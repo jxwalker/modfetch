@@ -243,12 +243,12 @@ func handleDownload(args []string) error {
 			if headers == nil { headers = map[string]string{} }
 			if strings.HasSuffix(h, "civitai.com") && c.Sources.CivitAI.Enabled {
 				if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
-					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer " + tok }
+					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer " + tok } else { log.Warnf("CivitAI token env %s is not set; gated content will return 401. Export %s.", env, env) }
 				}
 			}
 			if strings.HasSuffix(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
 				if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
-					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer " + tok }
+					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer " + tok } else { log.Warnf("Hugging Face token env %s is not set; gated repos will return 401. Export %s and accept the repo license.", env, env) }
 				}
 			}
 		}
