@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -9,7 +10,9 @@ import (
 	"strings"
 
 	"modfetch/internal/config"
+	"modfetch/internal/downloader"
 	"modfetch/internal/logging"
+	"modfetch/internal/state"
 )
 
 const version = "0.1.0-M0"
@@ -34,6 +37,8 @@ func run(args []string) error {
 		return handleConfig(args[1:])
 	case "status":
 		return handleStatus(args[1:])
+	case "download":
+		return handleDownload(args[1:])
 	case "version":
 		fmt.Println(version)
 		return nil
@@ -55,6 +60,7 @@ Usage:
 Commands:
   config validate   Validate a YAML config file
   config print      Print the loaded config as JSON
+  download          Download a file via direct URL (M1 minimal)
   status            Print a simple status (skeleton)
   version           Print version
   help              Show this help
@@ -96,6 +102,33 @@ func handleConfig(args []string) error {
 	default:
 		return fmt.Errorf("unknown config subcommand: %s", sub)
 	}
+}
+
+func handleDownload(args []string) error {
+	fs := flag.NewFlagSet("download", flag.ContinueOnError)
+	cfgPath := fs.String("config", "", "Path to YAML config file")
+	logLevel := fs.String("log-level", "info", "log level")
+	jsonOut := fs.Bool("json", false, "json logs")
+	url := fs.String("url", "", "HTTP URL to download (direct)")
+	dest := fs.String("dest", "", "destination path (optional)")
+	sha := fs.String("sha256", "", "expected SHA256 (optional)")
+	if err := fs.Parse(args); err != nil { return err }
+	if *cfgPath == "" {
+		if env := os.Getenv("MODFETCH_CONFIG"); env != "" { *cfgPath = env }
+	}
+	if *cfgPath == "" { return errors.New("--config is required or set MODFETCH_CONFIG") }
+	c, err := config.Load(*cfgPath)
+	if err != nil { return err }
+	log := logging.New(*logLevel, *jsonOut)
+	st, err := state.Open(c)
+	if err != nil { return err }
+	defer st.SQL.Close()
+	dl := downloader.NewSingle(c, log, st)
+	ctx := context.Background()
+	final, sum, err := dl.Download(ctx, *url, *dest, *sha)
+	if err != nil { return err }
+	log.Infof("downloaded: %s (sha256=%s)", final, sum)
+	return nil
 }
 
 func configOp(args []string, fn func(*config.Config, *logging.Logger) error) error {
