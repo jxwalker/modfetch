@@ -44,6 +44,7 @@ func initSchema(db *sql.DB) error {
 			last_modified TEXT,
 			size INTEGER,
 			status TEXT,
+			retries INTEGER DEFAULT 0,
 			created_at INTEGER NOT NULL,
 			updated_at INTEGER NOT NULL,
 			UNIQUE(url, dest)
@@ -54,6 +55,7 @@ func initSchema(db *sql.DB) error {
 	}
 	// Try to add new columns in case of existing DB without them
 	_, _ = db.Exec(`ALTER TABLE downloads ADD COLUMN actual_sha256 TEXT`)
+	_, _ = db.Exec(`ALTER TABLE downloads ADD COLUMN retries INTEGER DEFAULT 0`)
 	return nil
 }
 
@@ -66,6 +68,7 @@ type DownloadRow struct {
 	LastModified   string
 	Size           int64
 	Status         string
+	Retries        int64
 	UpdatedAt      int64
 }
 
@@ -78,15 +81,22 @@ func (db *DB) UpsertDownload(row DownloadRow) error {
 	return err
 }
 
+// IncDownloadRetries increments the retries counter for a download row.
+func (db *DB) IncDownloadRetries(url, dest string, delta int64) error {
+	if delta == 0 { return nil }
+	_, err := db.SQL.Exec(`UPDATE downloads SET retries = COALESCE(retries,0) + ?, updated_at=strftime('%s','now') WHERE url=? AND dest=?`, delta, url, dest)
+	return err
+}
+
 // ListDownloads returns a snapshot of the downloads table
 func (db *DB) ListDownloads() ([]DownloadRow, error) {
-	rows, err := db.SQL.Query(`SELECT url,dest,expected_sha256,actual_sha256,etag,last_modified,size,status,updated_at FROM downloads ORDER BY updated_at DESC`)
+	rows, err := db.SQL.Query(`SELECT url,dest,expected_sha256,actual_sha256,etag,last_modified,size,status,retries,updated_at FROM downloads ORDER BY updated_at DESC`)
 	if err != nil { return nil, err }
 	defer rows.Close()
 	var out []DownloadRow
 	for rows.Next() {
 		var r DownloadRow
-		if err := rows.Scan(&r.URL, &r.Dest, &r.ExpectedSHA256, &r.ActualSHA256, &r.ETag, &r.LastModified, &r.Size, &r.Status, &r.UpdatedAt); err != nil { return nil, err }
+		if err := rows.Scan(&r.URL, &r.Dest, &r.ExpectedSHA256, &r.ActualSHA256, &r.ETag, &r.LastModified, &r.Size, &r.Status, &r.Retries, &r.UpdatedAt); err != nil { return nil, err }
 		out = append(out, r)
 	}
 	return out, rows.Err()

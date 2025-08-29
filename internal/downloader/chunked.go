@@ -173,8 +173,8 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		defer func(){ <-sem }()
 
 		if c.Status == "complete" { return }
-		if err := e.st.UpdateChunkStatus(url, destPath, c.Index, "running"); err != nil { setErr(&dErr, &dMu, err); return }
-sha, err := e.fetchChunk(ctx, url, h, f, c, headers)
+if err := e.st.UpdateChunkStatus(url, destPath, c.Index, "running"); err != nil { setErr(&dErr, &dMu, err); return }
+sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 		if err != nil { setErr(&dErr, &dMu, err); return }
 		_ = e.st.UpdateChunkSHA(url, destPath, c.Index, sha)
 		_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "complete")
@@ -204,7 +204,7 @@ sha, err := e.fetchChunk(ctx, url, h, f, c, headers)
 				// re-download this chunk
 				e.log.Warnf("chunk %d sha mismatch; re-fetching", c.Index)
 				_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
-sha3, err := e.fetchChunk(ctx, url, h, f, c, headers)
+sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 				if err != nil { return "", "", err }
 				_ = e.st.UpdateChunkSHA(url, destPath, c.Index, sha3)
 				_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "complete")
@@ -239,7 +239,7 @@ sha3, err := e.fetchChunk(ctx, url, h, f, c, headers)
 	return destPath, finalSHA, nil
 }
 
-func (e *Chunked) fetchChunk(ctx context.Context, url string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string) (string, error) {
+func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string) (string, error) {
 	// retry loop
 	max := e.cfg.Concurrency.MaxRetries
 	if max <= 0 { max = 8 }
@@ -249,6 +249,7 @@ sha, err := e.tryFetchChunk(ctx, url, h, f, c, headers)
 		if err == nil { return sha, nil }
 		lastErr = err
 		if e.metrics != nil { e.metrics.IncRetries(1) }
+		_ = e.st.IncDownloadRetries(url, destPath, 1)
 		// backoff
 		b := e.cfg.Concurrency.Backoff
 		min := b.MinMS; if min <= 0 { min = 200 }
@@ -318,6 +319,7 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 		final, sha, err := NewSingle(e.cfg, e.log, e.st, e.metrics).Download(ctx, url, destPath, expectedSHA, headers)
 		if err == nil { return final, sha, nil }
 		lastErr = err
+		_ = e.st.IncDownloadRetries(url, destPath, 1)
 		// backoff between attempts
 		b := e.cfg.Concurrency.Backoff
 		min := b.MinMS; if min <= 0 { min = 200 }

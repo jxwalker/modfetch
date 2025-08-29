@@ -22,6 +22,12 @@ func startProgressLoop(ctx context.Context, st *state.DB, url, dest string) func
 	go func() {
 		var lastCompleted int64
 		var lastT = time.Now()
+		// smoothing window of recent samples (bytes, time)
+		type sample struct{ t time.Time; b int64 }
+		var win []sample
+		var lastNonZeroRate float64
+		var lastNonZeroAt time.Time
+		var rows []state.DownloadRow
 		for {
 			select {
 			case <-stop:
@@ -30,7 +36,7 @@ func startProgressLoop(ctx context.Context, st *state.DB, url, dest string) func
 			case <-time.After(250 * time.Millisecond):
 				// Fetch total size from downloads table
 				total := int64(0)
-				rows, _ := st.ListDownloads()
+				rows, _ = st.ListDownloads()
 				for _, r := range rows {
 					if r.URL == url && r.Dest == dest { total = r.Size; break }
 				}
@@ -45,29 +51,63 @@ func startProgressLoop(ctx context.Context, st *state.DB, url, dest string) func
 					// Single: read .part size if exists, else final
 					if fi, err := os.Stat(dest + ".part"); err == nil { completed = fi.Size() } else if fi, err := os.Stat(dest); err == nil { completed = fi.Size() }
 				}
-				// Rate and ETA
+				// Rate (smoothed) and ETA
 				now := time.Now()
 				dt := now.Sub(lastT).Seconds()
-				var rate float64
-				if dt > 0 {
-					rate = float64(completed-lastCompleted) / dt
-				}
+				if dt <= 0 { dt = 1 }
+				delta := completed - lastCompleted
+				if delta < 0 { delta = 0 }
 				lastCompleted = completed
 				lastT = now
+				win = append(win, sample{t: now, b: completed})
+				// drop samples older than 5s
+				cut := now.Add(-5 * time.Second)
+				for len(win) > 1 && win[0].t.Before(cut) { win = win[1:] }
+				// compute smoothed rate
+				var rate float64
+				if len(win) >= 2 {
+					span := win[len(win)-1].t.Sub(win[0].t).Seconds()
+					bytes := win[len(win)-1].b - win[0].b
+					if span > 0 && bytes > 0 {
+						rate = float64(bytes) / span
+					}
+				}
+				if rate > 0 { lastNonZeroRate = rate; lastNonZeroAt = now }
+				// Use last non-zero for brief stalls to avoid flicker
+				if rate <= 0 && time.Since(lastNonZeroAt) < 2*time.Second {
+					rate = lastNonZeroRate
+				}
 				eta := "-"
 				if rate > 0 && total > 0 && completed < total {
 					rem := float64(total-completed) / rate
 					eta = fmt.Sprintf("%ds", int(rem+0.5))
 				}
+				// Chunk status and retries
+				chunks, _ = st.ListChunks(url, dest)
+				cTotal := len(chunks)
+				cDone := 0
+				cRun := 0
+				for _, c := range chunks {
+					if strings.EqualFold(c.Status, "complete") { cDone++ }
+					if strings.EqualFold(c.Status, "running") { cRun++ }
+				}
+				// Fetch retries from downloads row
+				retries := int64(0)
+				rows, _ := st.ListDownloads()
+				for _, r := range rows {
+					if r.URL == url && r.Dest == dest { retries = r.Retries; break }
+				}
 				// Bar
 				bar := renderBar(completed, total, 30)
-				fmt.Printf("\r%s %6.2f%%  %8s/s  ETA %s  %s/%s",
+				fmt.Printf("\r%s %6.2f%%  %8s/s  ETA %s  %s/%s  C %d/%d A %d  R %d",
 					bar,
 					pct(completed, total),
 					ifnz(rate, "-"),
 					eta,
 					humanize.Bytes(uint64(completed)),
 					humanize.Bytes(uint64(max64(total, completed))),
+					cDone, cTotal, cRun,
+					retries,
 				)
 			}
 		}
