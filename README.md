@@ -100,11 +100,13 @@ User guide (see docs/USER_GUIDE.md for full guide)
   
   modfetch verify --config /path/to/config.yml --all
   
+  - Use `--only-errors` to show only problematic files; add `--summary` for totals and paths
 - Deep-verify safetensors and scan/repair a directory:
   
   modfetch verify --config /path/to/config.yml --scan-dir /path/to/models --safetensors-deep
   modfetch verify --config /path/to/config.yml --scan-dir /path/to/models --safetensors-deep --repair --quarantine-incomplete
   
+  - Only errors + summary: add `--only-errors --summary`
 - JSON summary (for scripting/CI):
   
   modfetch download --config /path/to/config.yml --url 'https://proof.ovh.net/files/1Mb.dat' --summary-json

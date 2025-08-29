@@ -9,6 +9,10 @@ Common errors and remedies
        
        modfetch verify --config ~/.config/modfetch/config.yml --scan-dir /path/to/checkpoints --safetensors-deep
        
+       - To focus only on problem files and get a quick count:
+         
+         modfetch verify --config ~/.config/modfetch/config.yml --scan-dir /path/to/checkpoints --safetensors-deep --only-errors --summary
+       
     2) If you see "extra bytes", repair is safe and lossless (truncate to declared size):
        
        modfetch verify --config ~/.config/modfetch/config.yml --scan-dir /path/to/checkpoints --safetensors-deep --repair
