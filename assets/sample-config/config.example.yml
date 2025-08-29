@@ -6,6 +6,8 @@ general:
   quarantine: true
   allow_overwrite: false
   dry_run: false
+  stage_partials: true           # write .part files under download_root/.parts (recommended)
+  always_no_resume: false        # force fresh downloads by default (can override with CLI)
 
 network:
   timeout_seconds: 60

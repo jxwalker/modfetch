@@ -19,6 +19,8 @@ Quick start: interactive wizard
   - `placement_mode`: `symlink` | `hardlink` | `copy`
   - `quarantine`: true|false (quarantine until checksum verified)
   - `allow_overwrite`: true|false
+  - `stage_partials`: true|false (default true). When true, .part files are written under `download_root/.parts` and moved atomically on completion.
+  - `always_no_resume`: true|false (default false). When true, every download starts fresh (ignores any .part and clears chunk state) unless overridden by CLI.
 - `network`
   - `timeout_seconds`, `max_redirects`, `tls_verify`, `user_agent`
 - `concurrency`

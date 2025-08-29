@@ -25,12 +25,15 @@ type Config struct {
 }
 
 type General struct {
-	DataRoot     string `yaml:"data_root"`
-	DownloadRoot string `yaml:"download_root"`
-	PlacementMode string `yaml:"placement_mode"` // symlink | hardlink | copy
-	Quarantine    bool   `yaml:"quarantine"`
-	AllowOverwrite bool  `yaml:"allow_overwrite"`
-	DryRun         bool  `yaml:"dry_run"`
+	DataRoot       string `yaml:"data_root"`
+	DownloadRoot   string `yaml:"download_root"`
+	PlacementMode  string `yaml:"placement_mode"` // symlink | hardlink | copy
+	Quarantine     bool   `yaml:"quarantine"`
+	AllowOverwrite bool   `yaml:"allow_overwrite"`
+	DryRun         bool   `yaml:"dry_run"`
+	// Downloads behavior
+	StagePartials  bool   `yaml:"stage_partials"`   // if true (default), write .part files under download_root/.parts
+	AlwaysNoResume bool   `yaml:"always_no_resume"` // if true, do not resume partials unless overridden on CLI
 }
 
 type Network struct {
