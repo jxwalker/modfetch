@@ -21,8 +21,8 @@ func Open(cfg *config.Config) (*DB, error) {
 	if cfg == nil { return nil, errors.New("nil config") }
 	if cfg.General.DataRoot == "" { return nil, errors.New("general.data_root required") }
 	if err := os.MkdirAll(cfg.General.DataRoot, 0o755); err != nil { return nil, err }
-	path := filepath.Join(cfg.General.DataRoot, "state.db")
-	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout=5000&_fk=1", path)
+path := filepath.Join(cfg.General.DataRoot, "state.db")
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout=5000&_pragma=journal_mode(WAL)&_fk=1", path)
 	sqldb, err := sql.Open("sqlite", dsn)
 	if err != nil { return nil, err }
 	if err := initSchema(sqldb); err != nil { return nil, err }

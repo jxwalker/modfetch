@@ -30,7 +30,8 @@ func (db *DB) InitChunksTable() error {
 		status TEXT NOT NULL,
 		updated_at INTEGER NOT NULL,
 		UNIQUE(url, dest, idx)
-	);`)
+	);
+	CREATE INDEX IF NOT EXISTS idx_chunks_url_dest ON chunks(url, dest);`)
 	return err
 }
 
