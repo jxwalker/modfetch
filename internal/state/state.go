@@ -38,6 +38,7 @@ func initSchema(db *sql.DB) error {
 			url TEXT NOT NULL,
 			dest TEXT NOT NULL,
 			expected_sha256 TEXT,
+			actual_sha256 TEXT,
 			etag TEXT,
 			last_modified TEXT,
 			size INTEGER,
@@ -50,6 +51,8 @@ func initSchema(db *sql.DB) error {
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil { return err }
 	}
+	// Try to add new columns in case of existing DB without them
+	_, _ = db.Exec(`ALTER TABLE downloads ADD COLUMN actual_sha256 TEXT`)
 	return nil
 }
 
@@ -57,6 +60,7 @@ type DownloadRow struct {
 	URL            string
 	Dest           string
 	ExpectedSHA256 string
+	ActualSHA256   string
 	ETag           string
 	LastModified   string
 	Size           int64
@@ -66,10 +70,24 @@ type DownloadRow struct {
 
 func (db *DB) UpsertDownload(row DownloadRow) error {
 	now := time.Now().Unix()
-	_, err := db.SQL.Exec(`INSERT INTO downloads(url, dest, expected_sha256, etag, last_modified, size, status, created_at, updated_at)
-		VALUES(?,?,?,?,?,?,?,?,?)
-		ON CONFLICT(url, dest) DO UPDATE SET expected_sha256=excluded.expected_sha256, etag=excluded.etag, last_modified=excluded.last_modified, size=excluded.size, status=excluded.status, updated_at=?`,
-		row.URL, row.Dest, row.ExpectedSHA256, row.ETag, row.LastModified, row.Size, row.Status, now, now, now)
+	_, err := db.SQL.Exec(`INSERT INTO downloads(url, dest, expected_sha256, actual_sha256, etag, last_modified, size, status, created_at, updated_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(url, dest) DO UPDATE SET expected_sha256=excluded.expected_sha256, actual_sha256=excluded.actual_sha256, etag=excluded.etag, last_modified=excluded.last_modified, size=excluded.size, status=excluded.status, updated_at=?`,
+		row.URL, row.Dest, row.ExpectedSHA256, row.ActualSHA256, row.ETag, row.LastModified, row.Size, row.Status, now, now, now)
 	return err
+}
+
+// ListDownloads returns a snapshot of the downloads table
+func (db *DB) ListDownloads() ([]DownloadRow, error) {
+	rows, err := db.SQL.Query(`SELECT url,dest,expected_sha256,actual_sha256,etag,last_modified,size,status,updated_at FROM downloads ORDER BY updated_at DESC`)
+	if err != nil { return nil, err }
+	defer rows.Close()
+	var out []DownloadRow
+	for rows.Next() {
+		var r DownloadRow
+		if err := rows.Scan(&r.URL, &r.Dest, &r.ExpectedSHA256, &r.ActualSHA256, &r.ETag, &r.LastModified, &r.Size, &r.Status, &r.UpdatedAt); err != nil { return nil, err }
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 

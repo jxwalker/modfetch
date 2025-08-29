@@ -72,7 +72,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		e.log.Warnf("chunked: falling back to single: %v", err)
 		return NewSingle(e.cfg, e.log, e.st).Download(ctx, url, destPath, expectedSHA, headers)
 	}
-	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "planning"})
+	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "planning"})
 
 	part := destPath + ".part"
 	// If final exists and no part exists, rename to part to verify & resume
@@ -169,7 +169,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 			finalSHA = hex.EncodeToString(hasher.Sum(nil))
 		}
 		if expectedSHA != "" && !stringsEqualHex(expectedSHA, finalSHA) {
-			_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "checksum_mismatch"})
+		_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: finalSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "checksum_mismatch"})
 			return "", finalSHA, fmt.Errorf("sha256 mismatch after repair: expected=%s got=%s", expectedSHA, finalSHA)
 		}
 	}
@@ -177,7 +177,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	// Finalize
 	if err := os.Rename(part, destPath); err != nil { return "", "", err }
 	if err := os.WriteFile(destPath+".sha256", []byte(finalSHA+"  "+filepath.Base(destPath)+"\n"), 0o644); err != nil { return "", "", err }
-	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "complete"})
+	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: finalSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "complete"})
 	return destPath, finalSHA, nil
 }
 

@@ -100,13 +100,13 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 
 	mw := io.MultiWriter(f, hasher)
 	if _, err := io.Copy(mw, resp.Body); err != nil {
-		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "error"})
+	_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error"})
 		return "", "", err
 	}
 
 	actualSHA := hex.EncodeToString(hasher.Sum(nil))
 	if expectedSHA != "" && !equalSHA(expectedSHA, actualSHA) {
-		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "checksum_mismatch"})
+		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "checksum_mismatch"})
 		return "", actualSHA, fmt.Errorf("sha256 mismatch: expected=%s actual=%s", expectedSHA, actualSHA)
 	}
 
@@ -116,7 +116,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	if err := os.WriteFile(destPath+".sha256", []byte(actualSHA+"  "+filepath.Base(destPath)+"\n"), 0o644); err != nil {
 		return "", "", err
 	}
-	_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "complete"})
+	_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "complete"})
 	return destPath, actualSHA, nil
 }
 
