@@ -123,8 +123,9 @@ func handleDownload(args []string) error {
 	st, err := state.Open(c)
 	if err != nil { return err }
 	defer st.SQL.Close()
-	dl := downloader.NewSingle(c, log, st)
 	ctx := context.Background()
+	// Prefer chunked downloader; it will fall back to single when needed
+	dl := downloader.NewChunked(c, log, st)
 	final, sum, err := dl.Download(ctx, *url, *dest, *sha)
 	if err != nil { return err }
 	log.Infof("downloaded: %s (sha256=%s)", final, sum)

@@ -26,7 +26,9 @@ func Open(cfg *config.Config) (*DB, error) {
 	sqldb, err := sql.Open("sqlite", dsn)
 	if err != nil { return nil, err }
 	if err := initSchema(sqldb); err != nil { return nil, err }
-	return &DB{SQL: sqldb, Path: path}, nil
+	db := &DB{SQL: sqldb, Path: path}
+	if err := db.InitChunksTable(); err != nil { return nil, err }
+	return db, nil
 }
 
 func initSchema(db *sql.DB) error {
