@@ -1,5 +1,7 @@
 # modfetch
 
+Fetch, verify, and place LLM and Stable Diffusion models reliably from Hugging Face and CivitAI — with resume, per‑chunk and full SHA256, batch YAML, and a TUI.
+
 A robust CLI/TUI downloader for LLM and Stable Diffusion assets from Hugging Face and CivitAI.
 
 Highlights
@@ -11,6 +13,35 @@ Highlights
 - Structured logging, metrics, and resilient state (SQLite)
 
 Status: MVP feature-complete for resolvers and downloads; TUI polish and docs ongoing.
+
+Quickstart (≈1 minute)
+```bash
+# 1) Build
+make build
+# 2) Minimal config (example paths; see docs/CONFIG.md for full schema)
+mkdir -p ~/.config/modfetch
+cat >~/.config/modfetch/config.yml <<'YAML'
+version: 1
+general:
+  data_root: "~/modfetch-data"
+  download_root: "~/Downloads/modfetch"
+  placement_mode: "symlink"
+network:
+  timeout_seconds: 60
+concurrency:
+  per_file_chunks: 4
+  chunk_size_mb: 8
+sources:
+  huggingface: { enabled: true, token_env: "HF_TOKEN" }
+  civitai:     { enabled: true, token_env: "CIVITAI_TOKEN" }
+YAML
+# 3) First run (public)
+./bin/modfetch download --config ~/.config/modfetch/config.yml --url 'https://proof.ovh.net/files/1Mb.dat'
+```
+
+Token env vars (if needed)
+- HF_TOKEN — used when accessing gated Hugging Face repos
+- CIVITAI_TOKEN — used when accessing gated CivitAI content
 
 Requirements
 - Go 1.22+
@@ -25,6 +56,7 @@ Installation
 - Homebrew: see packaging/homebrew/modfetch.rb template
 - Deployment (Linux): see docs/DEPLOY_LINUX.md
 - Optional: systemd user service for TUI: see docs/SYSTEMD_TUI.md
+- Shell completions: see docs/COMPLETIONS.md
 Configuration
 - All configuration is provided via a YAML file; no secrets in YAML (use env vars).
 - Pass the config file path with `--config` or via `MODFETCH_CONFIG`.
