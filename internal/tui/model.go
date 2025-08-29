@@ -147,7 +147,7 @@ func (m *model) View() string {
 		_, _, rate, eta := m.progressFor(r)
 		fn := r.Dest
 		if len(fn) > 40 { fn = fn[len(fn)-40:] }
-		u := r.URL
+	u := logging.SanitizeURL(r.URL)
 		if len(u) > 60 { u = u[:60] + "…" }
 		line := fmt.Sprintf("%-8s  %-10s  %-10s  %-8s  %-40s  %s", r.Status, prog, humanize.Bytes(uint64(rate))+"/s", eta, fn, u)
 		if i == m.selected {

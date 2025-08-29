@@ -182,9 +182,12 @@ sha3, err := e.fetchChunk(ctx, url, h, f, c, headers)
 		}
 	}
 
+	// Ensure part file is flushed before finalize
+	_ = f.Sync()
 	// Finalize
 	if err := os.Rename(part, destPath); err != nil { return "", "", err }
-	if err := os.WriteFile(destPath+".sha256", []byte(finalSHA+"  "+filepath.Base(destPath)+"\n"), 0o644); err != nil { return "", "", err }
+	if err := writeAndSync(destPath+".sha256", []byte(finalSHA+"  "+filepath.Base(destPath)+"\n")); err != nil { return "", "", err }
+	_ = fsyncDir(filepath.Dir(destPath))
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: finalSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "complete"})
 	if e.metrics != nil {
 		e.metrics.IncDownloadsSuccess()
@@ -235,6 +238,22 @@ req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil && !errors.Is(err, io.EOF) { return "", err }
 	if written != c.Size { return "", fmt.Errorf("chunk %d: short write %d!=%d", c.Index, written, c.Size) }
 	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+// writeAndSync writes content to path and fsyncs the file.
+func writeAndSync(path string, b []byte) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil { return err }
+	defer f.Close()
+	if _, err := f.Write(b); err != nil { return err }
+	return f.Sync()
+}
+
+func fsyncDir(dir string) error {
+	df, err := os.Open(dir)
+	if err != nil { return err }
+	defer df.Close()
+	return df.Sync()
 }
 
 func hashRange(f *os.File, start, size int64) (string, error) {

@@ -106,13 +106,19 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		return "", "", fmt.Errorf("unexpected status: %s", resp.Status)
 	}
 
+	// Preallocate to expected size when known
+	if size > 0 {
+		_ = f.Truncate(size)
+	}
 	mw := io.MultiWriter(f, hasher)
 	nWritten, err := io.Copy(mw, resp.Body)
 	if s.metrics != nil && nWritten > 0 { s.metrics.AddBytes(nWritten) }
 	if err != nil {
-	_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error"})
-		return "", "", err
+		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error"})
+		return "", "", friendlyIOError(err)
 	}
+	// Ensure file data is durable before rename
+	_ = f.Sync()
 
 	actualSHA := hex.EncodeToString(hasher.Sum(nil))
 	if expectedSHA != "" && !equalSHA(expectedSHA, actualSHA) {
@@ -122,10 +128,12 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 
 	// Rename to final
 	if err := os.Rename(part, destPath); err != nil { return "", "", err }
-	// Write checksum file
-	if err := os.WriteFile(destPath+".sha256", []byte(actualSHA+"  "+filepath.Base(destPath)+"\n"), 0o644); err != nil {
+	// Write checksum file (durable)
+	if err := writeAndSync(destPath+".sha256", []byte(actualSHA+"  "+filepath.Base(destPath)+"\n")); err != nil {
 		return "", "", err
 	}
+	// Fsync parent directory to persist rename and sidecar
+	_ = fsyncDir(filepath.Dir(destPath))
 	_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "complete"})
 	if s.metrics != nil {
 		s.metrics.IncDownloadsSuccess()
@@ -162,5 +170,34 @@ func lastURLSegment(u string) string {
 
 func equalSHA(exp, got string) bool {
 	return strings.EqualFold(strings.TrimSpace(exp), strings.TrimSpace(got))
+}
+
+// writeAndSync writes content to path and fsyncs the file.
+func writeAndSync(path string, b []byte) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil { return err }
+	defer f.Close()
+	if _, err := f.Write(b); err != nil { return err }
+	return f.Sync()
+}
+
+func fsyncDir(dir string) error {
+	df, err := os.Open(dir)
+	if err != nil { return err }
+	defer df.Close()
+	return df.Sync()
+}
+
+func friendlyIOError(err error) error {
+	// Map ENOSPC to a friendlier message
+	if errors.Is(err, os.ErrClosed) {
+		return err
+	}
+	if pe, ok := err.(*os.PathError); ok {
+		if pe.Err != nil && strings.Contains(strings.ToLower(pe.Err.Error()), "no space left") {
+			return fmt.Errorf("write failed: no space left on device")
+		}
+	}
+	return err
 }
 
