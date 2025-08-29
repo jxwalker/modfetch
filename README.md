@@ -24,6 +24,7 @@ Installation
 - Binaries: via GitHub Releases (tag `vX.Y.Z` to trigger CI)
 - Homebrew: see packaging/homebrew/modfetch.rb template
 - Deployment (Linux): see docs/DEPLOY_LINUX.md
+- Optional: systemd user service for TUI: see docs/SYSTEMD_TUI.md
 Configuration
 - All configuration is provided via a YAML file; no secrets in YAML (use env vars).
 - Pass the config file path with `--config` or via `MODFETCH_CONFIG`.

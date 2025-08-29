@@ -1,0 +1,22 @@
+[Unit]
+Description=modfetch TUI (Bubble Tea) in tmux
+Documentation=https://github.com/jxwalker/modfetch
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Ensure common PATH locations; adjust as needed for your environment
+Environment=PATH=%h/bin:/usr/local/bin:/usr/bin
+# Optional environment file for user-specific overrides. Create it and set MODFETCH_CONFIG there.
+# WARNING: Do not store secrets in this file.
+EnvironmentFile=-%h/.config/modfetch/modfetch.env
+# Start the TUI inside a tmux session so it has a proper TTY
+ExecStart=/usr/bin/tmux new -d -s modfetch_tui 'modfetch tui --config ${MODFETCH_CONFIG}'
+# Stop by killing the tmux session
+ExecStop=/usr/bin/tmux kill-session -t modfetch_tui
+
+[Install]
+WantedBy=default.target
+
