@@ -32,8 +32,19 @@ Project layout
 - internal/config: YAML loader and validation
 - assets/sample-config: Example configuration files
 
+Installation (from source)
+- Build: `make build`
+- Tests: `make test`
+- Cross-compile and package: `make release-dist`
+
+GitHub Releases (CI)
+- Tag a version like `v0.1.0` to trigger the release workflow. Binaries for Linux and macOS (amd64/arm64) will be attached to the release with checksums.
+
+Homebrew tap (template)
+- See `packaging/homebrew/modfetch.rb` for a formula template. After creating a release, update version and checksums and publish to your tap repo.
+
 Next milestones
-- M0: CLI skeleton + config loader (this commit)
+- M0: CLI skeleton + config loader
 - M1: Single-stream downloader + SHA256 + SQLite state
 - M2: Parallel chunked downloads + retries/backoff
 - M3: Hugging Face resolver
@@ -42,5 +53,5 @@ Next milestones
 - M6: Batch YAML + verify + status
 - M7: TUI dashboard
 - M8: Metrics & performance
-- M9: Packaging & release
+- M9: Packaging & release (this)
 

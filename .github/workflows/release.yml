@@ -1,0 +1,71 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+          - os: macos-latest
+            goos: darwin
+            goarch: amd64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+      - name: Build
+        env:
+          CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          go build -tags osusergo,netgo -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o modfetch_${{ matrix.goos }}_${{ matrix.goarch }} ./cmd/modfetch
+      - name: Checksum
+        run: |
+          shasum -a 256 modfetch_${{ matrix.goos }}_${{ matrix.goarch }} > modfetch_${{ matrix.goos }}_${{ matrix.goarch }}.sha256
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: modfetch_${{ matrix.goos }}_${{ matrix.goarch }}
+          path: |
+            modfetch_${{ matrix.goos }}_${{ matrix.goarch }}
+            modfetch_${{ matrix.goos }}_${{ matrix.goarch }}.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          files: |
+            dist/**/modfetch_*
+            dist/**/modfetch_*.sha256
+
