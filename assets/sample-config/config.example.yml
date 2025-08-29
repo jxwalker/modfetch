@@ -1,0 +1,106 @@
+version: 1
+general:
+  data_root: "~/modfetch-data"
+  download_root: "~/Downloads/modfetch"
+  placement_mode: "symlink"     # symlink | hardlink | copy
+  quarantine: true
+  allow_overwrite: false
+  dry_run: false
+
+network:
+  timeout_seconds: 60
+  max_redirects: 10
+  tls_verify: true
+  user_agent: "modfetch/0.1"
+
+concurrency:
+  global_files: 4
+  per_file_chunks: 8
+  chunk_size_mb: 8
+  max_retries: 8
+  backoff:
+    min_ms: 200
+    max_ms: 30000
+    jitter: true
+
+sources:
+  huggingface:
+    enabled: true
+    token_env: "HF_TOKEN"      # resolved at runtime
+  civitai:
+    enabled: true
+    token_env: "CIVITAI_TOKEN"
+
+placement:
+  apps:
+    a1111:
+      base: "/path/to/stable-diffusion-webui"
+      paths:
+        checkpoints: "models/Stable-diffusion"
+        lora: "models/Lora"
+        vae: "models/VAE"
+        controlnet: "extensions/sd-webui-controlnet/models"
+        embeddings: "embeddings"
+    comfyui:
+      base: "/path/to/ComfyUI"
+      paths:
+        checkpoints: "models/checkpoints"
+        lora: "models/loras"
+        vae: "models/vae"
+        controlnet: "models/controlnet"
+        embeddings: "models/embeddings"
+    ollama:
+      base: "~/.ollama"
+      paths:
+        models: "models"
+    vllm:
+      base: "~/Models/LLM"
+      paths:
+        models: "."
+    lmstudio:
+      base: "~/Library/Application Support/LM Studio"
+      paths:
+        models: "models"
+  mapping:
+    - match: "sd.checkpoint"
+      targets:
+        - app: "comfyui"
+          path_key: "checkpoints"
+        - app: "a1111"
+          path_key: "checkpoints"
+    - match: "sd.lora"
+      targets:
+        - app: "comfyui"
+          path_key: "lora"
+        - app: "a1111"
+          path_key: "lora"
+    - match: "llm.gguf"
+      targets:
+        - app: "ollama"
+          path_key: "models"
+        - app: "vllm"
+          path_key: "models"
+    - match: "generic"
+      targets:
+        - app: "vllm"
+          path_key: "models"
+
+logging:
+  level: "info"
+  format: "human"
+  file:
+    enabled: true
+    path: "~/modfetch-data/logs/modfetch.log"
+    max_megabytes: 50
+    max_backups: 3
+    max_age_days: 14
+
+metrics:
+  prometheus_textfile:
+    enabled: true
+    path: "~/modfetch-data/metrics/prometheus.prom"
+
+validation:
+  require_sha256: true
+  accept_md5_sha1_if_provided: false
+

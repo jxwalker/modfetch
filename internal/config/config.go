@@ -1,0 +1,209 @@
+package config
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Config mirrors the YAML schema. All values should be supplied via YAML; we avoid hard-coded defaults.
+// Minimal validation occurs in Validate().
+type Config struct {
+	Version     int          `yaml:"version"`
+	General     General      `yaml:"general"`
+	Network     Network      `yaml:"network"`
+	Concurrency Concurrency  `yaml:"concurrency"`
+	Sources     Sources      `yaml:"sources"`
+	Placement   Placement    `yaml:"placement"`
+	Logging     Logging      `yaml:"logging"`
+	Metrics     Metrics      `yaml:"metrics"`
+	Validation  Validation   `yaml:"validation"`
+}
+
+type General struct {
+	DataRoot     string `yaml:"data_root"`
+	DownloadRoot string `yaml:"download_root"`
+	PlacementMode string `yaml:"placement_mode"` // symlink | hardlink | copy
+	Quarantine    bool   `yaml:"quarantine"`
+	AllowOverwrite bool  `yaml:"allow_overwrite"`
+	DryRun         bool  `yaml:"dry_run"`
+}
+
+type Network struct {
+	TimeoutSeconds int    `yaml:"timeout_seconds"`
+	MaxRedirects   int    `yaml:"max_redirects"`
+	TLSVerify      bool   `yaml:"tls_verify"`
+	UserAgent      string `yaml:"user_agent"`
+}
+
+type Concurrency struct {
+	GlobalFiles    int `yaml:"global_files"`
+	PerFileChunks  int `yaml:"per_file_chunks"`
+	ChunkSizeMB    int `yaml:"chunk_size_mb"`
+	MaxRetries     int `yaml:"max_retries"`
+	Backoff        Backoff `yaml:"backoff"`
+}
+
+type Backoff struct {
+	MinMS int  `yaml:"min_ms"`
+	MaxMS int  `yaml:"max_ms"`
+	Jitter bool `yaml:"jitter"`
+}
+
+type Sources struct {
+	HuggingFace SourceWithToken `yaml:"huggingface"`
+	CivitAI     SourceWithToken `yaml:"civitai"`
+}
+
+type SourceWithToken struct {
+	Enabled  bool   `yaml:"enabled"`
+	TokenEnv string `yaml:"token_env"`
+}
+
+type Placement struct {
+	Apps    map[string]AppPlacement `yaml:"apps"`
+	Mapping []MappingRule           `yaml:"mapping"`
+}
+
+type AppPlacement struct {
+	Base  string            `yaml:"base"`
+	Paths map[string]string `yaml:"paths"`
+}
+
+type MappingRule struct {
+	Match   string          `yaml:"match"`
+	Targets []MappingTarget `yaml:"targets"`
+}
+
+type MappingTarget struct {
+	App     string `yaml:"app"`
+	PathKey string `yaml:"path_key"`
+}
+
+type Logging struct {
+	Level  string `yaml:"level"`  // debug|info|warn|error
+	Format string `yaml:"format"` // human|json
+	File   LogFile `yaml:"file"`
+}
+
+type LogFile struct {
+	Enabled       bool   `yaml:"enabled"`
+	Path          string `yaml:"path"`
+	MaxMegabytes  int    `yaml:"max_megabytes"`
+	MaxBackups    int    `yaml:"max_backups"`
+	MaxAgeDays    int    `yaml:"max_age_days"`
+}
+
+type Metrics struct {
+	PrometheusTextfile PromTextfile `yaml:"prometheus_textfile"`
+}
+
+type PromTextfile struct {
+	Enabled bool   `yaml:"enabled"`
+	Path    string `yaml:"path"`
+}
+
+type Validation struct {
+	RequireSHA256          bool `yaml:"require_sha256"`
+	AcceptMD5SHA1IfProvided bool `yaml:"accept_md5_sha1_if_provided"`
+}
+
+// Load reads, parses, expands, and validates a YAML config file.
+func Load(path string) (*Config, error) {
+	if path == "" {
+		return nil, errors.New("config path is empty")
+	}
+	expanded, err := expandTilde(path)
+	if err != nil {
+		return nil, err
+	}
+	b, err := os.ReadFile(expanded)
+	if err != nil {
+		return nil, err
+	}
+	var c Config
+	if err := yaml.Unmarshal(b, &c); err != nil {
+		return nil, err
+	}
+	if err := c.expandPaths(); err != nil {
+		return nil, err
+	}
+	if err := c.Validate(); err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (c *Config) expandPaths() error {
+	var err error
+	if c.General.DataRoot, err = expandTilde(c.General.DataRoot); err != nil { return err }
+	if c.General.DownloadRoot, err = expandTilde(c.General.DownloadRoot); err != nil { return err }
+	if c.Logging.File.Path, err = expandTilde(c.Logging.File.Path); err != nil { return err }
+	if c.Metrics.PrometheusTextfile.Path, err = expandTilde(c.Metrics.PrometheusTextfile.Path); err != nil { return err }
+	for name, app := range c.Placement.Apps {
+		if app.Base != "" {
+			exp, err := expandTilde(app.Base)
+			if err != nil { return fmt.Errorf("placement.apps.%s.base: %w", name, err) }
+			app.Base = exp
+			c.Placement.Apps[name] = app
+		}
+	}
+	return nil
+}
+
+func (c *Config) Validate() error {
+	if c.Version != 1 {
+		return fmt.Errorf("unsupported config version: %d", c.Version)
+	}
+	if c.General.DataRoot == "" {
+		return errors.New("general.data_root is required")
+	}
+	if c.General.DownloadRoot == "" {
+		return errors.New("general.download_root is required")
+	}
+	lvl := stringsLower(c.Logging.Level)
+	switch lvl {
+	case "", "debug", "info", "warn", "error":
+		// ok
+	default:
+		return fmt.Errorf("logging.level invalid: %s", c.Logging.Level)
+	}
+	fmtStr := stringsLower(c.Logging.Format)
+	switch fmtStr {
+	case "", "human", "json":
+		// ok
+	default:
+		return fmt.Errorf("logging.format invalid: %s", c.Logging.Format)
+	}
+	return nil
+}
+
+func expandTilde(p string) (string, error) {
+	if p == "" { return "", nil }
+	if p[0] != '~' { return p, nil }
+	h, err := os.UserHomeDir()
+	if err != nil { return "", err }
+	if p == "~" { return h, nil }
+	return filepath.Join(h, p[2:]), nil
+}
+
+func stringsLower(s string) string {
+	b := []byte(s)
+	for i := range b {
+		if 'A' <= b[i] && b[i] <= 'Z' {
+			b[i] = b[i] + 32
+		}
+	}
+	return string(b)
+}
+
+// Ensure paths that should exist (optional helper for future use)
+func EnsureDir(path string, perm fs.FileMode) error {
+	if path == "" { return nil }
+	return os.MkdirAll(path, perm)
+}
+

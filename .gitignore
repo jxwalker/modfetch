@@ -1,0 +1,19 @@
+# Go build and tooling
+/bin/
+/build/
+/dist/
+/out/
+/coverage/
+/tmp/
+*.log
+*.tmp
+*.cache
+
+# macOS artifacts
+.DS_Store
+
+# IDE/project
+.idea/
+.vscode/
+*.code-workspace
+

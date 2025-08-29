@@ -1,0 +1,115 @@
+package main
+
+import (
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"os"
+	"strings"
+
+	"modfetch/internal/config"
+)
+
+const version = "0.1.0-M0"
+
+func main() {
+	if err := run(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string) error {
+	if len(args) == 0 {
+		usage()
+		return errors.New("no command provided")
+	}
+
+	// Global flags (parsed per subcommand to avoid hard defaults)
+	cmd := args[0]
+	switch cmd {
+	case "config":
+		return handleConfig(args[1:])
+	case "status":
+		return handleStatus(args[1:])
+	case "version":
+		fmt.Println(version)
+		return nil
+	case "help", "-h", "--help":
+		usage()
+		return nil
+	default:
+		usage()
+		return fmt.Errorf("unknown command: %s", cmd)
+	}
+}
+
+func usage() {
+	fmt.Println(strings.TrimSpace(`modfetch - robust model fetcher (skeleton)
+
+Usage:
+  modfetch <command> [flags]
+
+Commands:
+  config validate   Validate a YAML config file
+  config print      Print the loaded config as JSON
+  status            Print a simple status (skeleton)
+  version           Print version
+  help              Show this help
+
+Flags:
+  --config PATH     Path to YAML config file (or MODFETCH_CONFIG env var)
+`))
+}
+
+func handleStatus(args []string) error {
+	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+	_ = fs.Parse(args)
+	fmt.Println("status: ok (skeleton)")
+	return nil
+}
+
+func handleConfig(args []string) error {
+	if len(args) == 0 {
+		return errors.New("config subcommand required: validate | print")
+	}
+	sub := args[0]
+	switch sub {
+	case "validate":
+		return configOp(args[1:], func(c *config.Config) error {
+			fmt.Println("config: valid")
+			return nil
+		})
+	case "print":
+		return configOp(args[1:], func(c *config.Config) error {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(c)
+		})
+	default:
+		return fmt.Errorf("unknown config subcommand: %s", sub)
+	}
+}
+
+func configOp(args []string, fn func(*config.Config) error) error {
+	fs := flag.NewFlagSet("config", flag.ContinueOnError)
+	cfgPath := fs.String("config", "", "Path to YAML config file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *cfgPath == "" {
+		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
+			*cfgPath = env
+		}
+	}
+	if *cfgPath == "" {
+		return errors.New("--config is required or set MODFETCH_CONFIG")
+	}
+	c, err := config.Load(*cfgPath)
+	if err != nil {
+		return err
+	}
+	return fn(c)
+}
+
