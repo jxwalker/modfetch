@@ -61,7 +61,7 @@ Usage:
 Commands:
   config validate   Validate a YAML config file
   config print      Print the loaded config as JSON
-  download          Download a file via direct URL (M1 minimal)
+  download          Download a file via direct URL or resolver URI (hf://, civitai://)
   status            Print a simple status (skeleton)
   version           Print version
   help              Show this help
@@ -127,7 +127,7 @@ func handleDownload(args []string) error {
 	ctx := context.Background()
 	resolvedURL := *url
 	headers := map[string]string{}
-	if strings.HasPrefix(resolvedURL, "hf://") {
+if strings.HasPrefix(resolvedURL, "hf://") || strings.HasPrefix(resolvedURL, "civitai://") {
 		res, err := resolver.Resolve(ctx, resolvedURL, c)
 		if err != nil { return err }
 		resolvedURL = res.URL

@@ -20,9 +20,13 @@ type Resolver interface {
 
 func Resolve(ctx context.Context, uri string, cfg *config.Config) (*Resolved, error) {
 	uri = strings.TrimSpace(uri)
-	if strings.HasPrefix(uri, "hf://") {
+	switch {
+	case strings.HasPrefix(uri, "hf://"):
 		return (&HuggingFace{}).Resolve(ctx, uri, cfg)
+	case strings.HasPrefix(uri, "civitai://"):
+		return (&CivitAI{}).Resolve(ctx, uri, cfg)
+	default:
+		return nil, errors.New("no resolver for uri scheme")
 	}
-	return nil, errors.New("no resolver for uri scheme")
 }
 
