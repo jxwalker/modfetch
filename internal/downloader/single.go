@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -163,9 +165,12 @@ func (s *Single) head(ctx context.Context, url string, headers map[string]string
 	return
 }
 
-func lastURLSegment(u string) string {
-	if i := strings.LastIndex(u, "/"); i >= 0 && i < len(u)-1 {
-		return u[i+1:]
+func lastURLSegment(uStr string) string {
+	if u, err := neturl.Parse(uStr); err == nil {
+		b := path.Base(u.Path)
+		if b != "/" && b != "." && b != "" {
+			return b
+		}
 	}
 	return ""
 }

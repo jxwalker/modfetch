@@ -11,6 +11,7 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -42,10 +43,12 @@ func NewChunked(cfg *config.Config, log *logging.Logger, st *state.DB, m interfa
 }
 
 type headInfo struct {
-	etag       string
-	lastMod    string
-	size       int64
+	etag        string
+	lastMod     string
+	size        int64
 	acceptRange bool
+	filename    string
+	finalURL    string
 }
 
 func (e *Chunked) head(ctx context.Context, url string, headers map[string]string) (headInfo, error) {
@@ -63,17 +66,17 @@ func (e *Chunked) head(ctx context.Context, url string, headers map[string]strin
 	h.lastMod = resp.Header.Get("Last-Modified")
 	if cl := resp.Header.Get("Content-Length"); cl != "" { _, _ = fmt.Sscan(cl, &h.size) }
 	h.acceptRange = strings.Contains(strings.ToLower(resp.Header.Get("Accept-Ranges")), "bytes")
+	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
+		if fn := parseDispositionFilename(cd); fn != "" { h.filename = fn }
+	}
 	return h, nil
 }
 
 // Download orchestrates a chunked download if possible; otherwise falls back to single-stream.
 func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string) (string, string, error) {
 	if url == "" { return "", "", errors.New("url required") }
-	if destPath == "" {
-		name := filepath.Base(url)
-		destPath = filepath.Join(e.cfg.General.DownloadRoot, name)
-	}
-	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil { return "", "", err }
+	// Ensure download root exists; we will finalize destPath after probing headers
+	if err := os.MkdirAll(e.cfg.General.DownloadRoot, 0o755); err != nil { return "", "", err }
 	startTime := time.Now()
 	if a, ok := e.metrics.(interface{ IncActive(int64); Write() error }); ok { a.IncActive(1); _ = a.Write(); defer func(){ a.IncActive(-1); _ = a.Write() }() }
 
@@ -100,6 +103,29 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		headOK := err == nil
 		acc := h.acceptRange
 		_ = e.st.UpsertHostCaps(strings.ToLower(u.Hostname()), headOK, acc)
+	}
+	// If caller did not supply a destination, derive a good filename now
+	if destPath == "" {
+		var name string
+		if h.filename != "" { name = h.filename }
+		if name == "" && h.finalURL != "" { name = baseNameFromURL(h.finalURL) }
+		if name == "" { name = baseNameFromURL(url) }
+		name = safeFileName(name)
+		destPath = filepath.Join(e.cfg.General.DownloadRoot, name)
+	}
+	// Attempt to migrate any previous wrong-named partial from raw URL base
+	if destPath != "" {
+		oldBase := filepath.Base(url) // may include query; prior versions used this
+		oldPart := filepath.Join(e.cfg.General.DownloadRoot, oldBase) + ".part"
+		newPart := destPath + ".part"
+		if oldPart != newPart {
+			if _, errOld := os.Stat(oldPart); errOld == nil {
+				if _, errNew := os.Stat(newPart); errors.Is(errNew, os.ErrNotExist) {
+					e.log.Warnf("moving existing partial from %s to %s", oldPart, newPart)
+					_ = os.Rename(oldPart, newPart)
+				}
+			}
+		}
 	}
 	if err != nil || h.size <= 0 || !h.acceptRange {
 		e.log.Warnf("chunked: falling back to single: %v", err)
@@ -313,6 +339,10 @@ func (e *Chunked) probeRangeGET(ctx context.Context, url string, headers map[str
 	h.acceptRange = true
 	h.etag = resp.Header.Get("ETag")
 	h.lastMod = resp.Header.Get("Last-Modified")
+	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
+		if fn := parseDispositionFilename(cd); fn != "" { h.filename = fn }
+	}
+	if resp.Request != nil && resp.Request.URL != nil { h.finalURL = resp.Request.URL.String() }
 	return h, nil
 }
 
@@ -333,6 +363,54 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 		time.Sleep(dur)
 	}
 	return "", "", lastErr
+}
+
+// parseDispositionFilename extracts a filename from a Content-Disposition header.
+func parseDispositionFilename(cd string) string {
+	// prefer filename*
+	parts := strings.Split(cd, ";")
+	for _, p := range parts {
+		pt := strings.TrimSpace(p)
+		plt := strings.ToLower(pt)
+		if strings.HasPrefix(plt, "filename*=") {
+			v := strings.TrimSpace(pt[len("filename*="):])
+			v = strings.Trim(v, "\"")
+			// format: UTF-8''percent-encoded
+			if i := strings.Index(v, "''"); i >= 0 && i+2 < len(v) {
+				enc := v[i+2:]
+				if dec, err := neturl.QueryUnescape(enc); err == nil { return safeFileName(dec) }
+			}
+			return safeFileName(v)
+		}
+	}
+	for _, p := range parts {
+		pt := strings.TrimSpace(p)
+		plt := strings.ToLower(pt)
+		if strings.HasPrefix(plt, "filename=") {
+			v := strings.TrimSpace(pt[len("filename="):])
+			v = strings.Trim(v, "\"'")
+			return safeFileName(v)
+		}
+	}
+	return ""
+}
+
+// baseNameFromURL returns the last path segment from a URL, ignoring query/fragments.
+func baseNameFromURL(uStr string) string {
+	u, err := neturl.Parse(uStr)
+	if err != nil || u.Path == "" { return "download" }
+	b := path.Base(u.Path)
+	if b == "/" || b == "." || b == "" { return "download" }
+	return b
+}
+
+// safeFileName strips directory components and disallowed characters.
+func safeFileName(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.ReplaceAll(name, "\\", "_")
+	name = strings.ReplaceAll(name, "/", "_")
+	if name == "" { return "download" }
+	return name
 }
 
 func hashRange(f *os.File, start, size int64) (string, error) {
