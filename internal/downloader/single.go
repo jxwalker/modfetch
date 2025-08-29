@@ -40,7 +40,7 @@ func NewSingle(cfg *config.Config, log *logging.Logger, st *state.DB) *Single {
 
 // Download downloads a single file from url to destPath. If destPath is empty, it uses cfg.General.DownloadRoot + last URL segment.
 // It resumes if a .part file exists and the server supports Range requests.
-func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string) (string, string, error) {
+func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string) (string, string, error) {
 	if url == "" { return "", "", errors.New("url required") }
 	if destPath == "" {
 		seg := lastURLSegment(url)
@@ -52,7 +52,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	part := destPath + ".part"
 
 	// HEAD for metadata
-	etag, lastMod, size, rangeOK := s.head(ctx, url)
+	etag, lastMod, size, rangeOK := s.head(ctx, url, headers)
 	s.log.Debugf("HEAD: etag=%s last-mod=%s size=%d range=%v", etag, lastMod, size, rangeOK)
 	_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "planning"})
 
@@ -78,6 +78,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil { return "", "", err }
 	if s.cfg.Network.UserAgent != "" { req.Header.Set("User-Agent", s.cfg.Network.UserAgent) }
+	for k, v := range headers { req.Header.Set(k, v) }
 	if start > 0 && rangeOK {
 		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", start))
 	}
@@ -119,9 +120,10 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	return destPath, actualSHA, nil
 }
 
-func (s *Single) head(ctx context.Context, url string) (etag, lastMod string, size int64, rangeOK bool) {
+func (s *Single) head(ctx context.Context, url string, headers map[string]string) (etag, lastMod string, size int64, rangeOK bool) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	if s.cfg.Network.UserAgent != "" { req.Header.Set("User-Agent", s.cfg.Network.UserAgent) }
+	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := s.client.Do(req)
 	if err != nil { return "", "", 0, false }
 	defer resp.Body.Close()

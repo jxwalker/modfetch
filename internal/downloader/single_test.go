@@ -33,7 +33,7 @@ func TestSingleDownloadHF(t *testing.T) {
 	defer st.SQL.Close()
 
 	dl := NewSingle(cfg, log, st)
-	final, sum, err := dl.Download(context.Background(), "https://raw.githubusercontent.com/github/gitignore/main/Go.gitignore", "", "")
+	final, sum, err := dl.Download(context.Background(), "https://raw.githubusercontent.com/github/gitignore/main/Go.gitignore", "", "", nil)
 	if err != nil { t.Fatalf("download: %v", err) }
 	if _, err := os.Stat(final); err != nil { t.Fatalf("final file missing: %v", err) }
 	if len(sum) != 64 { t.Fatalf("unexpected sha256 length: %d", len(sum)) }

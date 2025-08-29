@@ -40,9 +40,10 @@ type headInfo struct {
 	acceptRange bool
 }
 
-func (e *Chunked) head(ctx context.Context, url string) (headInfo, error) {
+func (e *Chunked) head(ctx context.Context, url string, headers map[string]string) (headInfo, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	if ua := e.cfg.Network.UserAgent; ua != "" { req.Header.Set("User-Agent", ua) }
+	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := e.client.Do(req)
 	if err != nil { return headInfo{}, err }
 	defer resp.Body.Close()
@@ -58,7 +59,7 @@ func (e *Chunked) head(ctx context.Context, url string) (headInfo, error) {
 }
 
 // Download orchestrates a chunked download if possible; otherwise falls back to single-stream.
-func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA string) (string, string, error) {
+func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string) (string, string, error) {
 	if url == "" { return "", "", errors.New("url required") }
 	if destPath == "" {
 		name := filepath.Base(url)
@@ -66,10 +67,10 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	}
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil { return "", "", err }
 
-	h, err := e.head(ctx, url)
+	h, err := e.head(ctx, url, headers)
 	if err != nil || h.size <= 0 || !h.acceptRange {
 		e.log.Warnf("chunked: falling back to single: %v", err)
-		return NewSingle(e.cfg, e.log, e.st).Download(ctx, url, destPath, expectedSHA)
+		return NewSingle(e.cfg, e.log, e.st).Download(ctx, url, destPath, expectedSHA, headers)
 	}
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "planning"})
 

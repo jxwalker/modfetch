@@ -12,6 +12,7 @@ import (
 	"modfetch/internal/config"
 	"modfetch/internal/downloader"
 	"modfetch/internal/logging"
+	"modfetch/internal/resolver"
 	"modfetch/internal/state"
 )
 
@@ -109,7 +110,7 @@ func handleDownload(args []string) error {
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
 	jsonOut := fs.Bool("json", false, "json logs")
-	url := fs.String("url", "", "HTTP URL to download (direct)")
+	url := fs.String("url", "", "HTTP URL to download (direct) or resolver URI (e.g. hf://owner/repo/path)")
 	dest := fs.String("dest", "", "destination path (optional)")
 	sha := fs.String("sha256", "", "expected SHA256 (optional)")
 	if err := fs.Parse(args); err != nil { return err }
@@ -124,9 +125,17 @@ func handleDownload(args []string) error {
 	if err != nil { return err }
 	defer st.SQL.Close()
 	ctx := context.Background()
+	resolvedURL := *url
+	headers := map[string]string{}
+	if strings.HasPrefix(resolvedURL, "hf://") {
+		res, err := resolver.Resolve(ctx, resolvedURL, c)
+		if err != nil { return err }
+		resolvedURL = res.URL
+		headers = res.Headers
+	}
 	// Prefer chunked downloader; it will fall back to single when needed
 	dl := downloader.NewChunked(c, log, st)
-	final, sum, err := dl.Download(ctx, *url, *dest, *sha)
+	final, sum, err := dl.Download(ctx, resolvedURL, *dest, *sha, headers)
 	if err != nil { return err }
 	log.Infof("downloaded: %s (sha256=%s)", final, sum)
 	return nil
