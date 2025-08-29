@@ -58,10 +58,12 @@ func run(args []string) error {
 	case "version":
 		fmt.Println(version)
 		return nil
-	case "completion":
+case "completion":
 		return handleCompletion(args[1:])
-	case "hostcaps":
+case "hostcaps":
 		return handleHostCaps(args[1:])
+case "clean":
+		return handleClean(args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -90,6 +92,7 @@ Commands:
   help              Show this help
   completion        Generate shell completion scripts (bash|zsh|fish)
   hostcaps          Manage host capability cache (list/clear)
+  clean             Prune staged partials and other cached artifacts
 
 Flags:
   --config PATH     Path to YAML config file (or MODFETCH_CONFIG env var)
@@ -257,7 +260,7 @@ func handleDownload(args []string) error {
 	}
 	// Prefer chunked downloader; it will fall back to single when needed
 	dl := downloader.NewAuto(c, log, st, m)
-	final, sum, err := dl.Download(ctx, resolvedURL, *dest, *sha, headers, *noResume)
+final, sum, err := dl.Download(ctx, resolvedURL, *dest, *sha, headers, (*noResume) || c.General.AlwaysNoResume)
 	if stopProg != nil { stopProg() }
 	if err != nil { return err }
 	// Final summary
@@ -318,6 +321,64 @@ func handlePlace(args []string) error {
 	placed, err := placer.Place(c, *filePath, *artType, *mode)
 	if err != nil { return err }
 	for _, p := range placed { log.Infof("placed: %s", p) }
+	return nil
+}
+
+func handleClean(args []string) error {
+	fs := flag.NewFlagSet("clean", flag.ContinueOnError)
+	cfgPath := fs.String("config", "", "Path to YAML config file")
+	logLevel := fs.String("log-level", "info", "log level")
+	jsonOut := fs.Bool("json", false, "json logs")
+	days := fs.Int("days", 7, "remove .part files older than this many days")
+	dryRun := fs.Bool("dry-run", false, "show what would be removed, but do not delete")
+	if err := fs.Parse(args); err != nil { return err }
+	if *cfgPath == "" { if env := os.Getenv("MODFETCH_CONFIG"); env != "" { *cfgPath = env } }
+	if *cfgPath == "" { return errors.New("--config is required or set MODFETCH_CONFIG") }
+	if _, err := os.Stat(*cfgPath); err != nil { return fmt.Errorf("config file not found: %s", *cfgPath) }
+	c, err := config.Load(*cfgPath)
+	if err != nil { return err }
+	log := logging.New(*logLevel, *jsonOut)
+	// Determine parts dir
+	partsDir := c.General.PartialsRoot
+	if strings.TrimSpace(partsDir) == "" {
+		partsDir = filepath.Join(c.General.DownloadRoot, ".parts")
+	}
+	if fi, err := os.Stat(partsDir); err != nil || !fi.IsDir() {
+		return fmt.Errorf("parts dir not found: %s", partsDir)
+	}
+	cutoff := time.Now().Add(-time.Duration(*days)*24*time.Hour)
+	removed := 0
+	skipped := 0
+	var errs []string
+	entries, err := os.ReadDir(partsDir)
+	if err != nil { return err }
+	for _, e := range entries {
+		if e.IsDir() { continue }
+		name := e.Name()
+		if !strings.HasSuffix(name, ".part") { continue }
+		p := filepath.Join(partsDir, name)
+		fi, err := os.Stat(p)
+		if err != nil { errs = append(errs, fmt.Sprintf("%s: %v", p, err)); continue }
+		if fi.ModTime().After(cutoff) { skipped++; continue }
+		if *dryRun {
+			log.Infof("would remove: %s (age=%s)", p, time.Since(fi.ModTime()).Round(time.Second))
+			removed++
+			continue
+		}
+		if err := os.Remove(p); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", p, err))
+			continue
+		}
+		removed++
+	}
+	if *jsonOut {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(map[string]any{"parts_dir": partsDir, "removed": removed, "skipped": skipped, "errors": errs})
+	}
+	log.Infof("parts dir: %s", partsDir)
+	log.Infof("removed: %d skipped: %d", removed, skipped)
+	if len(errs) > 0 { log.Warnf("errors: %v", errs) }
 	return nil
 }
 

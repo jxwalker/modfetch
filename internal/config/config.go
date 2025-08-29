@@ -27,12 +27,13 @@ type Config struct {
 type General struct {
 	DataRoot       string `yaml:"data_root"`
 	DownloadRoot   string `yaml:"download_root"`
+	PartialsRoot   string `yaml:"partials_root"`
 	PlacementMode  string `yaml:"placement_mode"` // symlink | hardlink | copy
 	Quarantine     bool   `yaml:"quarantine"`
 	AllowOverwrite bool   `yaml:"allow_overwrite"`
 	DryRun         bool   `yaml:"dry_run"`
 	// Downloads behavior
-	StagePartials  bool   `yaml:"stage_partials"`   // if true (default), write .part files under download_root/.parts
+	StagePartials  bool   `yaml:"stage_partials"`   // if true (default), write .part files under download_root/.parts or partials_root if set
 	AlwaysNoResume bool   `yaml:"always_no_resume"` // if true, do not resume partials unless overridden on CLI
 }
 
@@ -147,6 +148,7 @@ func (c *Config) expandPaths() error {
 	var err error
 	if c.General.DataRoot, err = expandTilde(c.General.DataRoot); err != nil { return err }
 	if c.General.DownloadRoot, err = expandTilde(c.General.DownloadRoot); err != nil { return err }
+	if c.General.PartialsRoot, err = expandTilde(c.General.PartialsRoot); err != nil { return err }
 	if c.Logging.File.Path, err = expandTilde(c.Logging.File.Path); err != nil { return err }
 	if c.Metrics.PrometheusTextfile.Path, err = expandTilde(c.Metrics.PrometheusTextfile.Path); err != nil { return err }
 	for name, app := range c.Placement.Apps {

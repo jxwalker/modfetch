@@ -2,6 +2,7 @@ version: 1
 general:
   data_root: "~/modfetch-data"
   download_root: "~/Downloads/modfetch"
+  partials_root: "~/Downloads/modfetch/.parts"   # optional override; else defaults to download_root/.parts
   placement_mode: "symlink"     # symlink | hardlink | copy
   quarantine: true
   allow_overwrite: false

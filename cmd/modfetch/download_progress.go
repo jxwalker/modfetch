@@ -164,7 +164,13 @@ func max64(a, b int64) int64 { if a > b { return a }; return b }
 
 // stagedPartPath mirrors downloader.stagePartPath hashing to locate .part for progress
 func stagedPartPath(cfg *config.Config, url, dest string) string {
-	partsDir := filepath.Join(cfg.General.DownloadRoot, ".parts")
+	if cfg != nil && !cfg.General.StagePartials {
+		return dest + ".part"
+	}
+	partsDir := cfg.General.PartialsRoot
+	if strings.TrimSpace(partsDir) == "" {
+		partsDir = filepath.Join(cfg.General.DownloadRoot, ".parts")
+	}
 	keySrc := url + "|" + dest
 	h := sha1.Sum([]byte(keySrc))
 	key := hex.EncodeToString(h[:])[:12]
