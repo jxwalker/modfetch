@@ -7,7 +7,7 @@ Robust CLI/TUI downloader for LLM and Stable Diffusion assets (Hugging Face and 
 - Batch YAML execution
 - Structured logging and rich terminal status
 
-Status: Milestone M0 scaffold
+Status: MVP in progress — downloading engine, resolvers, placement, batch, status/verify, metrics, and TUI dashboard are implemented. TUI visuals and config wizard in progress.
 
 Requirements
 - Go 1.22+
@@ -16,21 +16,50 @@ Requirements
 Config
 - All configuration is provided via a YAML file. No hard-coded directories are used.
 - Pass the config file path with `--config` or via `MODFETCH_CONFIG` env var.
+- Generate a starter config via the interactive wizard:
+  ```
+  modfetch config wizard --out ~/modfetch/config.yml
+  ```
 
-Example usage (skeleton)
+Quick start
 - Validate config:
   ```
   modfetch config validate --config /path/to/config.yml
   ```
-- Print config (round-trip):
+- Download a file (direct URL or resolver URI):
   ```
-  modfetch config print --config /path/to/config.yml
+  modfetch download --config /path/to/config.yml --url 'hf://gpt2/README.md?rev=main'
+  modfetch download --config /path/to/config.yml --url 'civitai://model/123456?file=vae'
+  ```
+- Place a file into your app directories:
+  ```
+  modfetch place --config /path/to/config.yml --path /path/to/model.safetensors
+  ```
+- Batch downloads (YAML):
+  ```
+  modfetch download --config /path/to/config.yml --batch /path/to/jobs.yml --place
+  ```
+- TUI dashboard:
+  ```
+  modfetch tui --config /path/to/config.yml
+  ```
+- Verify files:
+  ```
+  modfetch verify --config /path/to/config.yml --all
   ```
 
 Project layout
 - cmd/modfetch: CLI entrypoint
 - internal/config: YAML loader and validation
+- internal/downloader: single + chunked engines
+- internal/resolver: hf:// and civitai://
+- internal/placer: placement engine
+- internal/tui: TUI models
+- internal/state: SQLite state DB
+- internal/metrics: Prometheus textfile metrics
 - assets/sample-config: Example configuration files
+- docs/: configuration, testing, placement, resolvers guides
+- scripts/: smoke test and helpers
 
 Installation (from source)
 - Build: `make build`

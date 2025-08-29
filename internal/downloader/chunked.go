@@ -132,7 +132,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 
 		if c.Status == "complete" { return }
 		if err := e.st.UpdateChunkStatus(url, destPath, c.Index, "running"); err != nil { setErr(&dErr, &dMu, err); return }
-		sha, err := e.fetchChunk(ctx, url, h, f, c)
+sha, err := e.fetchChunk(ctx, url, h, f, c, headers)
 		if err != nil { setErr(&dErr, &dMu, err); return }
 		_ = e.st.UpdateChunkSHA(url, destPath, c.Index, sha)
 		_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "complete")
@@ -162,7 +162,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 				// re-download this chunk
 				e.log.Warnf("chunk %d sha mismatch; re-fetching", c.Index)
 				_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
-				sha3, err := e.fetchChunk(ctx, url, h, f, c)
+sha3, err := e.fetchChunk(ctx, url, h, f, c, headers)
 				if err != nil { return "", "", err }
 				_ = e.st.UpdateChunkSHA(url, destPath, c.Index, sha3)
 				_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "complete")
@@ -194,13 +194,13 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	return destPath, finalSHA, nil
 }
 
-func (e *Chunked) fetchChunk(ctx context.Context, url string, h headInfo, f *os.File, c state.ChunkRow) (string, error) {
+func (e *Chunked) fetchChunk(ctx context.Context, url string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string) (string, error) {
 	// retry loop
 	max := e.cfg.Concurrency.MaxRetries
 	if max <= 0 { max = 8 }
 	var lastErr error
 	for attempt := 0; attempt < max; attempt++ {
-		sha, err := e.tryFetchChunk(ctx, url, h, f, c)
+sha, err := e.tryFetchChunk(ctx, url, h, f, c, headers)
 		if err == nil { return sha, nil }
 		lastErr = err
 		if e.metrics != nil { e.metrics.IncRetries(1) }
@@ -214,9 +214,10 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, h headInfo, f *os.
 	return "", lastErr
 }
 
-func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *os.File, c state.ChunkRow) (string, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string) (string, error) {
+req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if ua := e.cfg.Network.UserAgent; ua != "" { req.Header.Set("User-Agent", ua) }
+	for k, v := range headers { req.Header.Set(k, v) }
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", c.Start, c.End))
 	if h.etag != "" { req.Header.Set("If-Range", h.etag) } else if h.lastMod != "" { req.Header.Set("If-Range", h.lastMod) }
 	resp, err := e.client.Do(req)

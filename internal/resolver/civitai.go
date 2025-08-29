@@ -16,6 +16,15 @@ import (
 
 type CivitAI struct{}
 
+// civitaiBaseURL allows tests to override the API host.
+var civitaiBaseURL = "https://civitai.com"
+
+// CivitaiBaseForTest returns the current base for tests.
+func CivitaiBaseForTest() string { return civitaiBaseURL }
+
+// SetCivitaiBaseForTest overrides the base URL for CivitAI API (tests only).
+func SetCivitaiBaseForTest(u string) { civitaiBaseURL = strings.TrimRight(u, "/") }
+
 func (c *CivitAI) CanHandle(u string) bool { return strings.HasPrefix(u, "civitai://") }
 
 // civitai://model/{id}?version={versionId}&file={substring}
@@ -99,7 +108,7 @@ type civitFile struct {
 }
 
 func civitaiFetchModelFiles(ctx context.Context, client *http.Client, headers map[string]string, modelID string) ([]civitFile, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://civitai.com/api/v1/models/%s", url.PathEscape(modelID)), nil)
+req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/api/v1/models/%s", civitaiBaseURL, url.PathEscape(modelID)), nil)
 	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := client.Do(req)
 	if err != nil { return nil, err }
@@ -115,7 +124,7 @@ func civitaiFetchModelFiles(ctx context.Context, client *http.Client, headers ma
 }
 
 func civitaiFetchVersionFiles(ctx context.Context, client *http.Client, headers map[string]string, versionID string) ([]civitFile, error) {
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("https://civitai.com/api/v1/model-versions/%s", url.PathEscape(versionID)), nil)
+req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/api/v1/model-versions/%s", civitaiBaseURL, url.PathEscape(versionID)), nil)
 	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := client.Do(req)
 	if err != nil { return nil, err }

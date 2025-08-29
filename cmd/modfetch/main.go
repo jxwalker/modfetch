@@ -70,6 +70,7 @@ Usage:
 Commands:
   config validate   Validate a YAML config file
   config print      Print the loaded config as JSON
+  config wizard     Interactive TUI to generate a YAML config
   download          Download a file via direct URL or resolver URI (hf://, civitai://)
   status            Show download status (table or JSON)
   place             Place a file into configured app directories
@@ -130,6 +131,8 @@ func handleConfig(args []string) error {
 			enc.SetIndent("", "  ")
 			return enc.Encode(c)
 		})
+	case "wizard":
+		return handleConfigWizard(args[1:])
 	default:
 		return fmt.Errorf("unknown config subcommand: %s", sub)
 	}
