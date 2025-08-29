@@ -112,7 +112,7 @@ Resolvers
 Logging and metrics
 - Log level per command: `--log-level debug|info|warn|error`; `--json` for JSON logs.
 - Quiet mode: `--quiet` (download command) hides progress and info logs.
-- Metrics: optional Prometheus textfile exporter; configure in YAML.
+- Metrics: optional Prometheus textfile exporter; configure in YAML (see docs/METRICS.md)
 - Troubleshooting: see docs/TROUBLESHOOTING.md
 
 Project layout

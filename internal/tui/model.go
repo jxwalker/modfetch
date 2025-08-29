@@ -15,6 +15,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"modfetch/internal/config"
 	"modfetch/internal/state"
+	"modfetch/internal/logging"
 )
 
 type model struct {

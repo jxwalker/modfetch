@@ -38,10 +38,11 @@ Quick start: interactive wizard
 
 See `assets/sample-config/config.example.yml` for a full example.
 
-## Tokens
+## Tokens / environment variables
 - Set in environment, not in YAML:
-  - `export HF_TOKEN=...`
-  - `export CIVITAI_TOKEN=...`
+  - `HF_TOKEN`: Hugging Face token (Bearer), used when sources.huggingface.enabled is true
+  - `CIVITAI_TOKEN`: CivitAI token (Bearer), used when sources.civitai.enabled is true
+- Do not print secrets back to the terminal; export them in your shell profile or a secure env file
 
 ## Placement mapping
 - Map artifact types to target apps/paths. Common types:
