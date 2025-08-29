@@ -35,6 +35,7 @@ Quick start: interactive wizard
   - `prometheus_textfile`: `enabled`, `path`
 - `validation`
   - `require_sha256`, `accept_md5_sha1_if_provided`
+  - `safetensors_deep_verify_after_download`: when true, perform deep coverage/length verification of .safetensors files immediately after download; fail the command if invalid
 
 See `assets/sample-config/config.example.yml` for a full example.
 

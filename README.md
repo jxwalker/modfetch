@@ -66,45 +66,50 @@ Configuration
   ```
 - See docs/CONFIG.md for full schema.
 
-User guide
+User guide (see docs/USER_GUIDE.md for full guide)
 - Validate config:
-  ```
+  
   modfetch config validate --config /path/to/config.yml
-  ```
+  
 - Download with live progress (CLI shows progress bar, speed, ETA):
-  ```
+  
   modfetch download --config /path/to/config.yml --url 'https://proof.ovh.net/files/1Mb.dat'
   modfetch download --config /path/to/config.yml --url 'hf://gpt2/README.md?rev=main'
   modfetch download --config /path/to/config.yml --url 'civitai://model/123456?file=vae'
-  ```
+  
   - Quiet mode (suppress progress/info logs): add `--quiet`
   - On completion, a summary is printed (dest, size, SHA256, duration, average speed)
 - Place artifacts into apps:
-  ```
+  
   modfetch place --config /path/to/config.yml --path /path/to/model.safetensors
-  ```
+  
 - Batch downloads from YAML (optionally place after):
-  ```
+  
   modfetch download --config /path/to/config.yml --batch /path/to/jobs.yml --place
-  ```
+  
   - See docs/BATCH.md for full batch schema and examples
 - TUI dashboard (live status, filter, per-row speed/ETA):
-  ```
+  
   modfetch tui --config /path/to/config.yml
-  ```
-  - Keys: q (quit), r (refresh), j/k (select), d (details), / (filter)
-- Verify checksums:
-  ```
+  
+  - Keys: q (quit), r (refresh), j/k (select), d (details), / (filter), s (sort by speed), e (sort by ETA)
+- Verify checksums in state:
+  
   modfetch verify --config /path/to/config.yml --all
-  ```
+  
+- Deep-verify safetensors and scan/repair a directory:
+  
+  modfetch verify --config /path/to/config.yml --scan-dir /path/to/models --safetensors-deep
+  modfetch verify --config /path/to/config.yml --scan-dir /path/to/models --safetensors-deep --repair --quarantine-incomplete
+  
 - JSON summary (for scripting/CI):
-  ```
+  
   modfetch download --config /path/to/config.yml --url 'https://proof.ovh.net/files/1Mb.dat' --summary-json
-  ```
+  
 - Placement dry-run:
-  ```
+  
   modfetch place --config /path/to/config.yml --path /path/to/model.safetensors --dry-run
-  ```
+  
 
 Resolvers
 - See docs/RESOLVERS.md for hf:// and civitai:// formats, examples, and auth via env tokens.
