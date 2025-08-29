@@ -77,6 +77,9 @@ User guide (see docs/USER_GUIDE.md for full guide)
   modfetch download --config /path/to/config.yml --url 'hf://gpt2/README.md?rev=main'
   modfetch download --config /path/to/config.yml --url 'civitai://model/123456?file=vae'
   
+  - Default filename:
+    - civitai:// uses `<ModelName> - <OriginalFileName>` if `--dest` is omitted (with collision-safe suffixes)
+    - others use the basename of the resolved URL
   - Quiet mode (suppress progress/info logs): add `--quiet`
   - On completion, a summary is printed (dest, size, SHA256, duration, average speed)
 - Place artifacts into apps:

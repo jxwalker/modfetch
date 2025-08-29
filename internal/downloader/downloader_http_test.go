@@ -82,7 +82,7 @@ func TestChunked_RangeWithTransient429(t *testing.T) {
 	defer st.SQL.Close()
 
 	dl := NewAuto(cfg, log, st, nil)
-	dest, sha, err := dl.Download(context.Background(), url, "", "", nil)
+	dest, sha, err := dl.Download(context.Background(), url, "", "", nil, false)
 	if err != nil { t.Fatalf("download: %v", err) }
 	if _, err := os.Stat(dest); err != nil { t.Fatalf("dest: %v", err) }
 	if len(sha) != 64 { t.Fatalf("sha len: %d", len(sha)) }
@@ -125,7 +125,7 @@ func TestFallback_NoRangeSupport(t *testing.T) {
 	defer st.SQL.Close()
 
 	dl := NewAuto(cfg, log, st, nil)
-	dest, _, err := dl.Download(context.Background(), url, "", "", nil)
+	dest, _, err := dl.Download(context.Background(), url, "", "", nil, false)
 	if err != nil { t.Fatalf("download: %v", err) }
 	b, err := os.ReadFile(dest)
 	if err != nil { t.Fatalf("read: %v", err) }
@@ -196,7 +196,7 @@ func TestChunked_CorruptOneChunkThenRepair(t *testing.T) {
 	defer st.SQL.Close()
 
 	dl := NewAuto(cfg, log, st, nil)
-	dest, sha, err := dl.Download(context.Background(), url, "", expected, nil)
+	dest, sha, err := dl.Download(context.Background(), url, "", expected, nil, false)
 	if err != nil { t.Fatalf("download: %v", err) }
 	if sha != expected {
 		b, _ := os.ReadFile(dest)

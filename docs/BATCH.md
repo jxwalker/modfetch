@@ -17,7 +17,9 @@ BatchJob fields:
   - Direct HTTP(S) or resolver URI
   - Examples: `https://...`, `hf://owner/repo/path?rev=main`, `civitai://model/123456?version=42&file=vae`
 - dest: string (optional)
-  - Destination file path; if omitted, modfetch saves to `<general.download_root>/<basename-of-resolved-URL>`
+  - Destination file path. If omitted:
+    - For civitai:// URIs: modfetch saves to `<general.download_root>/<ModelName> - <OriginalFileName>` (sanitized), with collision-safe suffixes.
+    - For other URIs: modfetch saves to `<general.download_root>/<basename-of-resolved-URL>`.
 - sha256: string (optional)
   - Expected final SHA256 (hex). On mismatch, modfetch will re-hash chunks to identify and re-fetch the corrupted ones. If still mismatched, the job fails.
   - A `.sha256` sidecar file is always written on success.

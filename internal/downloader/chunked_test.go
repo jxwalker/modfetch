@@ -39,7 +39,7 @@ func TestChunkedDownload1MB(t *testing.T) {
 
 	dl := NewChunked(cfg, log, st, nil)
 	url := "https://proof.ovh.net/files/1Mb.dat"
-	dest, sha, err := dl.Download(context.Background(), url, "", "", nil)
+	dest, sha, err := dl.Download(context.Background(), url, "", "", nil, false)
 	if err != nil { t.Fatalf("download: %v", err) }
 	fi, err := os.Stat(dest)
 	if err != nil { t.Fatalf("stat: %v", err) }
@@ -74,7 +74,7 @@ func TestChunkedCorruptAndRepair(t *testing.T) {
 	dl := NewChunked(cfg, log, st, nil)
 	url := "https://proof.ovh.net/files/1Mb.dat"
 	// First download to get good SHA
-	dest, goodSHA, err := dl.Download(context.Background(), url, "", "", nil)
+	dest, goodSHA, err := dl.Download(context.Background(), url, "", "", nil, false)
 	if err != nil { t.Fatalf("download1: %v", err) }
 	// Corrupt middle 64 bytes
 	f, err := os.OpenFile(dest, os.O_RDWR, 0)
@@ -85,7 +85,7 @@ func TestChunkedCorruptAndRepair(t *testing.T) {
 	for i := range bad { bad[i] = 0xFF }
 	if _, err := f.Write(bad); err != nil { t.Fatalf("write corrupt: %v", err) }
 	// Run downloader again with expected SHA; it should repair the corrupted chunk
-	_, fixedSHA, err := dl.Download(context.Background(), url, dest, goodSHA, nil)
+	_, fixedSHA, err := dl.Download(context.Background(), url, dest, goodSHA, nil, false)
 	if err != nil { t.Fatalf("download2(repair): %v", err) }
 	if fixedSHA != goodSHA {
 		// confirm by local recompute

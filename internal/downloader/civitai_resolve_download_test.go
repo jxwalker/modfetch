@@ -97,7 +97,7 @@ func TestCivitAIResolveAndDownload_WithAuthAndChunks(t *testing.T) {
 	res, err := resolver.Resolve(context.Background(), uri, cfg)
 	if err != nil { t.Fatalf("resolve: %v", err) }
 	dl := NewChunked(cfg, log, st, nil)
-	dest, sha, err := dl.Download(context.Background(), res.URL, "", "", res.Headers)
+	dest, sha, err := dl.Download(context.Background(), res.URL, "", "", res.Headers, false)
 	if err != nil { t.Fatalf("download: %v", err) }
 	fi, err := os.Stat(dest)
 	if err != nil { t.Fatalf("stat: %v", err) }

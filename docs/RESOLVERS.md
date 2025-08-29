@@ -34,7 +34,9 @@ CivitAI (civitai://)
   - The resolver queries the CivitAI API:
     - GET /api/v1/models/{modelId} to enumerate versions and files
     - or GET /api/v1/model-versions/{versionId}
-  - Returns the file.downloadUrl from the selected file.
+  - Returns the file.downloadUrl from the selected file and also provides metadata: model name, version name/id, original file name.
+- Default filename when --dest is omitted:
+  - For civitai:// URIs, modfetch will save to `<general.download_root>/<ModelName> - <OriginalFileName>` (sanitized). If a file with that name already exists, it tries appending `(v<versionId>)` before the extension, then numeric suffixes `(2)`, `(3)`, etc.
 - Authentication:
   - If sources.civitai.enabled is true and sources.civitai.token_env points to an environment variable (e.g., CIVITAI_TOKEN), an Authorization: Bearer <token> header is attached and used for both HEAD and GET requests.
 

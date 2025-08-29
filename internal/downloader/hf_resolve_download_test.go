@@ -36,7 +36,7 @@ func TestHFResolveAndDownload(t *testing.T) {
 	res, err := resolver.Resolve(context.Background(), uri, cfg)
 	if err != nil { t.Fatalf("resolve: %v", err) }
 	dl := NewChunked(cfg, log, st, nil)
-	dest, sha, err := dl.Download(context.Background(), res.URL, "", "", res.Headers)
+	dest, sha, err := dl.Download(context.Background(), res.URL, "", "", res.Headers, false)
 	if err != nil { t.Fatalf("download: %v", err) }
 	if _, err := os.Stat(dest); err != nil { t.Fatalf("dest stat: %v", err) }
 	if len(sha) != 64 { t.Fatalf("sha length: %d", len(sha)) }

@@ -83,7 +83,7 @@ func TestChunked_RangeTransient5xxThenSuccess(t *testing.T) {
 	defer st.SQL.Close()
 
 	dl := NewAuto(cfg, log, st, nil)
-	dest, sha, err := dl.Download(context.Background(), url, "", "", nil)
+	dest, sha, err := dl.Download(context.Background(), url, "", "", nil, false)
 	if err != nil { t.Fatalf("download: %v", err) }
 	if _, err := os.Stat(dest); err != nil { t.Fatalf("dest: %v", err) }
 	if len(sha) != 64 { t.Fatalf("sha len: %d", len(sha)) }
@@ -147,7 +147,7 @@ func TestChunked_SlowBodyCompletes(t *testing.T) {
 	defer st.SQL.Close()
 
 	dl := NewAuto(cfg, log, st, nil)
-	dest, sha, err := dl.Download(context.Background(), url, "", "", nil)
+	dest, sha, err := dl.Download(context.Background(), url, "", "", nil, false)
 	if err != nil { t.Fatalf("download: %v", err) }
 	if _, err := os.Stat(dest); err != nil { t.Fatalf("dest: %v", err) }
 	if len(sha) != 64 { t.Fatalf("sha len: %d", len(sha)) }
@@ -216,7 +216,7 @@ func TestChunked_TruncatedBodyThenRetrySuccess(t *testing.T) {
 	defer st.SQL.Close()
 
 	dl := NewAuto(cfg, log, st, nil)
-	dest, sha, err := dl.Download(context.Background(), url, "", expected, nil)
+	dest, sha, err := dl.Download(context.Background(), url, "", expected, nil, false)
 	if err != nil { t.Fatalf("download: %v", err) }
 	if sha != expected { t.Fatalf("expected sha %s got %s", expected, sha) }
 	if _, err := os.Stat(dest); err != nil { t.Fatalf("dest: %v", err) }
