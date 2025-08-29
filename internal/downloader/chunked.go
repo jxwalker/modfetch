@@ -232,6 +232,24 @@ sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers)
 	}
 
+	// Self-consistency check: ensure each written chunk matches its recorded SHA even without an expected file SHA
+	chunks, _ = e.st.ListChunks(url, destPath)
+	repaired := false
+	for _, c := range chunks {
+		if !strings.EqualFold(c.Status, "complete") { continue }
+		sha2, err := hashRange(f, c.Start, c.Size)
+		if err != nil { return "", "", err }
+		if c.SHA256 != "" && !stringsEqualHex(sha2, c.SHA256) {
+			// re-download this chunk
+			e.log.WarnfThrottled(fmt.Sprintf("repair:%s|%s", url, destPath), 2*time.Second, "chunk %d sha mismatch on self-check; re-fetching", c.Index)
+			_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
+sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
+			if err != nil { return "", "", err }
+			_ = e.st.UpdateChunkSHA(url, destPath, c.Index, sha3)
+			_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "complete")
+			repaired = true
+		}
+	}
 	// Verify final SHA by streaming the part file
 	hasher := sha256.New()
 	if _, err := f.Seek(0, io.SeekStart); err != nil { return "", "", err }
@@ -240,7 +258,6 @@ sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 	if expectedSHA != "" && !stringsEqualHex(expectedSHA, finalSHA) {
 		e.log.Warnf("final sha mismatch; scanning chunks for corruption")
 		// Re-hash each chunk and compare with recorded chunk sha
-		repaired := false
 		chunks, _ = e.st.ListChunks(url, destPath)
 		for _, c := range chunks {
 			sha2, err := hashRange(f, c.Start, c.Size)

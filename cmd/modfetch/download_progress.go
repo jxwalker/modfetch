@@ -34,11 +34,12 @@ func startProgressLoop(ctx context.Context, st *state.DB, url, dest string) func
 				fmt.Fprint(os.Stderr, "\r")
 				return
 			case <-time.After(250 * time.Millisecond):
-				// Fetch total size from downloads table
+				// Fetch total size and status from downloads table
 				total := int64(0)
+				status := ""
 				rows, _ = st.ListDownloads()
 				for _, r := range rows {
-					if r.URL == url && r.Dest == dest { total = r.Size; break }
+					if r.URL == url && r.Dest == dest { total = r.Size; status = r.Status; break }
 				}
 				// Completed bytes
 				completed := int64(0)
@@ -48,8 +49,13 @@ func startProgressLoop(ctx context.Context, st *state.DB, url, dest string) func
 						if strings.EqualFold(c.Status, "complete") { completed += c.Size }
 					}
 				} else {
-					// Single: read .part size if exists, else final
-					if fi, err := os.Stat(dest + ".part"); err == nil { completed = fi.Size() } else if fi, err := os.Stat(dest); err == nil { completed = fi.Size() }
+					// If chunked planning is underway, avoid counting preallocated .part size to prevent 100%→backwards artifacts
+					if strings.EqualFold(status, "planning") {
+						completed = 0
+					} else {
+						// Single: read .part size if exists, else final
+						if fi, err := os.Stat(dest + ".part"); err == nil { completed = fi.Size() } else if fi, err := os.Stat(dest); err == nil { completed = fi.Size() }
+					}
 				}
 				// Rate (smoothed) and ETA
 				now := time.Now()
