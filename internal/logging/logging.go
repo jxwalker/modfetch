@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -34,9 +35,11 @@ func ParseLevel(s string) Level {
 }
 
 type Logger struct {
-	min   Level
-	json  bool
-	out   io.Writer
+	min      Level
+	json     bool
+	out      io.Writer
+	mu       sync.Mutex
+	throttle map[string]throttleEntry
 }
 
 func New(level string, jsonOut bool) *Logger {
@@ -78,5 +81,38 @@ func levelString(l Level) string {
 	default:
 		return "info"
 	}
+}
+
+// throttleEntry tracks throttling window and suppressed count for a key.
+type throttleEntry struct {
+	until      time.Time
+	suppressed int
+}
+
+// WarnfThrottled logs a warning at most once per window for a given key.
+// Repeated calls within the window are suppressed and summarized on the next log.
+func (l *Logger) WarnfThrottled(key string, window time.Duration, format string, a ...any) {
+	if l == nil { return }
+	if window <= 0 { window = time.Second }
+	l.mu.Lock()
+	if l.throttle == nil { l.throttle = make(map[string]throttleEntry) }
+	e := l.throttle[key]
+	now := time.Now()
+	if now.Before(e.until) {
+		e.suppressed++
+		l.throttle[key] = e
+		l.mu.Unlock()
+		return
+	}
+	supp := e.suppressed
+	e.until = now.Add(window)
+	e.suppressed = 0
+	l.throttle[key] = e
+	l.mu.Unlock()
+	msg := fmt.Sprintf(format, a...)
+	if supp > 0 {
+		msg = fmt.Sprintf("%s (suppressed %d similar warnings)", msg, supp)
+	}
+	l.log(Warn, msg)
 }
 

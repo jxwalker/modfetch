@@ -137,7 +137,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		}
 	}
 	if err != nil || h.size <= 0 || !h.acceptRange {
-		e.log.Warnf("chunked: falling back to single: %v", err)
+		e.log.WarnfThrottled(fmt.Sprintf("fallback:%s|%s", url, destPath), 2*time.Second, "chunked: falling back to single: %v", err)
 		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers)
 	}
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "planning"})
@@ -192,7 +192,8 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 			}
 		}
 		if markedDirty > 0 {
-			e.log.Warnf("resume verification: %d chunk(s) marked dirty; will refetch", markedDirty)
+			key := fmt.Sprintf("dirty:%s|%s", url, destPath)
+			e.log.WarnfThrottled(key, 2*time.Second, "resume verification: %d chunk(s) marked dirty; will refetch", markedDirty)
 		}
 		// Refresh chunk list to pick up dirty statuses
 		chunks, _ = e.st.ListChunks(url, destPath)
@@ -272,6 +273,25 @@ sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 	_ = f.Sync()
 	// Finalize
 	if err := os.Rename(part, destPath); err != nil { return "", "", err }
+	// If safetensors, trim any trailing bytes beyond header-declared size (and fail if incomplete)
+	if _, err := adjustSafetensors(destPath, e.log); err != nil { return "", "", err }
+	// Optional deep verify for safetensors
+	if e.cfg.Validation.SafetensorsDeepVerifyAfterDownload && (strings.HasSuffix(strings.ToLower(destPath), ".safetensors") || strings.HasSuffix(strings.ToLower(destPath), ".sft")) {
+		ok, _, verr := deepVerifySafetensors(destPath)
+		if !ok || verr != nil {
+			_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "verify_failed"})
+			return "", "", fmt.Errorf("deep verify failed: %v", verr)
+		}
+	}
+	// Recompute SHA after any adjustment
+	{
+		ff, err := os.Open(destPath)
+		if err != nil { return "", "", err }
+		h := sha256.New()
+		if _, err := io.Copy(h, ff); err != nil { _ = ff.Close(); return "", "", err }
+		_ = ff.Close()
+		finalSHA = hex.EncodeToString(h.Sum(nil))
+	}
 	if err := writeAndSync(destPath+".sha256", []byte(finalSHA+"  "+filepath.Base(destPath)+"\n")); err != nil { return "", "", err }
 	_ = fsyncDir(filepath.Dir(destPath))
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: finalSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "complete"})

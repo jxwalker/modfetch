@@ -148,6 +148,25 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 
 	// Rename to final
 	if err := os.Rename(part, destPath); err != nil { return "", "", err }
+	// If safetensors, trim any trailing bytes beyond header-declared size (and fail if incomplete)
+	if _, err := adjustSafetensors(destPath, s.log); err != nil { return "", "", err }
+	// Optional deep verify for safetensors
+	if s.cfg.Validation.SafetensorsDeepVerifyAfterDownload && (strings.HasSuffix(strings.ToLower(destPath), ".safetensors") || strings.HasSuffix(strings.ToLower(destPath), ".sft")) {
+		ok, _, verr := deepVerifySafetensors(destPath)
+		if !ok || verr != nil {
+			_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "verify_failed"})
+			return "", "", fmt.Errorf("deep verify failed: %v", verr)
+		}
+	}
+	// Recompute SHA after any adjustment
+	{
+		ff, err := os.Open(destPath)
+		if err != nil { return "", "", err }
+		h := sha256.New()
+		if _, err := io.Copy(h, ff); err != nil { _ = ff.Close(); return "", "", err }
+		_ = ff.Close()
+		actualSHA = hex.EncodeToString(h.Sum(nil))
+	}
 	// Write checksum file (durable)
 	if err := writeAndSync(destPath+".sha256", []byte(actualSHA+"  "+filepath.Base(destPath)+"\n")); err != nil {
 		return "", "", err

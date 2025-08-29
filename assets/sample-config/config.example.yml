@@ -104,4 +104,5 @@ metrics:
 validation:
   require_sha256: true
   accept_md5_sha1_if_provided: false
+  safetensors_deep_verify_after_download: true   # verify coverage/length for .safetensors after download; fail if not exact
 

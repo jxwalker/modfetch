@@ -109,8 +109,9 @@ type PromTextfile struct {
 }
 
 type Validation struct {
-	RequireSHA256          bool `yaml:"require_sha256"`
-	AcceptMD5SHA1IfProvided bool `yaml:"accept_md5_sha1_if_provided"`
+	RequireSHA256                      bool `yaml:"require_sha256"`
+	AcceptMD5SHA1IfProvided            bool `yaml:"accept_md5_sha1_if_provided"`
+	SafetensorsDeepVerifyAfterDownload bool `yaml:"safetensors_deep_verify_after_download"`
 }
 
 // Load reads, parses, expands, and validates a YAML config file.
