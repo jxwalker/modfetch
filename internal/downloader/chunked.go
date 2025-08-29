@@ -77,23 +77,33 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	startTime := time.Now()
 	if a, ok := e.metrics.(interface{ IncActive(int64); Write() error }); ok { a.IncActive(1); _ = a.Write(); defer func(){ a.IncActive(-1); _ = a.Write() }() }
 
-	// Host capability cache: if we know HEAD is bad or Range unsupported, skip chunked path early
+	// Host capability cache: if we know Accept-Ranges is unsupported, skip chunked path early
 	if u, perr := neturl.Parse(url); perr == nil {
 		if caps, ok, _ := e.st.GetHostCaps(strings.ToLower(u.Hostname())); ok {
-			if !caps.HeadOK || !caps.AcceptRanges {
-				e.log.Debugf("host capability cached: head_ok=%v accept_ranges=%v; falling back to single", caps.HeadOK, caps.AcceptRanges)
-				return NewSingle(e.cfg, e.log, e.st, e.metrics).Download(ctx, url, destPath, expectedSHA, headers)
+			if !caps.AcceptRanges {
+				e.log.Debugf("host capability cached: accept_ranges=%v; falling back to single", caps.AcceptRanges)
+				return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers)
 			}
 		}
 	}
 	h, err := e.head(ctx, url, headers)
-	// Persist host capabilities from HEAD probe
+	// If HEAD failed or Range not advertised, try a Range GET probe (bytes=0-0)
+	if (err != nil || !h.acceptRange || h.size <= 0) && ctx != nil {
+		if hp, perr := e.probeRangeGET(ctx, url, headers); perr == nil && hp.acceptRange && hp.size > 0 {
+			e.log.Debugf("range GET probe succeeded (size=%d)", hp.size)
+			h = hp
+			err = nil
+		}
+	}
+	// Persist host capabilities based on what we know
 	if u, perr := neturl.Parse(url); perr == nil {
-		_ = e.st.UpsertHostCaps(strings.ToLower(u.Hostname()), err == nil, err == nil && h.acceptRange)
+		headOK := err == nil
+		acc := h.acceptRange
+		_ = e.st.UpsertHostCaps(strings.ToLower(u.Hostname()), headOK, acc)
 	}
 	if err != nil || h.size <= 0 || !h.acceptRange {
 		e.log.Warnf("chunked: falling back to single: %v", err)
-		return NewSingle(e.cfg, e.log, e.st, e.metrics).Download(ctx, url, destPath, expectedSHA, headers)
+		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers)
 	}
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "planning"})
 
@@ -272,6 +282,51 @@ req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
+// probeRangeGET attempts to fetch a single byte (0-0) via GET with Range header
+// to infer total size and whether Range requests are honored when HEAD is blocked.
+func (e *Chunked) probeRangeGET(ctx context.Context, url string, headers map[string]string) (headInfo, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req.Header.Set("User-Agent", userAgent(e.cfg))
+	for k, v := range headers { req.Header.Set(k, v) }
+	req.Header.Set("Range", "bytes=0-0")
+	resp, err := e.client.Do(req)
+	if err != nil { return headInfo{}, err }
+	defer resp.Body.Close()
+	// Expect 206 Partial Content
+	if resp.StatusCode != http.StatusPartialContent {
+		return headInfo{}, fmt.Errorf("probe: unexpected status %s", resp.Status)
+	}
+	cr := resp.Header.Get("Content-Range")
+	// Format: bytes 0-0/TOTAL
+	var start, end, total int64
+	if _, err := fmt.Sscanf(cr, "bytes %d-%d/%d", &start, &end, &total); err != nil || total <= 0 {
+		return headInfo{}, fmt.Errorf("probe: invalid Content-Range: %q", cr)
+	}
+	var h headInfo
+	h.size = total
+	h.acceptRange = true
+	h.etag = resp.Header.Get("ETag")
+	h.lastMod = resp.Header.Get("Last-Modified")
+	return h, nil
+}
+
+func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string) (string, string, error) {
+	max := e.cfg.Concurrency.MaxRetries
+	if max <= 0 { max = 8 }
+	var lastErr error
+	for attempt := 0; attempt < max; attempt++ {
+		final, sha, err := NewSingle(e.cfg, e.log, e.st, e.metrics).Download(ctx, url, destPath, expectedSHA, headers)
+		if err == nil { return final, sha, nil }
+		lastErr = err
+		// backoff between attempts
+		b := e.cfg.Concurrency.Backoff
+		min := b.MinMS; if min <= 0 { min = 200 }
+		maxb := b.MaxMS; if maxb <= 0 { maxb = 30000 }
+		dur := time.Duration(min)*time.Millisecond + time.Duration(rand.Intn(maxb-min+1))*time.Millisecond
+		time.Sleep(dur)
+	}
+	return "", "", lastErr
+}
 
 func hashRange(f *os.File, start, size int64) (string, error) {
 	if _, err := f.Seek(start, io.SeekStart); err != nil { return "", err }
