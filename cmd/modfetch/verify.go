@@ -33,6 +33,8 @@ func handleVerify(args []string) error {
 	scanDir := fs.String("scan-dir", "", "Recursively scan a directory for .safetensors and verify")
 	repair := fs.Bool("repair", false, "When used with --scan-dir and --safetensors-deep: trim extra trailing bytes to declared size")
 	quarantineIncomplete := fs.Bool("quarantine-incomplete", false, "When used with --scan-dir: move incomplete files to .incomplete")
+	onlyErrors := fs.Bool("only-errors", false, "Show only files with errors or non-verified status")
+	summary := fs.Bool("summary", false, "Print a summary of total scanned and error count")
 	logLevel := fs.String("log-level", "info", "log level")
 	jsonOut := fs.Bool("json", false, "json logs")
 	if err := fs.Parse(args); err != nil { return err }
@@ -109,8 +111,36 @@ func handleVerify(args []string) error {
 		enc := json.NewEncoder(os.Stdout); enc.SetIndent("", "  ")
 		return enc.Encode(report)
 	}
+	// Human-readable output with optional filtering and summary
+	total := 0
+	errCount := 0
+	errPaths := []string{}
+	isErr := func(m map[string]any) bool {
+		// status not verified
+		if st, ok := m["status"].(string); ok && st != "" && st != "verified" {
+			return true
+		}
+		// safetensors basic
+		if *checkST {
+			if ok, okp := m["safetensors_ok"].(bool); okp && !ok { return true }
+			if _, has := m["safetensors_error"]; has { return true }
+		}
+		// safetensors deep
+		if *checkSTDeep {
+			if ok, okp := m["safetensors_deep_ok"].(bool); okp && !ok { return true }
+			if _, has := m["safetensors_deep_error"]; has { return true }
+		}
+		return false
+	}
 	for _, v := range report {
 		m := v.(map[string]any)
+		total++
+		err := isErr(m)
+		if err {
+			errCount++
+			if p, ok := m["path"].(string); ok { errPaths = append(errPaths, p) }
+		}
+		if *onlyErrors && !err { continue }
 		path := m["path"]
 		if _, hasSize := m["size"]; hasSize {
 			fmt.Printf("%s size=%v sha256=%v status=%v\n", path, m["size"], m["sha256"], m["status"])
@@ -125,6 +155,13 @@ func handleVerify(args []string) error {
 			if rv, ok := m["repaired"]; ok { fmt.Printf(" repaired=%v", rv) }
 			if qv, ok := m["quarantined"]; ok { fmt.Printf(" quarantined=%v", qv) }
 			fmt.Print("\n")
+		}
+	}
+	if *summary {
+		fmt.Printf("Summary: scanned=%d errors=%d\n", total, errCount)
+		if errCount > 0 {
+			fmt.Println("Error paths:")
+			for _, p := range errPaths { fmt.Printf("  %s\n", p) }
 		}
 	}
 	return nil
