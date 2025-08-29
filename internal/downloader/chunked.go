@@ -272,21 +272,6 @@ req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
-// writeAndSync writes content to path and fsyncs the file.
-func writeAndSync(path string, b []byte) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-	if err != nil { return err }
-	defer f.Close()
-	if _, err := f.Write(b); err != nil { return err }
-	return f.Sync()
-}
-
-func fsyncDir(dir string) error {
-	df, err := os.Open(dir)
-	if err != nil { return err }
-	defer df.Close()
-	return df.Sync()
-}
 
 func hashRange(f *os.File, start, size int64) (string, error) {
 	if _, err := f.Seek(start, io.SeekStart); err != nil { return "", err }

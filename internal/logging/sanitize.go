@@ -12,6 +12,10 @@ func SanitizeURL(raw string) string {
 	if s == "" { return s }
 	u, err := url.Parse(s)
 	if err != nil { return s }
+	// If no scheme and no authority, keep as-is to avoid percent-encoding spaces
+	if u.Scheme == "" && !strings.Contains(s, "://") {
+		return s
+	}
 	u.User = nil
 	u.RawQuery = ""
 	u.Fragment = ""
