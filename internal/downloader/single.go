@@ -20,6 +20,22 @@ import (
 	"modfetch/internal/state"
 )
 
+// local helper to probe size and range via GET bytes=0-0
+func probeRangeGET(client *http.Client, url string, headers map[string]string, ua string) (size int64, ok bool) {
+	req, _ := http.NewRequest(http.MethodGet, url, nil)
+	req.Header.Set("User-Agent", ua)
+	for k, v := range headers { req.Header.Set(k, v) }
+	req.Header.Set("Range", "bytes=0-0")
+	resp, err := client.Do(req)
+	if err != nil { return 0, false }
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusPartialContent { return 0, false }
+	cr := resp.Header.Get("Content-Range")
+	var s, e, total int64
+	if _, err := fmt.Sscanf(cr, "bytes %d-%d/%d", &s, &e, &total); err != nil || total <= 0 { return 0, false }
+	return total, true
+}
+
 type Single struct {
 	cfg    *config.Config
 	log    *logging.Logger
@@ -152,16 +168,24 @@ func (s *Single) head(ctx context.Context, url string, headers map[string]string
 	req.Header.Set("User-Agent", userAgent(s.cfg))
 	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := s.client.Do(req)
-	if err != nil { return "", "", 0, false }
-	defer resp.Body.Close()
-	etag = strings.Trim(resp.Header.Get("ETag"), "\"")
-	lastMod = resp.Header.Get("Last-Modified")
-	if cl := resp.Header.Get("Content-Length"); cl != "" {
-		var n int64
-		_, _ = fmt.Sscan(cl, &n)
-		size = n
+	if err == nil {
+		defer resp.Body.Close()
+		etag = strings.Trim(resp.Header.Get("ETag"), "\"")
+		lastMod = resp.Header.Get("Last-Modified")
+		if cl := resp.Header.Get("Content-Length"); cl != "" {
+			var n int64
+			_, _ = fmt.Sscan(cl, &n)
+			size = n
+		}
+		rangeOK = strings.Contains(strings.ToLower(resp.Header.Get("Accept-Ranges")), "bytes")
 	}
-	rangeOK = strings.Contains(strings.ToLower(resp.Header.Get("Accept-Ranges")), "bytes")
+	// Fallback: if HEAD failed or size/range not known, try a 0-0 Range GET to infer
+	if size <= 0 || !rangeOK {
+		if sz, ok := probeRangeGET(s.client, url, headers, userAgent(s.cfg)); ok && sz > 0 {
+			size = sz
+			rangeOK = true
+		}
+	}
 	return
 }
 

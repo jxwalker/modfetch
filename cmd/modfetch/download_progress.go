@@ -98,14 +98,15 @@ func startProgressLoop(ctx context.Context, st *state.DB, url, dest string) func
 					if r.URL == url && r.Dest == dest { retries = r.Retries; break }
 				}
 				// Bar
-				bar := renderBar(completed, total, 30)
+				bar := renderBar(completed, max64(total, completed), 30)
+				den := max64(total, completed)
 				fmt.Fprintf(os.Stderr, "\r%s %6.2f%%  %8s/s  ETA %s  %s/%s  C %d/%d A %d  R %d",
 					bar,
-					pct(completed, total),
+					pct(completed, den),
 					ifnz(rate, "-"),
 					eta,
 					humanize.Bytes(uint64(completed)),
-					humanize.Bytes(uint64(max64(total, completed))),
+					humanize.Bytes(uint64(den)),
 					cDone, cTotal, cRun,
 					retries,
 				)
