@@ -341,10 +341,10 @@ req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	} else if resp.StatusCode != http.StatusPartialContent {
 		return "", fmt.Errorf("chunk %d: bad status %s", c.Index, resp.Status)
 	}
-	// Write at offset
-	if _, err := f.Seek(c.Start, io.SeekStart); err != nil { return "", err }
+	// Write this chunk using a WriteAt-backed offset writer to avoid concurrent Seek/Write races
 	hasher := sha256.New()
-	mw := io.MultiWriter(f, hasher)
+	ow := &offsetWriterAt{w: f, off: c.Start}
+	mw := io.MultiWriter(ow, hasher)
 	written, err := io.CopyN(mw, resp.Body, c.Size)
 	if e.metrics != nil && written > 0 { e.metrics.AddBytes(written) }
 	if err != nil && !errors.Is(err, io.EOF) { return "", err }
@@ -478,5 +478,17 @@ func equalFoldHex(a, b string) bool {
 		if ca != cb { return false }
 	}
 	return true
+}
+
+// offsetWriterAt wraps an io.WriterAt and maintains a moving offset implementing io.Writer.
+type offsetWriterAt struct {
+	w   io.WriterAt
+	off int64
+}
+
+func (o *offsetWriterAt) Write(p []byte) (int, error) {
+	n, err := o.w.WriteAt(p, o.off)
+	o.off += int64(n)
+	return n, err
 }
 
