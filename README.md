@@ -23,7 +23,7 @@ Installation
   - Cross-compile: `make release-dist`
 - Binaries: via GitHub Releases (tag `vX.Y.Z` to trigger CI)
 - Homebrew: see packaging/homebrew/modfetch.rb template
-
+- Deployment (Linux): see docs/DEPLOY_LINUX.md
 Configuration
 - All configuration is provided via a YAML file; no secrets in YAML (use env vars).
 - Pass the config file path with `--config` or via `MODFETCH_CONFIG`.
@@ -54,6 +54,7 @@ User guide
   ```
   modfetch download --config /path/to/config.yml --batch /path/to/jobs.yml --place
   ```
+  - See docs/BATCH.md for full batch schema and examples
 - TUI dashboard (live status, filter, per-row speed/ETA):
   ```
   modfetch tui --config /path/to/config.yml
