@@ -129,6 +129,22 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		start = 0
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		// Provide a friendlier hint for 401 on known hosts
+		if resp.StatusCode == http.StatusUnauthorized {
+			if u, _ := neturl.Parse(url); u != nil {
+				h := strings.ToLower(u.Hostname())
+				if strings.HasSuffix(h, "huggingface.co") {
+					env := strings.TrimSpace(s.cfg.Sources.HuggingFace.TokenEnv)
+					if env == "" { env = "HF_TOKEN" }
+					return "", "", fmt.Errorf("unexpected status: 401 Unauthorized (Hugging Face: token required; export %s and ensure access/license accepted)", env)
+				}
+				if strings.HasSuffix(h, "civitai.com") {
+					env := strings.TrimSpace(s.cfg.Sources.CivitAI.TokenEnv)
+					if env == "" { env = "CIVITAI_TOKEN" }
+					return "", "", fmt.Errorf("unexpected status: 401 Unauthorized (CivitAI: token required; export %s and ensure access)", env)
+				}
+			}
+		}
 		return "", "", fmt.Errorf("unexpected status: %s", resp.Status)
 	}
 
