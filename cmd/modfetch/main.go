@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"modfetch/internal/config"
+	"modfetch/internal/logging"
 )
 
 const version = "0.1.0-M0"
@@ -60,13 +61,18 @@ Commands:
 
 Flags:
   --config PATH     Path to YAML config file (or MODFETCH_CONFIG env var)
+  --log-level L     Log level: debug|info|warn|error (per command)
+  --json            JSON log output (per command)
 `))
 }
 
 func handleStatus(args []string) error {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
+	logLevel := fs.String("log-level", "info", "log level")
+	jsonOut := fs.Bool("json", false, "json logs")
 	_ = fs.Parse(args)
-	fmt.Println("status: ok (skeleton)")
+	log := logging.New(*logLevel, *jsonOut)
+	log.Infof("status: ok (skeleton)")
 	return nil
 }
 
@@ -77,12 +83,12 @@ func handleConfig(args []string) error {
 	sub := args[0]
 	switch sub {
 	case "validate":
-		return configOp(args[1:], func(c *config.Config) error {
-			fmt.Println("config: valid")
+		return configOp(args[1:], func(c *config.Config, log *logging.Logger) error {
+			log.Infof("config: valid")
 			return nil
 		})
 	case "print":
-		return configOp(args[1:], func(c *config.Config) error {
+		return configOp(args[1:], func(c *config.Config, log *logging.Logger) error {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
 			return enc.Encode(c)
@@ -92,9 +98,11 @@ func handleConfig(args []string) error {
 	}
 }
 
-func configOp(args []string, fn func(*config.Config) error) error {
+func configOp(args []string, fn func(*config.Config, *logging.Logger) error) error {
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
+	logLevel := fs.String("log-level", "info", "log level")
+	jsonOut := fs.Bool("json", false, "json logs")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -110,6 +118,7 @@ func configOp(args []string, fn func(*config.Config) error) error {
 	if err != nil {
 		return err
 	}
-	return fn(c)
+	log := logging.New(*logLevel, *jsonOut)
+	return fn(c, log)
 }
 
