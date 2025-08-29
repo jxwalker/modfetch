@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	neturl "net/url"
 	"strings"
 	"time"
 
@@ -16,6 +18,8 @@ import (
 	"modfetch/internal/config"
 	"modfetch/internal/state"
 	"modfetch/internal/logging"
+	"modfetch/internal/downloader"
+	"modfetch/internal/resolver"
 )
 
 type model struct {
@@ -25,9 +29,19 @@ type model struct {
 	selected int
 	showInfo bool
 	showHelp bool
+	menuOn   bool
 	filterOn bool
 	filter   textinput.Model
 	sortMode string // ""|"speed"|"eta"
+	filterPreset string // all|active|errors
+	groupOn  bool
+	showURLFirst bool
+	// new download modal
+	newDL    bool
+	newURL   textinput.Model
+	newDest  textinput.Model
+	newFocus int
+	newMsg   string
 	err      error
 	width   int
 	height  int
@@ -37,6 +51,8 @@ type model struct {
 	// speed state
 	prev map[string]obs
 }
+
+type dlDoneMsg struct { path string; err error }
 
 type obs struct{ bytes int64; t time.Time }
 
@@ -61,7 +77,11 @@ func New(cfg *config.Config, st *state.DB) tea.Model {
 	}
 	ti := textinput.New()
 	ti.Placeholder = "filter (url or dest contains)"
-	return &model{cfg: cfg, st: st, refresh: time.Second, prog: p, styles: styles, filter: ti, prev: map[string]obs{}}
+	m := &model{cfg: cfg, st: st, refresh: time.Second, prog: p, styles: styles, filter: ti, prev: map[string]obs{}, filterPreset: "all"}
+	// new download inputs
+	m.newURL = textinput.New(); m.newURL.Placeholder = "URL (https://..., hf://..., civitai://...)"; m.newURL.CharLimit = 4096
+	m.newDest = textinput.New(); m.newDest.Placeholder = "Destination path (optional)"; m.newDest.CharLimit = 4096
+	return m
 }
 
 func (m *model) Init() tea.Cmd {
@@ -78,6 +98,29 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		return m, nil
 	case tea.KeyMsg:
+		// Handle new download modal key events first
+		if m.newDL {
+			sw := msg.String()
+			switch sw {
+			case "esc":
+				m.newDL = false; m.newMsg = ""; return m, nil
+			case "tab":
+				m.newFocus = (m.newFocus + 1) % 2
+				return m, nil
+			case "shift+tab":
+				m.newFocus = (m.newFocus + 1 + 2 - 1) % 2
+				return m, nil
+			case "enter":
+				url := strings.TrimSpace(m.newURL.Value())
+				dest := strings.TrimSpace(m.newDest.Value())
+				if url == "" { m.newMsg = "URL required"; return m, nil }
+				m.newMsg = "starting download..."
+				return m, m.startDownloadCmd(url, dest)
+			}
+			// route typing to focused input
+			if m.newFocus == 0 { var cmd tea.Cmd; m.newURL, cmd = m.newURL.Update(msg); return m, cmd }
+			{ var cmd tea.Cmd; m.newDest, cmd = m.newDest.Update(msg); return m, cmd }
+		}
 		switch msg.String() {
 		case "q", "ctrl+c":
 			return m, tea.Quit
@@ -99,11 +142,23 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "k", "up":
 			if m.selected > 0 { m.selected-- }
 			return m, nil
+		case "n":
+			m.newDL = true; m.newURL.SetValue(""); m.newDest.SetValue(""); m.newFocus = 0; m.newURL.Focus(); m.newDest.Blur(); m.newMsg = ""; return m, nil
+		case "f":
+			if m.filterPreset == "all" { m.filterPreset = "active" } else if m.filterPreset == "active" { m.filterPreset = "errors" } else { m.filterPreset = "all" }
+			return m, refreshCmd()
+		case "g":
+			m.groupOn = !m.groupOn; return m, refreshCmd()
+		case "t":
+			m.showURLFirst = !m.showURLFirst; return m, nil
 		case "d":
 			m.showInfo = !m.showInfo
 			return m, nil
 		case "?", "h":
 			m.showHelp = !m.showHelp
+			return m, nil
+		case "m":
+			m.menuOn = !m.menuOn
 			return m, nil
 		case "s":
 			m.sortMode = "speed"
@@ -127,6 +182,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.err = msg.err
 		return m, tickCmd(m.refresh)
+	case dlDoneMsg:
+		if msg.err != nil {
+			m.newMsg = fmt.Sprintf("download failed: %v", msg.err)
+		} else {
+			m.newMsg = fmt.Sprintf("downloaded: %s", msg.path)
+		}
+		m.newDL = false
+		return m, refreshCmd()
 	}
 	// Update filter if active
 	if m.filterOn {
@@ -139,18 +202,53 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *model) View() string {
 	var b strings.Builder
-	// Header with total completed size and global throughput
+	// Header with totals and throughput
 	var total int64
 	var gRate float64
+	counts := map[string]int{"complete":0, "running":0, "pending":0, "planning":0, "error":0}
 	for _, r := range m.filteredRows() {
 		if r.Status == "complete" { total += r.Size }
 		_, _, rate, _ := m.progressFor(r)
 		gRate += rate
+		ls := strings.ToLower(r.Status)
+		if _, ok := counts[ls]; ok { counts[ls]++ }
 	}
-	help := m.styles.label.Render("(q quit, r refresh, j/k select, d details, / filter)")
+	help := m.styles.label.Render("(q quit, r refresh, j/k select, n new, f filter preset, g group, t toggle cols, d details, / filter, m menu)")
 	fmt.Fprintf(&b, "%s %s %s\n", m.styles.header.Render("modfetch: downloads"), help, m.styles.label.Render("total="+humanize.Bytes(uint64(total))+" rate="+humanize.Bytes(uint64(gRate))+"/s"))
+	// Status counts & preset
+	fmt.Fprintf(&b, "%s\n", m.styles.label.Render(fmt.Sprintf("completed:%d running:%d pending:%d planning:%d errors:%d • view:%s", counts["complete"], counts["running"], counts["pending"], counts["planning"], counts["error"], m.filterPreset)) )
+	// Token env warnings
+	if m.cfg.Sources.HuggingFace.Enabled {
+		env := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv)
+		if env == "" { env = "HF_TOKEN" }
+		if strings.TrimSpace(os.Getenv(env)) == "" {
+			b.WriteString(m.styles.label.Render("Warning: Hugging Face token env "+env+" not set; gated repos may 401")+"\n")
+		}
+	}
+	if m.cfg.Sources.CivitAI.Enabled {
+		env := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv)
+		if env == "" { env = "CIVITAI_TOKEN" }
+		if strings.TrimSpace(os.Getenv(env)) == "" {
+			b.WriteString(m.styles.label.Render("Warning: CivitAI token env "+env+" not set; gated content may 401")+"\n")
+		}
+	}
 	if m.filterOn {
 		b.WriteString("Filter: "+ m.filter.View()+"\n")
+	}
+	if m.menuOn {
+		b.WriteString(m.menuView())
+		b.WriteString("\n")
+	}
+	if m.newMsg != "" {
+		b.WriteString(m.styles.label.Render(m.newMsg)+"\n")
+	}
+	// New download modal overlay
+	if m.newDL {
+		b.WriteString(lipgloss.NewStyle().Bold(true).Render("New Download")+"\n")
+		if m.newFocus == 0 { m.newURL.Focus(); m.newDest.Blur() } else { m.newDest.Focus(); m.newURL.Blur() }
+		b.WriteString("  URL:  "+m.newURL.View()+"\n")
+		b.WriteString("  Dest: "+m.newDest.View()+"\n")
+		b.WriteString(m.styles.label.Render("Enter to start • Tab to switch • Esc to cancel")+"\n\n")
 	}
 	if m.err != nil {
 		fmt.Fprintf(&b, "error: %v\n\n", m.err)
@@ -159,17 +257,34 @@ func (m *model) View() string {
 		b.WriteString(m.helpView())
 		b.WriteString("\n")
 	}
-	// Columns header
-	fmt.Fprintf(&b, "%s\n", m.styles.label.Render(fmt.Sprintf("%-8s  %-10s  %-10s  %-8s  %-40s  %s", "STATUS", "PROGRESS", "SPEED", "ETA", "DEST", "URL")))
+	// Columns header with dynamic widths
+	avail := m.width
+	if avail <= 0 { avail = 120 }
+	fixed := 8 + 2 + 10 + 2 + 10 + 2 + 8 + 2 + 2 // status, spaces, progress label, speed, eta, spaces
+	rest := avail - fixed
+	if rest < 20 { rest = 20 }
+	destW := rest/2
+	urlW := rest - destW
+	if m.showURLFirst { destW, urlW = urlW, destW }
+	// Build header labels
+	labelLeft := "DEST"; labelRight := "URL"; if m.showURLFirst { labelLeft, labelRight = "URL", "DEST" }
+	fmt.Fprintf(&b, "%s\n", m.styles.label.Render(fmt.Sprintf("%-8s  %-10s  %-10s  %-8s  %-*s  %-*s", "STATUS", "PROGRESS", "SPEED", "ETA", destW, labelLeft, urlW, labelRight)))
 	rows := m.filteredRows()
+	var prevStatus string
 	for i, r := range rows {
+		if m.groupOn {
+			if i == 0 || !strings.EqualFold(prevStatus, r.Status) {
+				b.WriteString(m.styles.label.Render(fmt.Sprintf("== %s ==", strings.ToUpper(r.Status)))+"\n")
+				prevStatus = r.Status
+			}
+		}
 		prog := m.renderProgress(r)
 		_, _, rate, eta := m.progressFor(r)
-		fn := r.Dest
-		if len(fn) > 40 { fn = fn[len(fn)-40:] }
-	u := logging.SanitizeURL(r.URL)
-		if len(u) > 60 { u = u[:60] + "…" }
-		line := fmt.Sprintf("%-8s  %-10s  %-10s  %-8s  %-40s  %s", r.Status, prog, humanize.Bytes(uint64(rate))+"/s", eta, fn, u)
+		d := r.Dest; if len(d) > destW { if destW > 1 { d = d[len(d)-destW:] } }
+		u := logging.SanitizeURL(r.URL); if len(u) > urlW { if urlW > 1 { u = u[:urlW-1] + "…" } }
+		left := d; right := u
+		if m.showURLFirst { left, right = u, d }
+		line := fmt.Sprintf("%-8s  %-10s  %-10s  %-8s  %-*s  %-*s", r.Status, prog, humanize.Bytes(uint64(rate))+"/s", eta, destW, left, urlW, right)
 		if i == m.selected {
 			line = lipgloss.NewStyle().Bold(true).Render(line)
 		}
@@ -277,6 +392,47 @@ func etaSeconds(cur, total int64, rate float64) float64 {
 }
 
 func (m *model) helpView() string {
-	return "Help: j/k up/down • r refresh • d details • / filter • s sort by speed • e sort by ETA • o clear sort • h/? toggle this help"
+	return "Help: j/k up/down • r refresh • n new download • f filter preset • g group by status • t toggle columns • d details • / filter • s sort by speed • e sort by ETA • o clear sort • m menu • h/? toggle this help"
 }
+
+func (m *model) menuView() string {
+	var b strings.Builder
+	b.WriteString(lipgloss.NewStyle().Bold(true).Render("Menu") + "\n")
+	b.WriteString("  n: New download      f: Filter preset (all/active/errors)    g: Group by status    t: Toggle columns\n")
+	b.WriteString("  d: Toggle details    /: Filter                           s: Sort by speed     e: Sort by ETA\n")
+	b.WriteString("  o: Clear sort        h: Help                             r: Refresh           q: Quit\n")
+	return b.String()
+}
+
+func (m *model) startDownloadCmd(urlStr, dest string) tea.Cmd {
+	return func() tea.Msg {
+		ctx := context.Background()
+		resolved := urlStr
+		headers := map[string]string{}
+		if strings.HasPrefix(resolved, "hf://") || strings.HasPrefix(resolved, "civitai://") {
+			res, err := resolver.Resolve(ctx, resolved, m.cfg)
+			if err != nil { return dlDoneMsg{"", err} }
+			resolved = res.URL
+			headers = res.Headers
+		} else {
+			if u, err := neturl.Parse(resolved); err == nil {
+				h := strings.ToLower(u.Hostname())
+				if strings.HasSuffix(h, "huggingface.co") && m.cfg.Sources.HuggingFace.Enabled {
+					env := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv); if env == "" { env = "HF_TOKEN" }
+					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer "+tok }
+				}
+				if strings.HasSuffix(h, "civitai.com") && m.cfg.Sources.CivitAI.Enabled {
+					env := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv); if env == "" { env = "CIVITAI_TOKEN" }
+					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer "+tok }
+				}
+			}
+		}
+		log := logging.New("error", false)
+		dl := downloader.NewAuto(m.cfg, log, m.st, nil)
+		final, _, err := dl.Download(ctx, resolved, dest, "", headers, m.cfg.General.AlwaysNoResume)
+		return dlDoneMsg{final, err}
+	}
+}
+
+// Modal overlay for new download (render within View)
 
