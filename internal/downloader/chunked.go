@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,7 +38,7 @@ type Chunked struct {
 func NewChunked(cfg *config.Config, log *logging.Logger, st *state.DB, m interface{ AddBytes(int64); IncRetries(int64); IncDownloadsSuccess(); ObserveDownloadSeconds(float64); Write() error }) *Chunked {
 	timeout := time.Duration(cfg.Network.TimeoutSeconds) * time.Second
 	if timeout <= 0 { timeout = 60 * time.Second }
-	return &Chunked{cfg: cfg, log: log, st: st, client: &http.Client{Timeout: timeout}, metrics: m}
+	return &Chunked{cfg: cfg, log: log, st: st, client: newHTTPClient(cfg), metrics: m}
 }
 
 type headInfo struct {
@@ -75,7 +76,20 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil { return "", "", err }
 	startTime := time.Now()
 
+	// Host capability cache: if we know HEAD is bad or Range unsupported, skip chunked path early
+	if u, perr := neturl.Parse(url); perr == nil {
+		if caps, ok, _ := e.st.GetHostCaps(strings.ToLower(u.Hostname())); ok {
+			if !caps.HeadOK || !caps.AcceptRanges {
+				e.log.Debugf("host capability cached: head_ok=%v accept_ranges=%v; falling back to single", caps.HeadOK, caps.AcceptRanges)
+				return NewSingle(e.cfg, e.log, e.st, e.metrics).Download(ctx, url, destPath, expectedSHA, headers)
+			}
+		}
+	}
 	h, err := e.head(ctx, url, headers)
+	// Persist host capabilities from HEAD probe
+	if u, perr := neturl.Parse(url); perr == nil {
+		_ = e.st.UpsertHostCaps(strings.ToLower(u.Hostname()), err == nil, err == nil && h.acceptRange)
+	}
 	if err != nil || h.size <= 0 || !h.acceptRange {
 		e.log.Warnf("chunked: falling back to single: %v", err)
 		return NewSingle(e.cfg, e.log, e.st, e.metrics).Download(ctx, url, destPath, expectedSHA, headers)
@@ -120,6 +134,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	// Download chunks concurrently
 	perFile := e.cfg.Concurrency.PerFileChunks
 	if perFile <= 0 { perFile = 4 }
+	if ph := e.cfg.Concurrency.PerHostRequests; ph > 0 && perFile > ph { perFile = ph }
 	sem := make(chan struct{}, perFile)
 	var wg sync.WaitGroup
 	var dErr error

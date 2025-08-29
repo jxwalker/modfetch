@@ -22,7 +22,7 @@ Quick start: interactive wizard
 - `network`
   - `timeout_seconds`, `max_redirects`, `tls_verify`, `user_agent`
 - `concurrency`
-  - `global_files`, `per_file_chunks`, `chunk_size_mb`, `max_retries`, `backoff`
+  - `global_files`, `per_file_chunks`, `per_host_requests`, `chunk_size_mb`, `max_retries`, `backoff`
 - `sources`
   - `huggingface`: `enabled`, `token_env`
   - `civitai`: `enabled`, `token_env`

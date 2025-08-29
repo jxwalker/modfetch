@@ -28,6 +28,7 @@ path := filepath.Join(cfg.General.DataRoot, "state.db")
 	if err := initSchema(sqldb); err != nil { return nil, err }
 	db := &DB{SQL: sqldb, Path: path}
 	if err := db.InitChunksTable(); err != nil { return nil, err }
+	if err := db.InitHostCapsTable(); err != nil { return nil, err }
 	return db, nil
 }
 

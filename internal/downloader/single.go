@@ -40,7 +40,7 @@ func NewSingle(cfg *config.Config, log *logging.Logger, st *state.DB, m interfac
 		cfg: cfg,
 		log: log,
 		st:  st,
-		client: &http.Client{Timeout: timeout},
+		client: newHTTPClient(cfg),
 		metrics: m,
 	}
 }

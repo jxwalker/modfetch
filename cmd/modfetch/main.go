@@ -57,6 +57,8 @@ func run(args []string) error {
 	case "version":
 		fmt.Println(version)
 		return nil
+	case "completion":
+		return handleCompletion(args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -83,6 +85,7 @@ Commands:
   tui               Open the interactive terminal dashboard
   version           Print version
   help              Show this help
+  completion        Generate shell completion scripts (bash|zsh|fish)
 
 Flags:
   --config PATH     Path to YAML config file (or MODFETCH_CONFIG env var)
@@ -114,7 +117,7 @@ func handleStatus(args []string) error {
 		return enc.Encode(rows)
 	}
 	for _, r := range rows {
-		log.Infof("%s -> %s [%s] size=%d", r.URL, r.Dest, r.Status, r.Size)
+		log.Infof("%s -> %s [%s] size=%d", logging.SanitizeURL(r.URL), r.Dest, r.Status, r.Size)
 	}
 	return nil
 }
@@ -154,6 +157,7 @@ func handleDownload(args []string) error {
 	sha := fs.String("sha256", "", "expected SHA256 (optional)")
 	batchPath := fs.String("batch", "", "YAML batch file with download jobs")
 	placeFlag := fs.Bool("place", false, "place files after successful download")
+	summaryJSON := fs.Bool("summary-json", false, "print a JSON summary when a download completes")
 	if err := fs.Parse(args); err != nil { return err }
 	if *cfgPath == "" {
 		if env := os.Getenv("MODFETCH_CONFIG"); env != "" { *cfgPath = env }
@@ -188,10 +192,23 @@ func handleDownload(args []string) error {
 			final, sum, err := dl.Download(ctx, resolvedURL, job.Dest, job.SHA256, headers)
 			if err != nil { return fmt.Errorf("job %d download: %w", i, err) }
 			log.Infof("downloaded: %s (sha256=%s)", final, sum)
+			var placed []string
 			if job.Place || *placeFlag {
-				placed, err := placer.Place(c, final, job.Type, job.Mode)
-				if err != nil { return fmt.Errorf("job %d place: %w", i, err) }
+				var err2 error
+				placed, err2 = placer.Place(c, final, job.Type, job.Mode)
+				if err2 != nil { return fmt.Errorf("job %d place: %w", i, err2) }
 				for _, p := range placed { log.Infof("placed: %s", p) }
+			}
+			if *summaryJSON {
+				enc := json.NewEncoder(os.Stdout)
+				enc.SetIndent("", "  ")
+				_ = enc.Encode(map[string]any{
+					"url":      logging.SanitizeURL(resolvedURL),
+					"dest":     final,
+					"sha256":   sum,
+					"placed":   placed,
+					"status":   "ok",
+				})
 			}
 		}
 		return nil
@@ -237,13 +254,25 @@ func handleDownload(args []string) error {
 	if stopProg != nil { stopProg() }
 	if err != nil { return err }
 	// Final summary
-	if !*jsonOut {
+	if *summaryJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(map[string]any{
+			"url":      logging.SanitizeURL(resolvedURL),
+			"dest":     final,
+			"size":     size,
+			"duration": dur,
+			"avg_bps":  float64(size)/dur,
+			"sha256":   sum,
+			"status":   "ok",
+		})
+	} else if !*jsonOut {
 		fi, _ := os.Stat(final)
 		size := int64(0); if fi != nil { size = fi.Size() }
 		dur := time.Since(startWall).Seconds()
 		var rate string
 		if dur > 0 && size > 0 { rate = humanize.Bytes(uint64(float64(size)/dur)) + "/s" } else { rate = "-" }
-		fmt.Printf("\nDownloaded: %s\nDest: %s\nSHA256: %s\nSize: %s\nDuration: %.1fs  Avg: %s\n", resolvedURL, final, sum, humanize.Bytes(uint64(size)), dur, rate)
+	fmt.Printf("\nDownloaded: %s\nDest: %s\nSHA256: %s\nSize: %s\nDuration: %.1fs  Avg: %s\n", logging.SanitizeURL(resolvedURL), final, sum, humanize.Bytes(uint64(size)), dur, rate)
 	}
 	log.Infof("downloaded: %s (sha256=%s)", final, sum)
 	if *placeFlag {

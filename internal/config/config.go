@@ -41,11 +41,12 @@ type Network struct {
 }
 
 type Concurrency struct {
-	GlobalFiles    int `yaml:"global_files"`
-	PerFileChunks  int `yaml:"per_file_chunks"`
-	ChunkSizeMB    int `yaml:"chunk_size_mb"`
-	MaxRetries     int `yaml:"max_retries"`
-	Backoff        Backoff `yaml:"backoff"`
+	GlobalFiles     int    `yaml:"global_files"`
+	PerFileChunks   int    `yaml:"per_file_chunks"`
+	PerHostRequests int    `yaml:"per_host_requests"`
+	ChunkSizeMB     int    `yaml:"chunk_size_mb"`
+	MaxRetries      int    `yaml:"max_retries"`
+	Backoff         Backoff `yaml:"backoff"`
 }
 
 type Backoff struct {
