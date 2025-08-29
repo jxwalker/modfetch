@@ -67,6 +67,10 @@ func TestCivitAIResolve_ModelLatestAndHeaders(t *testing.T) {
 	if got := res.Headers["Authorization"]; got != "Bearer XYZ" {
 		t.Fatalf("auth header not set: %q", got)
 	}
+	// Suggested filename falls back to original file name when model name is absent in API
+	if res.SuggestedFilename == "" || !strings.HasSuffix(res.SuggestedFilename, ".safetensors") {
+		t.Fatalf("expected suggested filename safetensors, got %q", res.SuggestedFilename)
+	}
 
 	// Filter by file name substring
 	res2, err := (&CivitAI{}).Resolve(context.Background(), "civitai://model/123?file=vae", cfg)
@@ -74,12 +78,18 @@ func TestCivitAIResolve_ModelLatestAndHeaders(t *testing.T) {
 	if !strings.HasSuffix(res2.URL, "/dl/vae.bin") {
 		t.Fatalf("unexpected url2: %s", res2.URL)
 	}
+	if res2.SuggestedFilename == "" || !strings.Contains(res2.SuggestedFilename, "vae") {
+		t.Fatalf("expected suggested filename containing 'vae', got %q", res2.SuggestedFilename)
+	}
 
 	// Specific version
 	res3, err := (&CivitAI{}).Resolve(context.Background(), "civitai://model/123?version=12", cfg)
 	if err != nil { t.Fatalf("resolve3: %v", err) }
 	if !strings.HasSuffix(res3.URL, "/dl/mv.bin") {
 		t.Fatalf("unexpected url3: %s", res3.URL)
+	}
+	if res3.SuggestedFilename == "" || !strings.Contains(res3.SuggestedFilename, ".safetensors") {
+		t.Fatalf("expected suggested safetensors filename, got %q", res3.SuggestedFilename)
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 	"modfetch/internal/classifier"
 	"modfetch/internal/batch"
 	"modfetch/internal/metrics"
+	"modfetch/internal/util"
 )
 
 var version = "dev"
@@ -193,13 +194,17 @@ func handleDownload(args []string) error {
 		for i, job := range bf.Jobs {
 			resolvedURL := job.URI
 			headers := map[string]string{}
+			destCandidate := strings.TrimSpace(job.Dest)
 			if strings.HasPrefix(resolvedURL, "hf://") || strings.HasPrefix(resolvedURL, "civitai://") {
 				res, err := resolver.Resolve(ctx, resolvedURL, c)
 				if err != nil { return fmt.Errorf("job %d resolve: %w", i, err) }
 				resolvedURL = res.URL
 				headers = res.Headers
+				if destCandidate == "" && strings.HasPrefix(job.URI, "civitai://") && strings.TrimSpace(res.SuggestedFilename) != "" {
+					if p, err := util.UniquePath(c.General.DownloadRoot, res.SuggestedFilename, res.VersionID); err == nil { destCandidate = p }
+				}
 			}
-			final, sum, err := dl.Download(ctx, resolvedURL, job.Dest, job.SHA256, headers, false)
+			final, sum, err := dl.Download(ctx, resolvedURL, destCandidate, job.SHA256, headers, false)
 			if err != nil { return fmt.Errorf("job %d download: %w", i, err) }
 			log.Infof("downloaded: %s (sha256=%s)", final, sum)
 			var placed []string
@@ -252,7 +257,13 @@ func handleDownload(args []string) error {
 	// Progress display (disabled for JSON or quiet)
 	var stopProg func()
 	if !*jsonOut && !*quiet {
-		candDest := *dest
+		candDest := strings.TrimSpace(*dest)
+		if candDest == "" && strings.HasPrefix(*url, "civitai://") {
+			// If we resolved civitai:// earlier, try SuggestedFilename by resolving again cheaply
+			if res2, err := resolver.Resolve(ctx, *url, c); err == nil && strings.TrimSpace(res2.SuggestedFilename) != "" {
+				if p, err := util.UniquePath(c.General.DownloadRoot, res2.SuggestedFilename, res2.VersionID); err == nil { candDest = p }
+			}
+		}
 		if candDest == "" {
 			candDest = filepath.Join(c.General.DownloadRoot, filepath.Base(resolvedURL))
 		}
@@ -260,7 +271,14 @@ func handleDownload(args []string) error {
 	}
 	// Prefer chunked downloader; it will fall back to single when needed
 	dl := downloader.NewAuto(c, log, st, m)
-final, sum, err := dl.Download(ctx, resolvedURL, *dest, *sha, headers, (*noResume) || c.General.AlwaysNoResume)
+	// If civitai:// and no explicit dest, use SuggestedFilename
+	destArg := strings.TrimSpace(*dest)
+	if destArg == "" && strings.HasPrefix(*url, "civitai://") {
+		if res2, err := resolver.Resolve(ctx, *url, c); err == nil && strings.TrimSpace(res2.SuggestedFilename) != "" {
+			if p, err := util.UniquePath(c.General.DownloadRoot, res2.SuggestedFilename, res2.VersionID); err == nil { destArg = p }
+		}
+	}
+	final, sum, err := dl.Download(ctx, resolvedURL, destArg, *sha, headers, (*noResume) || c.General.AlwaysNoResume)
 	if stopProg != nil { stopProg() }
 	if err != nil { return err }
 	// Final summary

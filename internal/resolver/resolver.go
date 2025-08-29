@@ -9,8 +9,14 @@ import (
 )
 
 type Resolved struct {
-	URL     string
-	Headers map[string]string
+	URL               string
+	Headers           map[string]string
+	// Optional metadata (primarily for CivitAI) — may be empty for other resolvers
+	ModelName         string
+	VersionName       string
+	VersionID         string
+	FileName          string
+	SuggestedFilename string
 }
 
 type Resolver interface {

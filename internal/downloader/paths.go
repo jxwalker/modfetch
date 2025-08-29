@@ -12,9 +12,16 @@ import (
 	"modfetch/internal/config"
 )
 
-// stagePartPath returns a staging .part path under download_root/.parts, unique to (url,dest).
+// stagePartPath returns a staging .part path under download_root/.parts or partials_root if set, unique to (url,dest).
 func stagePartPath(cfg *config.Config, url, dest string) string {
-	partsDir := filepath.Join(cfg.General.DownloadRoot, ".parts")
+	if cfg != nil && !cfg.General.StagePartials {
+		return dest + ".part"
+	}
+	// Prefer explicit partials_root if configured; otherwise fallback to download_root/.parts
+	partsDir := cfg.General.PartialsRoot
+	if partsDir == "" {
+		partsDir = filepath.Join(cfg.General.DownloadRoot, ".parts")
+	}
 	_ = os.MkdirAll(partsDir, 0o755)
 	keySrc := url + "|" + dest
 	h := sha1.Sum([]byte(keySrc))

@@ -20,6 +20,7 @@ import (
 	"modfetch/internal/config"
 	"modfetch/internal/logging"
 	"modfetch/internal/state"
+	"modfetch/internal/util"
 )
 
 type Chunked struct {
@@ -119,7 +120,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		if h.filename != "" { name = h.filename }
 		if name == "" && h.finalURL != "" { name = baseNameFromURL(h.finalURL) }
 		if name == "" { name = baseNameFromURL(url) }
-		name = safeFileName(name)
+		name = util.SafeFileName(name)
 		destPath = filepath.Join(e.cfg.General.DownloadRoot, name)
 	}
 	// Attempt to migrate any previous wrong-named partial from raw URL base
@@ -444,9 +445,9 @@ func parseDispositionFilename(cd string) string {
 			// format: UTF-8''percent-encoded
 			if i := strings.Index(v, "''"); i >= 0 && i+2 < len(v) {
 				enc := v[i+2:]
-				if dec, err := neturl.QueryUnescape(enc); err == nil { return safeFileName(dec) }
+				if dec, err := neturl.QueryUnescape(enc); err == nil { return util.SafeFileName(dec) }
 			}
-			return safeFileName(v)
+			return util.SafeFileName(v)
 		}
 	}
 	for _, p := range parts {
@@ -455,7 +456,7 @@ func parseDispositionFilename(cd string) string {
 		if strings.HasPrefix(plt, "filename=") {
 			v := strings.TrimSpace(pt[len("filename="):])
 			v = strings.Trim(v, "\"'")
-			return safeFileName(v)
+			return util.SafeFileName(v)
 		}
 	}
 	return ""
@@ -470,14 +471,6 @@ func baseNameFromURL(uStr string) string {
 	return b
 }
 
-// safeFileName strips directory components and disallowed characters.
-func safeFileName(name string) string {
-	name = strings.TrimSpace(name)
-	name = strings.ReplaceAll(name, "\\", "_")
-	name = strings.ReplaceAll(name, "/", "_")
-	if name == "" { return "download" }
-	return name
-}
 
 func hashRange(f *os.File, start, size int64) (string, error) {
 	if _, err := f.Seek(start, io.SeekStart); err != nil { return "", err }
