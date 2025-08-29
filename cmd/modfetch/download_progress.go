@@ -2,20 +2,24 @@ package main
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"modfetch/internal/config"
 	"modfetch/internal/state"
 )
 
 // startProgressLoop prints a single-line progress bar with throughput and ETA while a download is running.
 // It polls the state DB for chunk completion (chunked) or file size (.part) for single-stream.
 // Call the returned stop() when the download ends.
-func startProgressLoop(ctx context.Context, st *state.DB, url, dest string) func() {
+func startProgressLoop(ctx context.Context, st *state.DB, cfg *config.Config, url, dest string) func() {
 	stop := make(chan struct{})
 	var stopped atomic.Bool
 
@@ -53,8 +57,13 @@ func startProgressLoop(ctx context.Context, st *state.DB, url, dest string) func
 					if strings.EqualFold(status, "planning") {
 						completed = 0
 					} else {
-						// Single: read .part size if exists, else final
-						if fi, err := os.Stat(dest + ".part"); err == nil { completed = fi.Size() } else if fi, err := os.Stat(dest); err == nil { completed = fi.Size() }
+						// Single: read staged .part size if exists, else final
+						if cfg != nil {
+							pp := stagedPartPath(cfg, url, dest)
+							if fi, err := os.Stat(pp); err == nil { completed = fi.Size() } else if fi, err := os.Stat(dest); err == nil { completed = fi.Size() }
+						} else {
+							if fi, err := os.Stat(dest+".part"); err == nil { completed = fi.Size() } else if fi, err := os.Stat(dest); err == nil { completed = fi.Size() }
+						}
 					}
 				}
 				// Rate (smoothed) and ETA
@@ -152,4 +161,15 @@ func ifnz(v float64, def string) string {
 }
 
 func max64(a, b int64) int64 { if a > b { return a }; return b }
+
+// stagedPartPath mirrors downloader.stagePartPath hashing to locate .part for progress
+func stagedPartPath(cfg *config.Config, url, dest string) string {
+	partsDir := filepath.Join(cfg.General.DownloadRoot, ".parts")
+	keySrc := url + "|" + dest
+	h := sha1.Sum([]byte(keySrc))
+	key := hex.EncodeToString(h[:])[:12]
+	name := filepath.Base(dest)
+	file := fmt.Sprintf("%s.%s.part", name, key)
+	return filepath.Join(partsDir, file)
+}
 

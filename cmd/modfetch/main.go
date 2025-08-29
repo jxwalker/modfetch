@@ -157,6 +157,7 @@ func handleDownload(args []string) error {
 	logLevel := fs.String("log-level", "info", "log level")
 	jsonOut := fs.Bool("json", false, "json logs")
 	quiet := fs.Bool("quiet", false, "suppress progress and info logs (errors only)")
+	noResume := fs.Bool("no-resume", false, "do not resume; start fresh (delete any staged .part and chunk state)")
 	url := fs.String("url", "", "HTTP URL to download (direct) or resolver URI (e.g. hf://owner/repo/path)")
 	dest := fs.String("dest", "", "destination path (optional)")
 	sha := fs.String("sha256", "", "expected SHA256 (optional)")
@@ -195,7 +196,7 @@ func handleDownload(args []string) error {
 				resolvedURL = res.URL
 				headers = res.Headers
 			}
-			final, sum, err := dl.Download(ctx, resolvedURL, job.Dest, job.SHA256, headers)
+			final, sum, err := dl.Download(ctx, resolvedURL, job.Dest, job.SHA256, headers, false)
 			if err != nil { return fmt.Errorf("job %d download: %w", i, err) }
 			log.Infof("downloaded: %s (sha256=%s)", final, sum)
 			var placed []string
@@ -252,11 +253,11 @@ func handleDownload(args []string) error {
 		if candDest == "" {
 			candDest = filepath.Join(c.General.DownloadRoot, filepath.Base(resolvedURL))
 		}
-		stopProg = startProgressLoop(ctx, st, resolvedURL, candDest)
+		stopProg = startProgressLoop(ctx, st, c, resolvedURL, candDest)
 	}
 	// Prefer chunked downloader; it will fall back to single when needed
 	dl := downloader.NewAuto(c, log, st, m)
-	final, sum, err := dl.Download(ctx, resolvedURL, *dest, *sha, headers)
+	final, sum, err := dl.Download(ctx, resolvedURL, *dest, *sha, headers, *noResume)
 	if stopProg != nil { stopProg() }
 	if err != nil { return err }
 	// Final summary

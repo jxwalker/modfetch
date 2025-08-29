@@ -1,0 +1,50 @@
+package downloader
+
+import (
+	"crypto/sha1"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"syscall"
+
+	"modfetch/internal/config"
+)
+
+// stagePartPath returns a staging .part path under download_root/.parts, unique to (url,dest).
+func stagePartPath(cfg *config.Config, url, dest string) string {
+	partsDir := filepath.Join(cfg.General.DownloadRoot, ".parts")
+	_ = os.MkdirAll(partsDir, 0o755)
+	keySrc := url + "|" + dest
+	h := sha1.Sum([]byte(keySrc))
+	key := hex.EncodeToString(h[:])[:12]
+	name := filepath.Base(dest)
+	file := fmt.Sprintf("%s.%s.part", name, key)
+	return filepath.Join(partsDir, file)
+}
+
+// renameOrCopy attempts to rename, falling back to copy when cross-device.
+func renameOrCopy(src, dst string) error {
+	if err := os.Rename(src, dst); err != nil {
+		if linkErr, ok := err.(*os.LinkError); ok && linkErr.Err == syscall.EXDEV {
+			if err2 := copyFile(src, dst); err2 != nil { return err2 }
+			_ = os.Remove(src)
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+func copyFile(src, dst string) error {
+	sf, err := os.Open(src)
+	if err != nil { return err }
+	defer sf.Close()
+	df, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil { return err }
+	defer df.Close()
+	if _, err := io.Copy(df, sf); err != nil { return err }
+	if err := df.Sync(); err != nil { return err }
+	return nil
+}

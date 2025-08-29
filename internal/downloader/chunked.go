@@ -73,7 +73,7 @@ func (e *Chunked) head(ctx context.Context, url string, headers map[string]strin
 }
 
 // Download orchestrates a chunked download if possible; otherwise falls back to single-stream.
-func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string) (string, string, error) {
+func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string, noResume bool) (string, string, error) {
 	if url == "" { return "", "", errors.New("url required") }
 	// Ensure download root exists; we will finalize destPath after probing headers
 	if err := os.MkdirAll(e.cfg.General.DownloadRoot, 0o755); err != nil { return "", "", err }
@@ -140,16 +140,20 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		e.log.WarnfThrottled(fmt.Sprintf("fallback:%s|%s", url, destPath), 2*time.Second, "chunked: falling back to single: %v", err)
 		// Clear any stale chunk state so progress doesn't show bogus completed bytes
 		_ = e.st.DeleteChunks(url, destPath)
-		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers)
+		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers, noResume)
 	}
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "planning"})
 
-	part := destPath + ".part"
-	// If final exists and no part exists, rename to part to verify & resume
+	part := stagePartPath(e.cfg, url, destPath)
+	if noResume {
+		_ = os.Remove(part)
+		_ = e.st.DeleteChunks(url, destPath)
+	}
+	// If final exists and no part exists, move/copy it to staging .part for verification
 	if _, err := os.Stat(part); errors.Is(err, os.ErrNotExist) {
 		if _, err2 := os.Stat(destPath); err2 == nil {
-			e.log.Warnf("dest exists; moving to .part for verification")
-			if err := os.Rename(destPath, part); err != nil { return "", "", err }
+			e.log.Warnf("dest exists; moving to staging .part for verification")
+			if err := renameOrCopy(destPath, part); err != nil { return "", "", err }
 		}
 	}
 
@@ -235,7 +239,7 @@ sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 	if dErr != nil {
 		// Fallback to single-stream with retry if chunked failed (e.g., server ignored Range)
 		_ = f.Close()
-		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers)
+		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers, noResume)
 	}
 
 	// Self-consistency check: ensure each written chunk matches its recorded SHA even without an expected file SHA
@@ -294,8 +298,9 @@ sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 
 	// Ensure part file is flushed before finalize
 	_ = f.Sync()
-	// Finalize
-	if err := os.Rename(part, destPath); err != nil { return "", "", err }
+	// Finalize (cross-filesystem safe)
+	if err := renameOrCopy(part, destPath); err != nil { return "", "", err }
+	_ = os.Remove(part)
 	// If safetensors, trim any trailing bytes beyond header-declared size (and fail if incomplete)
 	if _, err := adjustSafetensors(destPath, e.log); err != nil { return "", "", err }
 	// Optional deep verify for safetensors
@@ -407,12 +412,12 @@ func (e *Chunked) probeRangeGET(ctx context.Context, url string, headers map[str
 	return h, nil
 }
 
-func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string) (string, string, error) {
+func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string, noResume bool) (string, string, error) {
 	max := e.cfg.Concurrency.MaxRetries
 	if max <= 0 { max = 8 }
 	var lastErr error
 	for attempt := 0; attempt < max; attempt++ {
-		final, sha, err := NewSingle(e.cfg, e.log, e.st, e.metrics).Download(ctx, url, destPath, expectedSHA, headers)
+		final, sha, err := NewSingle(e.cfg, e.log, e.st, e.metrics).Download(ctx, url, destPath, expectedSHA, headers, noResume)
 		if err == nil { return final, sha, nil }
 		lastErr = err
 		_ = e.st.IncDownloadRetries(url, destPath, 1)

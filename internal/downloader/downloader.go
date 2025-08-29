@@ -10,7 +10,7 @@ import (
 
 // Interface is the common downloader interface used across implementations.
 type Interface interface {
-	Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string) (finalPath string, sha256 string, err error)
+	Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string, noResume bool) (finalPath string, sha256 string, err error)
 }
 
 // Auto implements Interface by delegating to the chunked downloader which
@@ -27,7 +27,7 @@ func NewAuto(c *config.Config, l *logging.Logger, st *state.DB, m interface{ Add
 	return &Auto{c: c, l: l, st: st, m: m}
 }
 
-func (a *Auto) Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string) (string, string, error) {
+func (a *Auto) Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string, noResume bool) (string, string, error) {
 	// Delegate to chunked downloader which handles head probe and fallback.
-	return NewChunked(a.c, a.l, a.st, a.m).Download(ctx, url, destPath, expectedSHA, headers)
+	return NewChunked(a.c, a.l, a.st, a.m).Download(ctx, url, destPath, expectedSHA, headers, noResume)
 }

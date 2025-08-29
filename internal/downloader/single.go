@@ -65,7 +65,7 @@ func NewSingle(cfg *config.Config, log *logging.Logger, st *state.DB, m interfac
 
 // Download downloads a single file from url to destPath. If destPath is empty, it uses cfg.General.DownloadRoot + last URL segment.
 // It resumes if a .part file exists and the server supports Range requests.
-func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string) (string, string, error) {
+func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string, noResume bool) (string, string, error) {
 	if url == "" { return "", "", errors.New("url required") }
 	if destPath == "" {
 		seg := lastURLSegment(url)
@@ -77,7 +77,11 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	// metrics: mark active
 	if a, ok := s.metrics.(interface{ IncActive(int64); Write() error }); ok { a.IncActive(1); _ = a.Write(); defer func(){ a.IncActive(-1); _ = a.Write() }() }
 
-	part := destPath + ".part"
+	part := stagePartPath(s.cfg, url, destPath)
+	if noResume {
+		_ = os.Remove(part)
+		_ = s.st.DeleteChunks(url, destPath)
+	}
 
 	// HEAD for metadata
 	etag, lastMod, size, rangeOK := s.head(ctx, url, headers)
@@ -148,8 +152,9 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		return "", actualSHA, fmt.Errorf("sha256 mismatch: expected=%s actual=%s", expectedSHA, actualSHA)
 	}
 
-	// Rename to final
-	if err := os.Rename(part, destPath); err != nil { return "", "", err }
+	// Move to final (cross-filesystem safe)
+	if err := renameOrCopy(part, destPath); err != nil { return "", "", err }
+	_ = os.Remove(part)
 	// If safetensors, trim any trailing bytes beyond header-declared size (and fail if incomplete)
 	if _, err := adjustSafetensors(destPath, s.log); err != nil { return "", "", err }
 	// Optional deep verify for safetensors
