@@ -14,6 +14,7 @@ import (
 	"modfetch/internal/logging"
 	"modfetch/internal/resolver"
 	"modfetch/internal/state"
+	"modfetch/internal/placer"
 )
 
 const version = "0.1.0-M0"
@@ -40,6 +41,8 @@ func run(args []string) error {
 		return handleStatus(args[1:])
 	case "download":
 		return handleDownload(args[1:])
+	case "place":
+		return handlePlace(args[1:])
 	case "version":
 		fmt.Println(version)
 		return nil
@@ -63,6 +66,7 @@ Commands:
   config print      Print the loaded config as JSON
   download          Download a file via direct URL or resolver URI (hf://, civitai://)
   status            Print a simple status (skeleton)
+  place             Place a file into configured app directories
   version           Print version
   help              Show this help
 
@@ -138,6 +142,27 @@ if strings.HasPrefix(resolvedURL, "hf://") || strings.HasPrefix(resolvedURL, "ci
 	final, sum, err := dl.Download(ctx, resolvedURL, *dest, *sha, headers)
 	if err != nil { return err }
 	log.Infof("downloaded: %s (sha256=%s)", final, sum)
+	return nil
+}
+
+func handlePlace(args []string) error {
+	fs := flag.NewFlagSet("place", flag.ContinueOnError)
+	cfgPath := fs.String("config", "", "Path to YAML config file")
+	logLevel := fs.String("log-level", "info", "log level")
+	jsonOut := fs.Bool("json", false, "json logs")
+	filePath := fs.String("path", "", "path to file to place")
+	artType := fs.String("type", "", "artifact type override (optional)")
+	mode := fs.String("mode", "", "placement mode override: symlink|hardlink|copy (optional)")
+	if err := fs.Parse(args); err != nil { return err }
+	if *cfgPath == "" { if env := os.Getenv("MODFETCH_CONFIG"); env != "" { *cfgPath = env } }
+	if *cfgPath == "" { return errors.New("--config is required or set MODFETCH_CONFIG") }
+	if *filePath == "" { return errors.New("--path is required") }
+	c, err := config.Load(*cfgPath)
+	if err != nil { return err }
+	log := logging.New(*logLevel, *jsonOut)
+	placed, err := placer.Place(c, *filePath, *artType, *mode)
+	if err != nil { return err }
+	for _, p := range placed { log.Infof("placed: %s", p) }
 	return nil
 }
 
