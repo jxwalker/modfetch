@@ -180,7 +180,7 @@ func handleDownload(args []string) error {
 	if *batchPath != "" {
 		bf, err := batch.Load(*batchPath)
 		if err != nil { return err }
-		dl := downloader.NewChunked(c, log, st, m)
+		dl := downloader.NewAuto(c, log, st, m)
 		for i, job := range bf.Jobs {
 			resolvedURL := job.URI
 			headers := map[string]string{}
@@ -250,11 +250,14 @@ func handleDownload(args []string) error {
 		stopProg = startProgressLoop(ctx, st, resolvedURL, candDest)
 	}
 	// Prefer chunked downloader; it will fall back to single when needed
-	dl := downloader.NewChunked(c, log, st, m)
+	dl := downloader.NewAuto(c, log, st, m)
 	final, sum, err := dl.Download(ctx, resolvedURL, *dest, *sha, headers)
 	if stopProg != nil { stopProg() }
 	if err != nil { return err }
 	// Final summary
+	fi, _ := os.Stat(final)
+	size := int64(0); if fi != nil { size = fi.Size() }
+	dur := time.Since(startWall).Seconds()
 	if *summaryJSON {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
@@ -268,9 +271,6 @@ func handleDownload(args []string) error {
 			"status":   "ok",
 		})
 	} else if !*jsonOut {
-		fi, _ := os.Stat(final)
-		size := int64(0); if fi != nil { size = fi.Size() }
-		dur := time.Since(startWall).Seconds()
 		var rate string
 		if dur > 0 && size > 0 { rate = humanize.Bytes(uint64(float64(size)/dur)) + "/s" } else { rate = "-" }
 	fmt.Printf("\nDownloaded: %s\nDest: %s\nSHA256: %s\nSize: %s\nDuration: %.1fs  Avg: %s\n", logging.SanitizeURL(resolvedURL), final, sum, humanize.Bytes(uint64(size)), dur, rate)
