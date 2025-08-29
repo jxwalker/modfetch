@@ -216,7 +216,11 @@ sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 		go downloadOne(c)
 	}
 	wg.Wait()
-	if dErr != nil { return "", "", dErr }
+	if dErr != nil {
+		// Fallback to single-stream with retry if chunked failed (e.g., server ignored Range)
+		_ = f.Close()
+		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers)
+	}
 
 	// Verify final SHA by streaming the part file
 	hasher := sha256.New()
@@ -300,7 +304,12 @@ req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	resp, err := e.client.Do(req)
 	if err != nil { return "", err }
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
+	// Require 206 for partial ranges; allow 200 only if the requested range is the entire file
+	if resp.StatusCode == http.StatusOK {
+		if !(c.Start == 0 && c.End == h.size-1) {
+			return "", fmt.Errorf("chunk %d: server ignored Range; got 200 for partial request", c.Index)
+		}
+	} else if resp.StatusCode != http.StatusPartialContent {
 		return "", fmt.Errorf("chunk %d: bad status %s", c.Index, resp.Status)
 	}
 	// Write at offset
