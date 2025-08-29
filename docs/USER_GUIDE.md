@@ -63,12 +63,23 @@ Verify all completed downloads in state:
 
 modfetch verify --config ~/.config/modfetch/config.yml --all
 
+Tips:
+- Add `--only-errors` to show only problematic files
+- Add `--summary` to print total scanned, error count, and a list of error paths
+- Combine with `--safetensors-deep` to include deep validation in state-backed checks
+
 ### Deep-verify safetensors and directory scan/repair
 
 Scan a directory of .safetensors/.sft for structural correctness and exact coverage:
 
 modfetch verify --config ~/.config/modfetch/config.yml \
   --scan-dir /path/to/models --safetensors-deep
+
+Show only errors and a summary:
+
+modfetch verify --config ~/.config/modfetch/config.yml \
+  --scan-dir /path/to/models --safetensors-deep \
+  --only-errors --summary
 
 Repair files with extra trailing bytes (safe, lossless) and quarantine incomplete ones:
 
