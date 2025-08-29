@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +24,7 @@ import (
 	"modfetch/internal/metrics"
 )
 
-const version = "0.1.0-M0"
+var version = "dev"
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -203,6 +204,22 @@ func handleDownload(args []string) error {
 		if err != nil { return err }
 		resolvedURL = res.URL
 		headers = res.Headers
+	} else {
+		// Attach auth headers for direct URLs when possible
+		if u, err := neturl.Parse(resolvedURL); err == nil {
+			h := strings.ToLower(u.Hostname())
+			if headers == nil { headers = map[string]string{} }
+			if strings.HasSuffix(h, "civitai.com") && c.Sources.CivitAI.Enabled {
+				if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
+					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer " + tok }
+				}
+			}
+			if strings.HasSuffix(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
+				if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
+					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer " + tok }
+				}
+			}
+		}
 	}
 	// Prefer chunked downloader; it will fall back to single when needed
 	// Progress display (disabled for JSON or quiet)
