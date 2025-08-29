@@ -37,7 +37,7 @@ func TestChunkedDownload1MB(t *testing.T) {
 	if err != nil { t.Fatalf("state: %v", err) }
 	defer st.SQL.Close()
 
-	dl := NewChunked(cfg, log, st)
+	dl := NewChunked(cfg, log, st, nil)
 	url := "https://proof.ovh.net/files/1Mb.dat"
 	dest, sha, err := dl.Download(context.Background(), url, "", "", nil)
 	if err != nil { t.Fatalf("download: %v", err) }
@@ -71,7 +71,7 @@ func TestChunkedCorruptAndRepair(t *testing.T) {
 	if err != nil { t.Fatalf("state: %v", err) }
 	defer st.SQL.Close()
 
-	dl := NewChunked(cfg, log, st)
+	dl := NewChunked(cfg, log, st, nil)
 	url := "https://proof.ovh.net/files/1Mb.dat"
 	// First download to get good SHA
 	dest, goodSHA, err := dl.Download(context.Background(), url, "", "", nil)

@@ -35,7 +35,7 @@ func TestHFResolveAndDownload(t *testing.T) {
 	uri := "hf://gpt2/README.md?rev=main"
 	res, err := resolver.Resolve(context.Background(), uri, cfg)
 	if err != nil { t.Fatalf("resolve: %v", err) }
-	dl := NewChunked(cfg, log, st)
+	dl := NewChunked(cfg, log, st, nil)
 	dest, sha, err := dl.Download(context.Background(), res.URL, "", "", res.Headers)
 	if err != nil { t.Fatalf("download: %v", err) }
 	if _, err := os.Stat(dest); err != nil { t.Fatalf("dest stat: %v", err) }

@@ -23,9 +23,15 @@ type Single struct {
 	log    *logging.Logger
 	client *http.Client
 	st     *state.DB
+	metrics interface {
+		AddBytes(int64)
+		IncDownloadsSuccess()
+		ObserveDownloadSeconds(float64)
+		Write() error
+	}
 }
 
-func NewSingle(cfg *config.Config, log *logging.Logger, st *state.DB) *Single {
+func NewSingle(cfg *config.Config, log *logging.Logger, st *state.DB, m interface{ AddBytes(int64); IncDownloadsSuccess(); ObserveDownloadSeconds(float64); Write() error }) *Single {
 	timeout := time.Duration(cfg.Network.TimeoutSeconds) * time.Second
 	if timeout <= 0 {
 		timeout = 60 * time.Second
@@ -35,6 +41,7 @@ func NewSingle(cfg *config.Config, log *logging.Logger, st *state.DB) *Single {
 		log: log,
 		st:  st,
 		client: &http.Client{Timeout: timeout},
+		metrics: m,
 	}
 }
 
@@ -48,6 +55,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		destPath = filepath.Join(s.cfg.General.DownloadRoot, seg)
 	}
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil { return "", "", err }
+	startTime := time.Now()
 
 	part := destPath + ".part"
 
@@ -99,7 +107,9 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	}
 
 	mw := io.MultiWriter(f, hasher)
-	if _, err := io.Copy(mw, resp.Body); err != nil {
+	nWritten, err := io.Copy(mw, resp.Body)
+	if s.metrics != nil && nWritten > 0 { s.metrics.AddBytes(nWritten) }
+	if err != nil {
 	_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error"})
 		return "", "", err
 	}
@@ -117,6 +127,11 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		return "", "", err
 	}
 	_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "complete"})
+	if s.metrics != nil {
+		s.metrics.IncDownloadsSuccess()
+		s.metrics.ObserveDownloadSeconds(time.Since(startTime).Seconds())
+		_ = s.metrics.Write()
+	}
 	return destPath, actualSHA, nil
 }
 

@@ -21,16 +21,23 @@ import (
 )
 
 type Chunked struct {
-	cfg    *config.Config
-	log    *logging.Logger
-	client *http.Client
-	st     *state.DB
+	cfg     *config.Config
+	log     *logging.Logger
+	client  *http.Client
+	st      *state.DB
+	metrics interface {
+		AddBytes(int64)
+		IncRetries(int64)
+		IncDownloadsSuccess()
+		ObserveDownloadSeconds(float64)
+		Write() error
+	}
 }
 
-func NewChunked(cfg *config.Config, log *logging.Logger, st *state.DB) *Chunked {
+func NewChunked(cfg *config.Config, log *logging.Logger, st *state.DB, m interface{ AddBytes(int64); IncRetries(int64); IncDownloadsSuccess(); ObserveDownloadSeconds(float64); Write() error }) *Chunked {
 	timeout := time.Duration(cfg.Network.TimeoutSeconds) * time.Second
 	if timeout <= 0 { timeout = 60 * time.Second }
-	return &Chunked{cfg: cfg, log: log, st: st, client: &http.Client{Timeout: timeout}}
+	return &Chunked{cfg: cfg, log: log, st: st, client: &http.Client{Timeout: timeout}, metrics: m}
 }
 
 type headInfo struct {
@@ -66,11 +73,12 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		destPath = filepath.Join(e.cfg.General.DownloadRoot, name)
 	}
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil { return "", "", err }
+	startTime := time.Now()
 
 	h, err := e.head(ctx, url, headers)
 	if err != nil || h.size <= 0 || !h.acceptRange {
 		e.log.Warnf("chunked: falling back to single: %v", err)
-		return NewSingle(e.cfg, e.log, e.st).Download(ctx, url, destPath, expectedSHA, headers)
+		return NewSingle(e.cfg, e.log, e.st, e.metrics).Download(ctx, url, destPath, expectedSHA, headers)
 	}
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "planning"})
 
@@ -178,6 +186,11 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	if err := os.Rename(part, destPath); err != nil { return "", "", err }
 	if err := os.WriteFile(destPath+".sha256", []byte(finalSHA+"  "+filepath.Base(destPath)+"\n"), 0o644); err != nil { return "", "", err }
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: finalSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "complete"})
+	if e.metrics != nil {
+		e.metrics.IncDownloadsSuccess()
+		e.metrics.ObserveDownloadSeconds(time.Since(startTime).Seconds())
+		_ = e.metrics.Write()
+	}
 	return destPath, finalSHA, nil
 }
 
@@ -190,6 +203,7 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, h headInfo, f *os.
 		sha, err := e.tryFetchChunk(ctx, url, h, f, c)
 		if err == nil { return sha, nil }
 		lastErr = err
+		if e.metrics != nil { e.metrics.IncRetries(1) }
 		// backoff
 		b := e.cfg.Concurrency.Backoff
 		min := b.MinMS; if min <= 0 { min = 200 }
@@ -216,6 +230,7 @@ func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *
 	hasher := sha256.New()
 	mw := io.MultiWriter(f, hasher)
 	written, err := io.CopyN(mw, resp.Body, c.Size)
+	if e.metrics != nil && written > 0 { e.metrics.AddBytes(written) }
 	if err != nil && !errors.Is(err, io.EOF) { return "", err }
 	if written != c.Size { return "", fmt.Errorf("chunk %d: short write %d!=%d", c.Index, written, c.Size) }
 	return hex.EncodeToString(hasher.Sum(nil)), nil

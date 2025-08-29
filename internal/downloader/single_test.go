@@ -32,7 +32,7 @@ func TestSingleDownloadHF(t *testing.T) {
 	if err != nil { t.Fatalf("state open: %v", err) }
 	defer st.SQL.Close()
 
-	dl := NewSingle(cfg, log, st)
+	dl := NewSingle(cfg, log, st, nil)
 	final, sum, err := dl.Download(context.Background(), "https://raw.githubusercontent.com/github/gitignore/main/Go.gitignore", "", "", nil)
 	if err != nil { t.Fatalf("download: %v", err) }
 	if _, err := os.Stat(final); err != nil { t.Fatalf("final file missing: %v", err) }

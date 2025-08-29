@@ -71,7 +71,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *model) View() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "modfetch: downloads (q to quit, r to refresh)\n")
+	// Simple aggregate: total size of completed downloads
+	var total int64
+	for _, r := range m.rows { if r.Status == "complete" { total += r.Size } }
+	fmt.Fprintf(&b, "modfetch: downloads (q to quit, r to refresh)  total=%s\n", humanize.Bytes(uint64(total)))
 	if m.err != nil {
 		fmt.Fprintf(&b, "error: %v\n\n", m.err)
 	}

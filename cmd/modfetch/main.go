@@ -16,6 +16,7 @@ import (
 	"modfetch/internal/state"
 	"modfetch/internal/placer"
 	"modfetch/internal/batch"
+	"modfetch/internal/metrics"
 )
 
 const version = "0.1.0-M0"
@@ -156,11 +157,13 @@ func handleDownload(args []string) error {
 	if err != nil { return err }
 	defer st.SQL.Close()
 	ctx := context.Background()
+	// Metrics manager (Prometheus textfile), if enabled
+	m := metrics.New(c)
 	// Batch mode
 	if *batchPath != "" {
 		bf, err := batch.Load(*batchPath)
 		if err != nil { return err }
-		dl := downloader.NewChunked(c, log, st)
+		dl := downloader.NewChunked(c, log, st, m)
 		for i, job := range bf.Jobs {
 			resolvedURL := job.URI
 			headers := map[string]string{}
@@ -191,7 +194,7 @@ func handleDownload(args []string) error {
 		headers = res.Headers
 	}
 	// Prefer chunked downloader; it will fall back to single when needed
-	dl := downloader.NewChunked(c, log, st)
+	dl := downloader.NewChunked(c, log, st, m)
 	final, sum, err := dl.Download(ctx, resolvedURL, *dest, *sha, headers)
 	if err != nil { return err }
 	log.Infof("downloaded: %s (sha256=%s)", final, sum)
