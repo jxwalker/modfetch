@@ -40,7 +40,9 @@ type Logger struct {
 }
 
 func New(level string, jsonOut bool) *Logger {
-	return &Logger{min: ParseLevel(level), json: jsonOut, out: os.Stdout}
+	out := io.Writer(os.Stderr)
+	if jsonOut { out = os.Stdout }
+	return &Logger{min: ParseLevel(level), json: jsonOut, out: out}
 }
 
 func (l *Logger) Enabled(v Level) bool { return v >= l.min }

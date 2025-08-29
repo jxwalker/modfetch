@@ -144,15 +144,20 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 
 	// Preflight: verify any previously complete chunks before writing further
 	if len(chunks) > 0 {
+		markedDirty := 0
 		for _, c := range chunks {
 			if strings.EqualFold(c.Status, "complete") {
 				sha2, err := hashRange(f, c.Start, c.Size)
 				if err != nil { return "", "", err }
 				if !stringsEqualHex(sha2, c.SHA256) {
-					e.log.Warnf("chunk %d sha mismatch on resume; marking dirty", c.Index)
+					e.log.Debugf("chunk %d sha mismatch on resume; marking dirty", c.Index)
 					_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
+					markedDirty++
 				}
 			}
+		}
+		if markedDirty > 0 {
+			e.log.Warnf("resume verification: %d chunk(s) marked dirty; will refetch", markedDirty)
 		}
 		// Refresh chunk list to pick up dirty statuses
 		chunks, _ = e.st.ListChunks(url, destPath)
@@ -202,7 +207,7 @@ sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 			if err != nil { return "", "", err }
 			if !stringsEqualHex(sha2, c.SHA256) {
 				// re-download this chunk
-				e.log.Warnf("chunk %d sha mismatch; re-fetching", c.Index)
+				e.log.Debugf("chunk %d sha mismatch; re-fetching", c.Index)
 				_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
 sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 				if err != nil { return "", "", err }

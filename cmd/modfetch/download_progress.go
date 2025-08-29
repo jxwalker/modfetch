@@ -31,7 +31,7 @@ func startProgressLoop(ctx context.Context, st *state.DB, url, dest string) func
 		for {
 			select {
 			case <-stop:
-				fmt.Print("\r")
+				fmt.Fprint(os.Stderr, "\r")
 				return
 			case <-time.After(250 * time.Millisecond):
 				// Fetch total size from downloads table
@@ -99,7 +99,7 @@ func startProgressLoop(ctx context.Context, st *state.DB, url, dest string) func
 				}
 				// Bar
 				bar := renderBar(completed, total, 30)
-				fmt.Printf("\r%s %6.2f%%  %8s/s  ETA %s  %s/%s  C %d/%d A %d  R %d",
+				fmt.Fprintf(os.Stderr, "\r%s %6.2f%%  %8s/s  ETA %s  %s/%s  C %d/%d A %d  R %d",
 					bar,
 					pct(completed, total),
 					ifnz(rate, "-"),
