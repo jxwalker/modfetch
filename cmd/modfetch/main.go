@@ -7,7 +7,11 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
+
+	"github.com/dustin/go-humanize"
 
 	"modfetch/internal/config"
 	"modfetch/internal/downloader"
@@ -143,6 +147,7 @@ func handleDownload(args []string) error {
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
 	jsonOut := fs.Bool("json", false, "json logs")
+	quiet := fs.Bool("quiet", false, "suppress progress and info logs (errors only)")
 	url := fs.String("url", "", "HTTP URL to download (direct) or resolver URI (e.g. hf://owner/repo/path)")
 	dest := fs.String("dest", "", "destination path (optional)")
 	sha := fs.String("sha256", "", "expected SHA256 (optional)")
@@ -155,11 +160,14 @@ func handleDownload(args []string) error {
 	if *cfgPath == "" { return errors.New("--config is required or set MODFETCH_CONFIG") }
 	c, err := config.Load(*cfgPath)
 	if err != nil { return err }
+	// quiet forces log level to error unless JSON is requested
+	if *quiet && !*jsonOut { *logLevel = "error" }
 	log := logging.New(*logLevel, *jsonOut)
 	st, err := state.Open(c)
 	if err != nil { return err }
 	defer st.SQL.Close()
 	ctx := context.Background()
+	startWall := time.Now()
 	// Metrics manager (Prometheus textfile), if enabled
 	m := metrics.New(c)
 	// Batch mode
@@ -197,9 +205,29 @@ func handleDownload(args []string) error {
 		headers = res.Headers
 	}
 	// Prefer chunked downloader; it will fall back to single when needed
+	// Progress display (disabled for JSON or quiet)
+	var stopProg func()
+	if !*jsonOut && !*quiet {
+		candDest := *dest
+		if candDest == "" {
+			candDest = filepath.Join(c.General.DownloadRoot, filepath.Base(resolvedURL))
+		}
+		stopProg = startProgressLoop(ctx, st, resolvedURL, candDest)
+	}
+	// Prefer chunked downloader; it will fall back to single when needed
 	dl := downloader.NewChunked(c, log, st, m)
 	final, sum, err := dl.Download(ctx, resolvedURL, *dest, *sha, headers)
+	if stopProg != nil { stopProg() }
 	if err != nil { return err }
+	// Final summary
+	if !*jsonOut {
+		fi, _ := os.Stat(final)
+		size := int64(0); if fi != nil { size = fi.Size() }
+		dur := time.Since(startWall).Seconds()
+		var rate string
+		if dur > 0 && size > 0 { rate = humanize.Bytes(uint64(float64(size)/dur)) + "/s" } else { rate = "-" }
+		fmt.Printf("\nDownloaded: %s\nDest: %s\nSHA256: %s\nSize: %s\nDuration: %.1fs  Avg: %s\n", resolvedURL, final, sum, humanize.Bytes(uint64(size)), dur, rate)
+	}
 	log.Infof("downloaded: %s (sha256=%s)", final, sum)
 	if *placeFlag {
 		placed, err := placer.Place(c, final, "", "")

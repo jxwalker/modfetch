@@ -1,86 +1,96 @@
 # modfetch
 
-Robust CLI/TUI downloader for LLM and Stable Diffusion assets (Hugging Face and CivitAI) with:
-- Parallel, chunked downloads with resume and retries
-- SHA256 integrity verification
-- Automatic artifact classification and placement into user-configured directories
-- Batch YAML execution
-- Structured logging and rich terminal status
+A robust CLI/TUI downloader for LLM and Stable Diffusion assets from Hugging Face and CivitAI.
 
-Status: MVP in progress — downloading engine, resolvers, placement, batch, status/verify, metrics, and TUI dashboard are implemented. TUI visuals and config wizard in progress.
+Highlights
+- Parallel chunked downloads with resume and retries
+- SHA256 integrity verification (per chunk and full file)
+- Automatic classification + placement into your app directories
+- Batch YAML execution with verify and status
+- Rich TUI dashboard and CLI progress bar with throughput and ETA
+- Structured logging, metrics, and resilient state (SQLite)
+
+Status: MVP feature-complete for resolvers and downloads; TUI polish and docs ongoing.
 
 Requirements
 - Go 1.22+
 - Linux (primary), macOS (secondary)
 
-Config
-- All configuration is provided via a YAML file. No hard-coded directories are used.
-- Pass the config file path with `--config` or via `MODFETCH_CONFIG` env var.
-- Generate a starter config via the interactive wizard:
+Installation
+- From source:
+  - Build: `make build`
+  - Tests: `make test`
+  - Cross-compile: `make release-dist`
+- Binaries: via GitHub Releases (tag `vX.Y.Z` to trigger CI)
+- Homebrew: see packaging/homebrew/modfetch.rb template
+
+Configuration
+- All configuration is provided via a YAML file; no secrets in YAML (use env vars).
+- Pass the config file path with `--config` or via `MODFETCH_CONFIG`.
+- Generate a starter config interactively:
   ```
   modfetch config wizard --out ~/modfetch/config.yml
   ```
+- See docs/CONFIG.md for full schema.
 
-Quick start
+User guide
 - Validate config:
   ```
   modfetch config validate --config /path/to/config.yml
   ```
-- Download a file (direct URL or resolver URI):
+- Download with live progress (CLI shows progress bar, speed, ETA):
   ```
+  modfetch download --config /path/to/config.yml --url 'https://proof.ovh.net/files/1Mb.dat'
   modfetch download --config /path/to/config.yml --url 'hf://gpt2/README.md?rev=main'
   modfetch download --config /path/to/config.yml --url 'civitai://model/123456?file=vae'
   ```
-- Place a file into your app directories:
+  - Quiet mode (suppress progress/info logs): add `--quiet`
+  - On completion, a summary is printed (dest, size, SHA256, duration, average speed)
+- Place artifacts into apps:
   ```
   modfetch place --config /path/to/config.yml --path /path/to/model.safetensors
   ```
-- Batch downloads (YAML):
+- Batch downloads from YAML (optionally place after):
   ```
   modfetch download --config /path/to/config.yml --batch /path/to/jobs.yml --place
   ```
-- TUI dashboard:
+- TUI dashboard (live status, filter, per-row speed/ETA):
   ```
   modfetch tui --config /path/to/config.yml
   ```
-- Verify files:
+  - Keys: q (quit), r (refresh), j/k (select), d (details), / (filter)
+- Verify checksums:
   ```
   modfetch verify --config /path/to/config.yml --all
   ```
 
+Resolvers
+- See docs/RESOLVERS.md for hf:// and civitai:// formats, examples, and auth via env tokens.
+
+Logging and metrics
+- Log level per command: `--log-level debug|info|warn|error`; `--json` for JSON logs.
+- Quiet mode: `--quiet` (download command) hides progress and info logs.
+- Metrics: optional Prometheus textfile exporter; configure in YAML.
+
 Project layout
-- cmd/modfetch: CLI entrypoint
+- cmd/modfetch: CLI entry point
 - internal/config: YAML loader and validation
 - internal/downloader: single + chunked engines
-- internal/resolver: hf:// and civitai://
+- internal/resolver: hf:// and civitai:// resolvers
 - internal/placer: placement engine
 - internal/tui: TUI models
 - internal/state: SQLite state DB
 - internal/metrics: Prometheus textfile metrics
-- assets/sample-config: Example configuration files
-- docs/: configuration, testing, placement, resolvers guides
+- docs/: configuration, testing, placement, resolvers
 - scripts/: smoke test and helpers
 
-Installation (from source)
-- Build: `make build`
-- Tests: `make test`
-- Cross-compile and package: `make release-dist`
+Troubleshooting
+- Missing tokens: Set `HF_TOKEN` or `CIVITAI_TOKEN` in your environment when accessing private resources.
+- TLS or HEAD failures: The downloader will fall back to single-stream when range/HEAD is unsupported.
+- Resume: Re-running the same download will resume and verify integrity.
 
-GitHub Releases (CI)
-- Tag a version like `v0.1.0` to trigger the release workflow. Binaries for Linux and macOS (amd64/arm64) will be attached to the release with checksums.
-
-Homebrew tap (template)
-- See `packaging/homebrew/modfetch.rb` for a formula template. After creating a release, update version and checksums and publish to your tap repo.
-
-Next milestones
-- M0: CLI skeleton + config loader
-- M1: Single-stream downloader + SHA256 + SQLite state
-- M2: Parallel chunked downloads + retries/backoff
-- M3: Hugging Face resolver
-- M4: CivitAI resolver
-- M5: Classifier + placement engine
-- M6: Batch YAML + verify + status
-- M7: TUI dashboard
-- M8: Metrics & performance
-- M9: Packaging & release (this)
+Roadmap
+- Further TUI enhancements (sorting, action keys)
+- Placement/classifier refinements and presets
+- Release packaging for more distros
 

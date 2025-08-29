@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dustin/go-humanize"
@@ -21,13 +22,19 @@ type model struct {
 	rows     []state.DownloadRow
 	selected int
 	showInfo bool
+	filterOn bool
+	filter   textinput.Model
 	err      error
 	width   int
 	height  int
 	refresh time.Duration
 	prog    progress.Model
 	styles  uiStyles
+	// speed state
+	prev map[string]obs
 }
+
+type obs struct{ bytes int64; t time.Time }
 
 type uiStyles struct {
 	header lipgloss.Style
@@ -48,7 +55,9 @@ func New(cfg *config.Config, st *state.DB) tea.Model {
 		col:    lipgloss.NewStyle().Padding(0, 1),
 		label:  lipgloss.NewStyle().Faint(true),
 	}
-	return &model{cfg: cfg, st: st, refresh: time.Second, prog: p, styles: styles}
+	ti := textinput.New()
+	ti.Placeholder = "filter (url or dest contains)"
+	return &model{cfg: cfg, st: st, refresh: time.Second, prog: p, styles: styles, filter: ti, prev: map[string]obs{}}
 }
 
 func (m *model) Init() tea.Cmd {
@@ -70,6 +79,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "r":
 			return m, refreshCmd()
+		case "/":
+			m.filterOn = true
+			m.filter.Focus()
+			return m, nil
+		case "enter":
+			if m.filterOn { m.filterOn = false; m.filter.Blur(); return m, refreshCmd() }
+			return m, nil
+		case "esc":
+			if m.filterOn { m.filterOn = false; m.filter.SetValue(""); m.filter.Blur(); return m, refreshCmd() }
+			return m, nil
 		case "j", "down":
 			if m.selected < len(m.rows)-1 { m.selected++ }
 			return m, nil
@@ -93,27 +112,44 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = msg.err
 		return m, tickCmd(m.refresh)
 	}
+	// Update filter if active
+	if m.filterOn {
+		var cmd tea.Cmd
+		m.filter, cmd = m.filter.Update(msg)
+		return m, cmd
+	}
 	return m, nil
 }
 
 func (m *model) View() string {
 	var b strings.Builder
-	// Header with total completed size
+	// Header with total completed size and global throughput
 	var total int64
-	for _, r := range m.rows { if r.Status == "complete" { total += r.Size } }
-	fmt.Fprintf(&b, "%s %s\n", m.styles.header.Render("modfetch: downloads"), m.styles.label.Render("(q quit, r refresh, j/k select, d details) total="+humanize.Bytes(uint64(total))))
+	var gRate float64
+	for _, r := range m.filteredRows() {
+		if r.Status == "complete" { total += r.Size }
+		_, _, rate, _ := m.progressFor(r)
+		gRate += rate
+	}
+	help := m.styles.label.Render("(q quit, r refresh, j/k select, d details, / filter)")
+	fmt.Fprintf(&b, "%s %s %s\n", m.styles.header.Render("modfetch: downloads"), help, m.styles.label.Render("total="+humanize.Bytes(uint64(total))+" rate="+humanize.Bytes(uint64(gRate))+"/s"))
+	if m.filterOn {
+		b.WriteString("Filter: "+ m.filter.View()+"\n")
+	}
 	if m.err != nil {
 		fmt.Fprintf(&b, "error: %v\n\n", m.err)
 	}
 	// Columns header
-	fmt.Fprintf(&b, "%s\n", m.styles.label.Render(fmt.Sprintf("%-8s  %-10s  %-40s  %s", "STATUS", "PROGRESS", "DEST", "URL")))
-	for i, r := range m.rows {
+	fmt.Fprintf(&b, "%s\n", m.styles.label.Render(fmt.Sprintf("%-8s  %-10s  %-10s  %-8s  %-40s  %s", "STATUS", "PROGRESS", "SPEED", "ETA", "DEST", "URL")))
+	rows := m.filteredRows()
+	for i, r := range rows {
 		prog := m.renderProgress(r)
+		_, _, rate, eta := m.progressFor(r)
 		fn := r.Dest
 		if len(fn) > 40 { fn = fn[len(fn)-40:] }
 		u := r.URL
 		if len(u) > 60 { u = u[:60] + "…" }
-		line := fmt.Sprintf("%-8s  %-10s  %-40s  %s", r.Status, prog, fn, u)
+		line := fmt.Sprintf("%-8s  %-10s  %-10s  %-8s  %-40s  %s", r.Status, prog, humanize.Bytes(uint64(rate))+"/s", eta, fn, u)
 		if i == m.selected {
 			line = lipgloss.NewStyle().Bold(true).Render(line)
 		}
@@ -127,19 +163,9 @@ func (m *model) View() string {
 }
 
 func (m *model) renderProgress(r state.DownloadRow) string {
-	// Determine current bytes by checking .part or final file size
-	cur := int64(0)
-	if r.Dest != "" {
-		if st, err := os.Stat(r.Dest + ".part"); err == nil {
-			cur = st.Size()
-		} else if st, err := os.Stat(r.Dest); err == nil {
-			cur = st.Size()
-		}
-	}
-	if r.Size <= 0 {
-		return "--"
-	}
-	ratio := float64(cur) / float64(r.Size)
+	cur, total, _, _ := m.progressFor(r)
+	if total <= 0 { return "--" }
+	ratio := float64(cur) / float64(total)
 	if ratio < 0 { ratio = 0 }
 	if ratio > 1 { ratio = 1 }
 	bar := m.prog.ViewAs(ratio)
@@ -150,11 +176,58 @@ func (m *model) renderDetails(r state.DownloadRow) string {
 	var sb strings.Builder
 	abs := r.Dest
 	if abs != "" { abs, _ = filepath.Abs(r.Dest) }
+	cur, total, rate, eta := m.progressFor(r)
 	fmt.Fprintf(&sb, "    %s %s\n", m.styles.label.Render("dest:"), abs)
+	fmt.Fprintf(&sb, "    %s %s\n", m.styles.label.Render("size:"), humanize.Bytes(uint64(total)))
+	fmt.Fprintf(&sb, "    %s %s/%s\n", m.styles.label.Render("progress:"), humanize.Bytes(uint64(cur)), humanize.Bytes(uint64(total)))
+	fmt.Fprintf(&sb, "    %s %s/s\n", m.styles.label.Render("speed:"), humanize.Bytes(uint64(rate)))
+	fmt.Fprintf(&sb, "    %s %s\n", m.styles.label.Render("eta:"), eta)
 	fmt.Fprintf(&sb, "    %s %s\n", m.styles.label.Render("etag:"), r.ETag)
 	fmt.Fprintf(&sb, "    %s %s\n", m.styles.label.Render("last-mod:"), r.LastModified)
 	fmt.Fprintf(&sb, "    %s %s\n", m.styles.label.Render("expected SHA256:"), r.ExpectedSHA256)
 	fmt.Fprintf(&sb, "    %s %s\n", m.styles.label.Render("actual SHA256:"), r.ActualSHA256)
 	return sb.String()
+}
+
+func (m *model) progressFor(r state.DownloadRow) (cur int64, total int64, rate float64, eta string) {
+	total = r.Size
+	// chunked progress if any chunks exist
+	chunks, _ := m.st.ListChunks(r.URL, r.Dest)
+	if len(chunks) > 0 {
+		for _, c := range chunks {
+			if strings.EqualFold(c.Status, "complete") { cur += c.Size }
+			total += 0 // already in r.Size
+		}
+	} else {
+		if r.Dest != "" {
+			if st, err := os.Stat(r.Dest + ".part"); err == nil {
+				cur = st.Size()
+			} else if st, err := os.Stat(r.Dest); err == nil {
+				cur = st.Size()
+			}
+		}
+	}
+	key := r.URL + "|" + r.Dest
+	prev := m.prev[key]
+	dt := time.Since(prev.t).Seconds()
+	if dt > 0 { rate = float64(cur-prev.bytes) / dt }
+	m.prev[key] = obs{bytes: cur, t: time.Now()}
+	if rate > 0 && total > 0 && cur < total {
+		rem := float64(total-cur) / rate
+		eta = fmt.Sprintf("%ds", int(rem+0.5))
+	} else { eta = "-" }
+	return
+}
+
+func (m *model) filteredRows() []state.DownloadRow {
+	if !m.filterOn && strings.TrimSpace(m.filter.Value()) == "" { return m.rows }
+	q := strings.ToLower(strings.TrimSpace(m.filter.Value()))
+	var out []state.DownloadRow
+	for _, r := range m.rows {
+		if q == "" || strings.Contains(strings.ToLower(r.URL), q) || strings.Contains(strings.ToLower(r.Dest), q) {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
