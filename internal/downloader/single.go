@@ -87,6 +87,8 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	// Prepare hasher and file
 	var hasher = sha256.New()
 	var start int64 = 0
+	// Clear any stale chunk state since we're using single-stream
+	_ = s.st.DeleteChunks(url, destPath)
 	if fi, err := os.Stat(part); err == nil {
 		start = fi.Size()
 		s.log.Infof("resuming: %s (have %d bytes)", part, start)

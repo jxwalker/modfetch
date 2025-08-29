@@ -138,6 +138,8 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	}
 	if err != nil || h.size <= 0 || !h.acceptRange {
 		e.log.WarnfThrottled(fmt.Sprintf("fallback:%s|%s", url, destPath), 2*time.Second, "chunked: falling back to single: %v", err)
+		// Clear any stale chunk state so progress doesn't show bogus completed bytes
+		_ = e.st.DeleteChunks(url, destPath)
 		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers)
 	}
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "planning"})
@@ -154,6 +156,10 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	f, err := os.OpenFile(part, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil { return "", "", err }
 	defer f.Close()
+	// If starting from an empty .part, clear any stale chunk state
+	if fi, _ := os.Stat(part); fi != nil && fi.Size() == 0 {
+		_ = e.st.DeleteChunks(url, destPath)
+	}
 	if fi, _ := f.Stat(); fi.Size() != h.size {
 		if err := f.Truncate(h.size); err != nil { return "", "", err }
 	}

@@ -65,3 +65,9 @@ func (db *DB) UpdateChunkSHA(url, dest string, idx int, sha string) error {
 	return err
 }
 
+// DeleteChunks removes all chunk rows for a given url+dest pair.
+func (db *DB) DeleteChunks(url, dest string) error {
+	_, err := db.SQL.Exec(`DELETE FROM chunks WHERE url=? AND dest=?`, url, dest)
+	return err
+}
+
