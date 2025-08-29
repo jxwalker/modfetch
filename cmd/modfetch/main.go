@@ -46,6 +46,8 @@ func run(args []string) error {
 		return handlePlace(args[1:])
 	case "verify":
 		return handleVerify(args[1:])
+	case "tui":
+		return handleTUI(args[1:])
 	case "version":
 		fmt.Println(version)
 		return nil
@@ -71,6 +73,7 @@ Commands:
   status            Show download status (table or JSON)
   place             Place a file into configured app directories
   verify            Verify SHA256 of a file or all completed downloads
+  tui               Open the interactive terminal dashboard
   version           Print version
   help              Show this help
 
