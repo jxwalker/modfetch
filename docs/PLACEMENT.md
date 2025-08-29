@@ -16,6 +16,10 @@ Artifact types (detected heuristically; override with `--type`)
 - `sd.checkpoint`, `sd.lora`, `sd.vae`, `sd.controlnet`, `sd.embedding`, `llm.gguf`, `llm.safetensors`, `generic`.
 
 Examples
+- Dry-run: see where a file would be placed without making changes:
+```
+modfetch place --config ./config.yml --path /path/to/file.safetensors --dry-run
+```
 - Place a downloaded file using detection:
 ```
 modfetch place --config ./config.yml --path /path/to/file.safetensors

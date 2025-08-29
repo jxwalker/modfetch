@@ -2,8 +2,10 @@ package downloader
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net"
 	"net/http"
+	"runtime"
 	"time"
 
 	"modfetch/internal/config"
@@ -29,4 +31,22 @@ func newHTTPClient(cfg *config.Config) *http.Client {
 	}
 	return &http.Client{Transport: tr, Timeout: timeout}
 }
+
+// userAgent returns the configured User-Agent, or a sensible default
+// like "modfetch/<version> (<goos>/<goarch>)" when not set.
+func userAgent(cfg *config.Config) string {
+	if cfg != nil && cfg.Network.UserAgent != "" {
+		return cfg.Network.UserAgent
+	}
+	return fmt.Sprintf("modfetch/%s (%s/%s)", versionString(), runtime.GOOS, runtime.GOARCH)
+}
+
+// versionString fetches main.version via linker -X if available.
+func versionString() string {
+	// main.version is defined in cmd/modfetch/main.go; expose via a weak link.
+	// We duplicate minimal logic here to avoid import cycles.
+	return defaultVersion
+}
+
+var defaultVersion = "dev"
 

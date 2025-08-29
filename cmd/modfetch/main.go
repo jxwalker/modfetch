@@ -20,6 +20,7 @@ import (
 	"modfetch/internal/resolver"
 	"modfetch/internal/state"
 	"modfetch/internal/placer"
+	"modfetch/internal/classifier"
 	"modfetch/internal/batch"
 	"modfetch/internal/metrics"
 )
@@ -291,6 +292,7 @@ func handlePlace(args []string) error {
 	filePath := fs.String("path", "", "path to file to place")
 	artType := fs.String("type", "", "artifact type override (optional)")
 	mode := fs.String("mode", "", "placement mode override: symlink|hardlink|copy (optional)")
+	dryRun := fs.Bool("dry-run", false, "print planned destinations only; do not modify files")
 	if err := fs.Parse(args); err != nil { return err }
 	if *cfgPath == "" { if env := os.Getenv("MODFETCH_CONFIG"); env != "" { *cfgPath = env } }
 	if *cfgPath == "" { return errors.New("--config is required or set MODFETCH_CONFIG") }
@@ -298,6 +300,15 @@ func handlePlace(args []string) error {
 	c, err := config.Load(*cfgPath)
 	if err != nil { return err }
 	log := logging.New(*logLevel, *jsonOut)
+	if *dryRun {
+		atype := *artType
+		if atype == "" { atype = classifier.Detect(*filePath) }
+		targets, err := placer.ComputeTargets(c, atype)
+		if err != nil { return err }
+		fmt.Printf("Would place %s (type=%s) to:\n", *filePath, atype)
+		for _, t := range targets { fmt.Printf("  %s\n", t) }
+		return nil
+	}
 	placed, err := placer.Place(c, *filePath, *artType, *mode)
 	if err != nil { return err }
 	for _, p := range placed { log.Infof("placed: %s", p) }

@@ -97,6 +97,14 @@ User guide
   ```
   modfetch verify --config /path/to/config.yml --all
   ```
+- JSON summary (for scripting/CI):
+  ```
+  modfetch download --config /path/to/config.yml --url 'https://proof.ovh.net/files/1Mb.dat' --summary-json
+  ```
+- Placement dry-run:
+  ```
+  modfetch place --config /path/to/config.yml --path /path/to/model.safetensors --dry-run
+  ```
 
 Resolvers
 - See docs/RESOLVERS.md for hf:// and civitai:// formats, examples, and auth via env tokens.
@@ -105,6 +113,7 @@ Logging and metrics
 - Log level per command: `--log-level debug|info|warn|error`; `--json` for JSON logs.
 - Quiet mode: `--quiet` (download command) hides progress and info logs.
 - Metrics: optional Prometheus textfile exporter; configure in YAML.
+- Troubleshooting: see docs/TROUBLESHOOTING.md
 
 Project layout
 - cmd/modfetch: CLI entry point

@@ -18,6 +18,7 @@ type Manager struct {
 	retriesTotal     int64
 	downloadsSuccess int64
 	lastDownloadSec  float64
+	activeDownloads  int64
 }
 
 func New(cfg *config.Config) *Manager {
@@ -49,6 +50,11 @@ func (m *Manager) ObserveDownloadSeconds(sec float64) {
 	m.mu.Lock(); m.lastDownloadSec = sec; m.mu.Unlock()
 }
 
+func (m *Manager) IncActive(n int64) {
+	if m == nil { return }
+	m.mu.Lock(); m.activeDownloads += n; if m.activeDownloads < 0 { m.activeDownloads = 0 }; m.mu.Unlock()
+}
+
 func (m *Manager) Write() error {
 	if m == nil { return nil }
 	m.mu.Lock(); defer m.mu.Unlock()
@@ -72,6 +78,10 @@ func (m *Manager) Write() error {
 	fmt.Fprintf(f, "# HELP modfetch_last_download_seconds Duration of the last completed download in seconds.\n")
 	fmt.Fprintf(f, "# TYPE modfetch_last_download_seconds gauge\n")
 	fmt.Fprintf(f, "modfetch_last_download_seconds %.6f\n", m.lastDownloadSec)
+
+	fmt.Fprintf(f, "# HELP modfetch_active_downloads Number of active downloads.\n")
+	fmt.Fprintf(f, "# TYPE modfetch_active_downloads gauge\n")
+	fmt.Fprintf(f, "modfetch_active_downloads %d\n", m.activeDownloads)
 
 	fmt.Fprintf(f, "# HELP modfetch_metrics_timestamp_seconds UNIX timestamp when this file was written.\n")
 	fmt.Fprintf(f, "# TYPE modfetch_metrics_timestamp_seconds gauge\n")

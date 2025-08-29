@@ -50,7 +50,7 @@ type headInfo struct {
 
 func (e *Chunked) head(ctx context.Context, url string, headers map[string]string) (headInfo, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
-	if ua := e.cfg.Network.UserAgent; ua != "" { req.Header.Set("User-Agent", ua) }
+	req.Header.Set("User-Agent", userAgent(e.cfg))
 	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := e.client.Do(req)
 	if err != nil { return headInfo{}, err }
@@ -75,6 +75,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	}
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil { return "", "", err }
 	startTime := time.Now()
+	if a, ok := e.metrics.(interface{ IncActive(int64); Write() error }); ok { a.IncActive(1); _ = a.Write(); defer func(){ a.IncActive(-1); _ = a.Write() }() }
 
 	// Host capability cache: if we know HEAD is bad or Range unsupported, skip chunked path early
 	if u, perr := neturl.Parse(url); perr == nil {
@@ -129,6 +130,22 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		}
 		chunks, err = e.st.ListChunks(url, destPath)
 		if err != nil { return "", "", err }
+	}
+
+	// Preflight: verify any previously complete chunks before writing further
+	if len(chunks) > 0 {
+		for _, c := range chunks {
+			if strings.EqualFold(c.Status, "complete") {
+				sha2, err := hashRange(f, c.Start, c.Size)
+				if err != nil { return "", "", err }
+				if !stringsEqualHex(sha2, c.SHA256) {
+					e.log.Warnf("chunk %d sha mismatch on resume; marking dirty", c.Index)
+					_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
+				}
+			}
+		}
+		// Refresh chunk list to pick up dirty statuses
+		chunks, _ = e.st.ListChunks(url, destPath)
 	}
 
 	// Download chunks concurrently
@@ -234,7 +251,7 @@ sha, err := e.tryFetchChunk(ctx, url, h, f, c, headers)
 
 func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string) (string, error) {
 req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if ua := e.cfg.Network.UserAgent; ua != "" { req.Header.Set("User-Agent", ua) }
+	req.Header.Set("User-Agent", userAgent(e.cfg))
 	for k, v := range headers { req.Header.Set(k, v) }
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", c.Start, c.End))
 	if h.etag != "" { req.Header.Set("If-Range", h.etag) } else if h.lastMod != "" { req.Header.Set("If-Range", h.lastMod) }

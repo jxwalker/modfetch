@@ -56,6 +56,8 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	}
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil { return "", "", err }
 	startTime := time.Now()
+	// metrics: mark active
+	if a, ok := s.metrics.(interface{ IncActive(int64); Write() error }); ok { a.IncActive(1); _ = a.Write(); defer func(){ a.IncActive(-1); _ = a.Write() }() }
 
 	part := destPath + ".part"
 
@@ -85,7 +87,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil { return "", "", err }
-	if s.cfg.Network.UserAgent != "" { req.Header.Set("User-Agent", s.cfg.Network.UserAgent) }
+	req.Header.Set("User-Agent", userAgent(s.cfg))
 	for k, v := range headers { req.Header.Set(k, v) }
 	if start > 0 && rangeOK {
 		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", start))
@@ -145,7 +147,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 
 func (s *Single) head(ctx context.Context, url string, headers map[string]string) (etag, lastMod string, size int64, rangeOK bool) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
-	if s.cfg.Network.UserAgent != "" { req.Header.Set("User-Agent", s.cfg.Network.UserAgent) }
+	req.Header.Set("User-Agent", userAgent(s.cfg))
 	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := s.client.Do(req)
 	if err != nil { return "", "", 0, false }

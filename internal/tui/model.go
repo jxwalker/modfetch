@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -22,8 +23,10 @@ type model struct {
 	rows     []state.DownloadRow
 	selected int
 	showInfo bool
+	showHelp bool
 	filterOn bool
 	filter   textinput.Model
+	sortMode string // ""|"speed"|"eta"
 	err      error
 	width   int
 	height  int
@@ -98,6 +101,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "d":
 			m.showInfo = !m.showInfo
 			return m, nil
+		case "?", "h":
+			m.showHelp = !m.showHelp
+			return m, nil
+		case "s":
+			m.sortMode = "speed"
+			return m, refreshCmd()
+		case "e":
+			m.sortMode = "eta"
+			return m, refreshCmd()
+		case "o":
+			m.sortMode = ""
+			return m, refreshCmd()
 		}
 	case tickMsg:
 		return m, refreshCmd()
@@ -138,6 +153,10 @@ func (m *model) View() string {
 	}
 	if m.err != nil {
 		fmt.Fprintf(&b, "error: %v\n\n", m.err)
+	}
+	if m.showHelp {
+		b.WriteString(m.helpView())
+		b.WriteString("\n")
 	}
 	// Columns header
 	fmt.Fprintf(&b, "%s\n", m.styles.label.Render(fmt.Sprintf("%-8s  %-10s  %-10s  %-8s  %-40s  %s", "STATUS", "PROGRESS", "SPEED", "ETA", "DEST", "URL")))
@@ -220,7 +239,7 @@ func (m *model) progressFor(r state.DownloadRow) (cur int64, total int64, rate f
 }
 
 func (m *model) filteredRows() []state.DownloadRow {
-	if !m.filterOn && strings.TrimSpace(m.filter.Value()) == "" { return m.rows }
+	if !m.filterOn && strings.TrimSpace(m.filter.Value()) == "" && m.sortMode == "" { return m.rows }
 	q := strings.ToLower(strings.TrimSpace(m.filter.Value()))
 	var out []state.DownloadRow
 	for _, r := range m.rows {
@@ -228,6 +247,35 @@ func (m *model) filteredRows() []state.DownloadRow {
 			out = append(out, r)
 		}
 	}
+	if m.sortMode != "" {
+		sort.SliceStable(out, func(i, j int) bool {
+			// compute rate and ETA seconds for both
+			ci, ti, ri, _ := m.progressFor(out[i])
+			cj, tj, rj, _ := m.progressFor(out[j])
+			etaI := etaSeconds(ci, ti, ri)
+			etaJ := etaSeconds(cj, tj, rj)
+			switch m.sortMode {
+			case "speed":
+				return ri > rj
+			case "eta":
+				if etaI == 0 && etaJ == 0 { return ri > rj }
+				if etaI == 0 { return false }
+				if etaJ == 0 { return true }
+				return etaI < etaJ
+			default:
+				return false
+			}
+		})
+	}
 	return out
+}
+
+func etaSeconds(cur, total int64, rate float64) float64 {
+	if rate <= 0 || total <= 0 || cur >= total { return 0 }
+	return float64(total-cur) / rate
+}
+
+func (m *model) helpView() string {
+	return "Help: j/k up/down • r refresh • d details • / filter • s sort by speed • e sort by ETA • o clear sort • h/? toggle this help"
 }
 
