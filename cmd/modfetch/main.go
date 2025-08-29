@@ -60,6 +60,8 @@ func run(args []string) error {
 		return nil
 	case "completion":
 		return handleCompletion(args[1:])
+	case "hostcaps":
+		return handleHostCaps(args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -87,6 +89,7 @@ Commands:
   version           Print version
   help              Show this help
   completion        Generate shell completion scripts (bash|zsh|fish)
+  hostcaps          Manage host capability cache (list/clear)
 
 Flags:
   --config PATH     Path to YAML config file (or MODFETCH_CONFIG env var)

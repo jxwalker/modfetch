@@ -46,5 +46,35 @@ func (db *DB) GetHostCaps(host string) (HostCaps, bool, error) {
 	}
 }
 
+// ListHostCaps returns all cached host capabilities.
+func (db *DB) ListHostCaps() ([]HostCaps, error) {
+	if db == nil || db.SQL == nil { return nil, errors.New("nil db") }
+	rows, err := db.SQL.Query(`SELECT host, head_ok, accept_ranges FROM host_caps ORDER BY host`)
+	if err != nil { return nil, err }
+	defer rows.Close()
+	var out []HostCaps
+	for rows.Next() {
+		var host string
+		var head, acc int
+		if err := rows.Scan(&host, &head, &acc); err != nil { return nil, err }
+		out = append(out, HostCaps{Host: host, HeadOK: head != 0, AcceptRanges: acc != 0})
+	}
+	return out, rows.Err()
+}
+
+// DeleteHostCaps deletes a single host from the cache.
+func (db *DB) DeleteHostCaps(host string) error {
+	if db == nil || db.SQL == nil { return errors.New("nil db") }
+	_, err := db.SQL.Exec(`DELETE FROM host_caps WHERE host=?`, host)
+	return err
+}
+
+// ClearHostCaps deletes all host capabilities from the cache.
+func (db *DB) ClearHostCaps() error {
+	if db == nil || db.SQL == nil { return errors.New("nil db") }
+	_, err := db.SQL.Exec(`DELETE FROM host_caps`)
+	return err
+}
+
 func boolToInt(b bool) int { if b { return 1 }; return 0 }
 

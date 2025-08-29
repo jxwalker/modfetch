@@ -80,15 +80,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	startTime := time.Now()
 	if a, ok := e.metrics.(interface{ IncActive(int64); Write() error }); ok { a.IncActive(1); _ = a.Write(); defer func(){ a.IncActive(-1); _ = a.Write() }() }
 
-	// Host capability cache: if we know Accept-Ranges is unsupported, skip chunked path early
-	if u, perr := neturl.Parse(url); perr == nil {
-		if caps, ok, _ := e.st.GetHostCaps(strings.ToLower(u.Hostname())); ok {
-			if !caps.AcceptRanges {
-				e.log.Debugf("host capability cached: accept_ranges=%v; falling back to single", caps.AcceptRanges)
-				return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers)
-			}
-		}
-	}
+	// Host capability cache is advisory only; we always probe to avoid stale data.
 	h, err := e.head(ctx, url, headers)
 	// If HEAD failed or Range not advertised, try a Range GET probe (bytes=0-0)
 	if (err != nil || !h.acceptRange || h.size <= 0) && ctx != nil {
