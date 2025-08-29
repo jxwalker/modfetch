@@ -1,0 +1,24 @@
+# Example batch jobs for modfetch
+#
+# Notes:
+# - Leave `dest` empty to let modfetch save into your configured download_root with the inferred filename.
+# - Set `place: true` to place the artifact after download using your placement mapping and selected mode.
+# - `type` is optional; when omitted, modfetch detects the artifact type heuristically.
+# - For civitai:// jobs, public files may work without a token; private/gated require CIVITAI_TOKEN in the environment.
+
+version: 1
+jobs:
+  # Public HTTP test file
+  - uri: "https://proof.ovh.net/files/1Mb.dat"
+    place: false
+
+  # Hugging Face example (public)
+  - uri: "hf://gpt2/README.md?rev=main"
+    # dest: "/absolute/path/optional"
+    place: false
+
+  # CivitAI example (replace with a real modelId/version/file selector). Requires CIVITAI_TOKEN for private/gated.
+  # - uri: "civitai://model/123456?file=vae"
+  #   place: true
+  #   mode: "symlink"   # symlink | hardlink | copy
+
