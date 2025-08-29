@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	neturl "net/url"
 	"runtime"
 	"strings"
 	"time"
@@ -64,4 +65,29 @@ func versionString() string {
 }
 
 var defaultVersion = "dev"
+
+// resolveRedirectURL performs a single GET without following redirects to capture the Location.
+// Returns the absolute redirected URL if present.
+func resolveRedirectURL(baseClient *http.Client, rawURL string, headers map[string]string, ua string) (string, bool) {
+	// clone client with redirect disabled
+	cl := *baseClient
+	cl.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+	req, _ := http.NewRequest(http.MethodGet, rawURL, nil)
+	req.Header.Set("User-Agent", ua)
+	for k, v := range headers { req.Header.Set(k, v) }
+	resp, err := cl.Do(req)
+	if err != nil { return "", false }
+	defer resp.Body.Close()
+	if resp.StatusCode < 300 || resp.StatusCode >= 400 { return "", false }
+	loc := resp.Header.Get("Location")
+	if loc == "" { return "", false }
+	u, err := neturl.Parse(loc)
+	if err != nil { return "", false }
+	if !u.IsAbs() {
+		base, err := neturl.Parse(rawURL)
+		if err != nil { return "", false }
+		u = base.ResolveReference(u)
+	}
+	return u.String(), true
+}
 

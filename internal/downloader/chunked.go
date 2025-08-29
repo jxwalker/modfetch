@@ -88,6 +88,23 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 			e.log.Debugf("range GET probe succeeded (size=%d)", hp.size)
 			h = hp
 			err = nil
+		} else {
+			// As a last resort, resolve signed redirect then retry probe on the final URL
+			if ru, ok := resolveRedirectURL(e.client, url, headers, userAgent(e.cfg)); ok {
+				e.log.Debugf("resolved redirect -> %s", ru)
+				url = ru
+				// Do not forward Authorization to different host
+				if u1, _ := neturl.Parse(ru); u1 != nil {
+					if u0, _ := neturl.Parse(url); u0 == nil || !strings.EqualFold(u0.Host, u1.Host) {
+						delete(headers, "Authorization")
+					}
+				}
+				if hp2, perr2 := e.probeRangeGET(ctx, url, headers); perr2 == nil && hp2.acceptRange && hp2.size > 0 {
+					e.log.Debugf("range GET probe after redirect succeeded (size=%d)", hp2.size)
+					h = hp2
+					err = nil
+				}
+			}
 		}
 	}
 	// Persist host capabilities based on what we know
