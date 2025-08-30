@@ -249,6 +249,15 @@ case "D":
 				return m, refreshCmd()
 			}
 			return m, nil
+case "X":
+			// clear download row from DB (useful for stuck planning rows)
+			if m.selected >=0 && m.selected < len(m.rows) {
+				r := m.rows[m.selected]
+				_ = m.st.DeleteChunks(r.URL, r.Dest)
+				if err := m.st.DeleteDownload(r.URL, r.Dest); err != nil { m.newMsg = "clear failed: "+err.Error() } else { m.newMsg = "cleared row" }
+				return m, refreshCmd()
+			}
+			return m, nil
 		case "s":
 			m.sortMode = "speed"
 			return m, refreshCmd()
@@ -549,7 +558,7 @@ func filterByStatuses(in []state.DownloadRow, want []string) []state.DownloadRow
 }
 
 func (m *model) helpView() string {
-	return "Help: j/k up/down • r refresh • n new download • f filter preset • g group by status • t toggle columns • d details • / filter • s sort by speed • e sort by ETA • o clear sort • C copy path • U copy URL • O open folder • D delete staged data • m menu • h/? toggle help"
+	return "Help: j/k up/down • r refresh • n new download • f filter preset • g group by status • t toggle columns • d details • / filter • s sort by speed • e sort by ETA • o clear sort • C copy path • U copy URL • O open folder • D delete staged data • X clear row • m menu • h/? toggle help"
 }
 
 func (m *model) menuView() string {
