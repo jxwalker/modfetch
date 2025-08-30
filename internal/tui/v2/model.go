@@ -80,6 +80,7 @@ type Model struct {
 	showToastDrawer bool
 	showHelp bool
 	themeIndex int
+	showURL bool
 	tickEvery time.Duration
 	// caches for performance
 	rateCache map[string]float64
@@ -138,6 +139,8 @@ case tea.KeyMsg:
 		case "e": m.sortMode = "eta"; return m, nil
 		case "o": m.sortMode = ""; return m, nil
 		case "g": if m.groupBy=="host" { m.groupBy = "" } else { m.groupBy = "host" }; return m, nil
+		case "t": // toggle last column between DEST and URL
+			m.showURL = !m.showURL; return m, nil
 case "T": // theme cycle presets
 			presets := themePresets()
 			m.themeIndex = (m.themeIndex + 1) % len(presets)
@@ -164,6 +167,9 @@ case "T": // theme cycle presets
 			return m, nil
 		case "A": // select all visible
 			for _, r := range m.visibleRows() { m.selectedKeys[keyFor(r)] = true }
+			return m, nil
+		case "X": // clear selection
+			m.selectedKeys = map[string]bool{}
 			return m, nil
 case "y": // retry (batch-aware)
 			targets := m.selectionOrCurrent()
@@ -246,7 +252,7 @@ func (m *Model) View() string {
 	// Footer
 	filterBar := ""
 	if m.filterOn { filterBar = "Filter: "+ m.filterInput.View() }
-	footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • T theme • H toasts • ? help • q quit\n"+filterBar))
+	footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • t URL/DEST • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
 	parts := []string{header, mid}
 	if help != "" { parts = append(parts, help) }
 	if drawer != "" { parts = append(parts, drawer) }
@@ -371,7 +377,8 @@ func etaSeconds(cur, total int64, rate float64) float64 {
 func (m *Model) renderTable() string {
 	rows := m.visibleRows()
 	var sb strings.Builder
-	sb.WriteString(m.th.head.Render(fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-10s  %-8s  %-s", "S", "STATUS", "PROGRESS", "SPEED", "THR", "ETA", "DEST")))
+	lastLabel := "DEST"; if m.showURL { lastLabel = "URL" }
+	sb.WriteString(m.th.head.Render(fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-10s  %-8s  %-s", "S", "STATUS", "PROGRESS", "SPEED", "THR", "ETA", lastLabel)))
 	sb.WriteString("\n")
 	maxRows := m.h - 10
 	if maxRows < 3 { maxRows = len(rows) }
@@ -389,7 +396,9 @@ func (m *Model) renderTable() string {
 		eta := m.etaCache[keyFor(r)]
 		thr := m.renderSparkline(keyFor(r))
 		sel := " "; if m.selectedKeys[keyFor(r)] { sel = "*" }
-		line := fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-10s  %-8s  %s", sel, r.Status, prog, humanize.Bytes(uint64(rate))+"/s", thr, eta, r.Dest)
+		last := r.Dest
+		if m.showURL { last = logging.SanitizeURL(r.URL) }
+		line := fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-10s  %-8s  %s", sel, r.Status, prog, humanize.Bytes(uint64(rate))+"/s", thr, eta, last)
 		if i == m.selected { line = m.th.rowSelected.Render(line) }
 		sb.WriteString(line+"\n")
 		if i+1 >= maxRows { break }
@@ -535,7 +544,8 @@ func (m *Model) renderHelp() string {
 	sb.WriteString("Group: g group by host\n")
 	sb.WriteString("Theme: T cycle presets\n")
 	sb.WriteString("Toasts: H toggle drawer\n")
-	sb.WriteString("Select: Space toggle • A select all\n")
+	sb.WriteString("Select: Space toggle • A select all • X clear selection\n")
+	sb.WriteString("Columns: t toggle URL/DEST\n")
 	sb.WriteString("Actions: y retry • p cancel • O open • C copy path • U copy URL\n")
 	sb.WriteString("Quit: q\n")
 	return sb.String()
