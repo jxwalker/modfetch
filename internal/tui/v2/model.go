@@ -78,7 +78,9 @@ type Model struct {
 	selectedKeys map[string]bool
 	toasts []toast
 	showToastDrawer bool
+	showHelp bool
 	themeIndex int
+	tickEvery time.Duration
 	// caches for performance
 	rateCache map[string]float64
 	etaCache  map[string]string
@@ -92,15 +94,22 @@ type Model struct {
 func New(cfg *config.Config, st *state.DB) tea.Model {
 	p := progress.New(progress.WithDefaultGradient())
 	fi := textinput.New(); fi.Placeholder = "filter (url or dest contains)"; fi.CharLimit = 4096
+	// compute refresh
+	refresh := time.Second
+	if hz := cfg.UI.RefreshHz; hz > 0 {
+		if hz > 10 { hz = 10 }
+		refresh = time.Second / time.Duration(hz)
+	}
 	return &Model{
 		cfg: cfg, st: st, th: defaultTheme(), activeTab: 1, prog: p, prev: map[string]obs{},
 		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
 		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{},
+		tickEvery: refresh,
 	}
 }
 
 func (m *Model) Init() tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
+return tea.Tick(m.tickEvery, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -129,13 +138,16 @@ case tea.KeyMsg:
 		case "e": m.sortMode = "eta"; return m, nil
 		case "o": m.sortMode = ""; return m, nil
 		case "g": if m.groupBy=="host" { m.groupBy = "" } else { m.groupBy = "host" }; return m, nil
-		case "T": // theme cycle presets
+case "T": // theme cycle presets
 			presets := themePresets()
 			m.themeIndex = (m.themeIndex + 1) % len(presets)
 			m.th = presets[m.themeIndex]
 			return m, nil
 		case "H": // toggle toast drawer
 			m.showToastDrawer = !m.showToastDrawer
+			return m, nil
+		case "?":
+			m.showHelp = !m.showHelp
 			return m, nil
 		case "1": m.activeTab = 0; m.selected = 0; return m, nil
 		case "2": m.activeTab = 1; m.selected = 0; return m, nil
@@ -226,14 +238,20 @@ func (m *Model) View() string {
 	if m.showToastDrawer {
 		drawer = m.th.border.Width(m.w-2).Render(m.renderToastDrawer())
 	}
+	// Optional help modal
+	help := ""
+	if m.showHelp {
+		help = m.th.border.Width(m.w-2).Render(m.renderHelp())
+	}
 	// Footer
 	filterBar := ""
 	if m.filterOn { filterBar = "Filter: "+ m.filterInput.View() }
-	footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • T theme • H toasts • q quit\n"+filterBar))
-	if drawer != "" {
-		return lipgloss.JoinVertical(lipgloss.Left, header, mid, drawer, footer)
-	}
-	return lipgloss.JoinVertical(lipgloss.Left, header, mid, footer)
+	footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • T theme • H toasts • ? help • q quit\n"+filterBar))
+	parts := []string{header, mid}
+	if help != "" { parts = append(parts, help) }
+	if drawer != "" { parts = append(parts, drawer) }
+	parts = append(parts, footer)
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 func (m *Model) refresh() tea.Cmd {
@@ -260,7 +278,7 @@ func (m *Model) refresh() tea.Cmd {
 		} else { m.etaCache[key] = "-" }
 		m.addRateSample(key, rate)
 	}
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
+return tea.Tick(m.tickEvery, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
 func (m *Model) renderStats() string {
@@ -505,6 +523,22 @@ func (m *Model) renderToasts() string {
 	parts := make([]string, 0, len(m.toasts))
 	for _, t := range m.toasts { parts = append(parts, t.msg) }
 	return m.th.label.Render(strings.Join(parts, " • "))
+}
+
+func (m *Model) renderHelp() string {
+	var sb strings.Builder
+	sb.WriteString(m.th.head.Render("Help (TUI v2)")+"\n")
+	sb.WriteString("Tabs: 1 Pending • 2 Active • 3 Completed • 4 Failed\n")
+	sb.WriteString("Nav: j/k up/down\n")
+	sb.WriteString("Filter: / to enter; Enter to apply; Esc to clear\n")
+	sb.WriteString("Sort: s speed • e ETA • o clear\n")
+	sb.WriteString("Group: g group by host\n")
+	sb.WriteString("Theme: T cycle presets\n")
+	sb.WriteString("Toasts: H toggle drawer\n")
+	sb.WriteString("Select: Space toggle • A select all\n")
+	sb.WriteString("Actions: y retry • p cancel • O open • C copy path • U copy URL\n")
+	sb.WriteString("Quit: q\n")
+	return sb.String()
 }
 
 func (m *Model) renderToastDrawer() string {

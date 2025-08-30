@@ -22,6 +22,7 @@ type Config struct {
 	Logging     Logging      `yaml:"logging"`
 	Metrics     Metrics      `yaml:"metrics"`
 	Validation  Validation   `yaml:"validation"`
+	UI          UIOptions    `yaml:"ui"`
 }
 
 type General struct {
@@ -118,6 +119,12 @@ type Validation struct {
 	SafetensorsDeepVerifyAfterDownload bool `yaml:"safetensors_deep_verify_after_download"`
 }
 
+type UIOptions struct {
+	// RefreshHz controls the TUI refresh frequency (ticks per second). If 0, defaults to 1.
+	// Values above 10 are clamped to 10 to avoid excessive CPU usage.
+	RefreshHz int `yaml:"refresh_hz"`
+}
+
 // Load reads, parses, expands, and validates a YAML config file.
 func Load(path string) (*Config, error) {
 	if path == "" {
@@ -185,6 +192,9 @@ func (c *Config) Validate() error {
 		// ok
 	default:
 		return fmt.Errorf("logging.format invalid: %s", c.Logging.Format)
+	}
+	if c.UI.RefreshHz < 0 {
+		return fmt.Errorf("ui.refresh_hz must be >= 0")
 	}
 	return nil
 }
