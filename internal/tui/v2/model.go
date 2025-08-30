@@ -80,6 +80,7 @@ type Model struct {
 	toasts []toast
 	showToastDrawer bool
 	showHelp bool
+	showInspector bool
 	themeIndex int
 	columnMode string // dest|url|host
 	tickEvery time.Duration
@@ -141,7 +142,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 case tea.KeyMsg:
 		s := msg.String()
-		// If filter mode is on, handle input first
+		// If filter mode is on, handle input first (swallow other keys into the input)
 		if m.filterOn {
 			switch s {
 			case "enter": m.filterOn = false; m.filterInput.Blur(); return m, nil
@@ -151,6 +152,7 @@ case tea.KeyMsg:
 			m.filterInput, cmd = m.filterInput.Update(msg)
 			return m, cmd
 		}
+		// Normal key handling
 		switch s {
 	case "q", "ctrl+c":
 			m.saveUIState()
@@ -182,6 +184,9 @@ case "T": // theme cycle presets
 			return m, nil
 		case "?":
 			m.showHelp = !m.showHelp
+			return m, nil
+		case "i": // toggle inspector panel
+			m.showInspector = !m.showInspector
 			return m, nil
 		case "1": m.activeTab = 0; m.selected = 0; return m, nil
 		case "2": m.activeTab = 1; m.selected = 0; return m, nil
@@ -248,43 +253,46 @@ case "y": // retry (batch-aware)
 func (m *Model) View() string {
 	if m.w == 0 { m.w = 120 }
 	if m.h == 0 { m.h = 30 }
-	// Header
+	// Title bar + inline toasts
 	title := m.th.title.Render("modfetch • TUI v2 (preview)")
-	stats := m.renderStats()
-	// Toasts inline
 	toastStr := m.renderToasts()
-	header := m.th.border.Render(lipgloss.JoinHorizontal(lipgloss.Top, title+"  ", m.th.label.Render(stats), "  ", toastStr))
-	// Left tabs
-	left := m.renderTabs()
-	// Main table
-	main := m.renderTable()
-	// Inspector
-	insp := m.renderInspector()
-	// Compose middle area
+	titleBar := m.th.border.Render(lipgloss.JoinHorizontal(lipgloss.Top, title, "  ", toastStr))
+
+	// Top panels: fixed height; left = key hints, right = stats
+	topHeight := 8
+	topLeftW := m.w / 2
+	if topLeftW < 40 { topLeftW = 40 }
+	if topLeftW > m.w-40 { topLeftW = m.w - 40 }
+	topLeft := m.th.border.Width(topLeftW).Height(topHeight).Render(m.renderTopLeftHints())
+	topRight := m.th.border.Width(m.w - topLeftW - 4).Height(topHeight).Render(m.renderTopRightStats())
+	topRow := lipgloss.JoinHorizontal(lipgloss.Top, topLeft, topRight)
+
+	// Bottom panels: queue/table (with tabs), optional inspector
 	leftW := 24
-	inspW := 42
-	midW := m.w - leftW - inspW - 4
-	if midW < 30 { midW = 30 }
-	mid := lipgloss.JoinHorizontal(lipgloss.Top,
-		m.th.border.Width(leftW).Render(left),
-		m.th.border.Width(midW).Render(main),
-		m.th.border.Width(inspW).Render(insp),
-	)
-	// Optional toast drawer
+	inspW := 0
+	if m.showInspector { inspW = 42 }
+	mainW := m.w - leftW - inspW - 4
+	if mainW < 30 { mainW = 30 }
+	left := m.th.border.Width(leftW).Render(m.renderTabs())
+	main := m.th.border.Width(mainW).Render(m.renderTable())
+	bottom := lipgloss.JoinHorizontal(lipgloss.Top, left, main)
+	if m.showInspector {
+		insp := m.th.border.Width(inspW).Render(m.renderInspector())
+		bottom = lipgloss.JoinHorizontal(lipgloss.Top, left, main, insp)
+	}
+
+	// Optional overlays
 	drawer := ""
-	if m.showToastDrawer {
-		drawer = m.th.border.Width(m.w-2).Render(m.renderToastDrawer())
-	}
-	// Optional help modal
+	if m.showToastDrawer { drawer = m.th.border.Width(m.w-2).Render(m.renderToastDrawer()) }
 	help := ""
-	if m.showHelp {
-		help = m.th.border.Width(m.w-2).Render(m.renderHelp())
-	}
-	// Footer
+	if m.showHelp { help = m.th.border.Width(m.w-2).Render(m.renderHelp()) }
+
+	// Footer with filter bar
 	filterBar := ""
 	if m.filterOn { filterBar = "Filter: "+ m.filterInput.View() }
-footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • t last col URL/DEST/HOST • v compact • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
-	parts := []string{header, mid}
+	footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • t last col URL/DEST/HOST • v compact • i inspector • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
+
+	parts := []string{titleBar, topRow, bottom}
 	if help != "" { parts = append(parts, help) }
 	if drawer != "" { parts = append(parts, drawer) }
 	parts = append(parts, footer)
@@ -355,6 +363,46 @@ func (m *Model) renderStats() string {
 		gRate += rate
 	}
 	return fmt.Sprintf("Pending:%d Active:%d Completed:%d Failed:%d • Rate:%s/s", pending, active, done, failed, humanize.Bytes(uint64(gRate)))
+}
+
+// renderTopLeftHints shows compact key hints in a fixed-size box
+func (m *Model) renderTopLeftHints() string {
+	lines := []string{
+		m.th.head.Render("Hints"),
+		"Tabs: 1 Pending • 2 Active • 3 Completed • 4 Failed",
+		"Nav: j/k up/down",
+		"Filter: / enter • Enter apply • Esc clear",
+		"Sort: s speed • e ETA • o clear | Group: g host",
+		"Select: Space toggle • A all • X clear",
+		"Actions: y retry • p cancel | Open: O • Copy: C/U",
+		"View: t column • v compact • i inspector • T theme • H toasts • ? help • q quit",
+	}
+	return strings.Join(lines, "\n")
+}
+
+// renderTopRightStats shows aggregate metrics and recent toasts summary
+func (m *Model) renderTopRightStats() string {
+	var pending, active, done, failed int
+	var gRate float64
+	for _, r := range m.rows {
+		ls := strings.ToLower(r.Status)
+		switch ls {
+		case "pending","planning": pending++
+		case "running": active++
+		case "complete": done++
+		case "error","checksum_mismatch","verify_failed": failed++
+		}
+		gRate += m.rateCache[keyFor(r)]
+	}
+	lines := []string{
+		m.th.head.Render("Stats"),
+		fmt.Sprintf("Pending:   %d", pending),
+		fmt.Sprintf("Active:    %d", active),
+		fmt.Sprintf("Completed: %d", done),
+		fmt.Sprintf("Failed:    %d", failed),
+		fmt.Sprintf("Global Rate: %s/s", humanize.Bytes(uint64(gRate))),
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m *Model) renderTabs() string {
