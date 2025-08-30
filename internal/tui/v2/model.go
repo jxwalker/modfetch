@@ -90,6 +90,8 @@ type Model struct {
 	curBytesCache map[string]int64
 	// rate history for sparkline
 	rateHist map[string][]float64
+	// cache for hostnames
+	hostCache map[string]string
 	err   error
 }
 
@@ -119,7 +121,7 @@ func New(cfg *config.Config, st *state.DB) tea.Model {
 	m := &Model{
 		cfg: cfg, st: st, th: defaultTheme(), activeTab: 1, prog: p, prev: map[string]obs{},
 		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
-		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{},
+		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{}, hostCache: map[string]string{},
 		tickEvery: refresh,
 		columnMode: mode,
 	}
@@ -295,25 +297,47 @@ func (m *Model) refresh() tea.Cmd {
 	m.rows = rows
 	m.lastRefresh = time.Now()
 	m.gcToasts()
-	// recompute caches once per tick
+	// determine visible keys to focus updates
+	vis := map[string]struct{}{}
+	vr := m.visibleRows()
+	maxRows := m.maxRowsOnScreen()
+	for i, r := range vr {
+		if i >= maxRows { break }
+		vis[keyFor(r)] = struct{}{}
+	}
+	// recompute caches, prioritizing visible, running rows
 	for _, r := range m.rows {
 		key := keyFor(r)
-		cur, total := m.computeCurAndTotal(r)
-		m.totalCache[key] = total
-		m.curBytesCache[key] = cur
-		prev := m.prev[key]
-		dt := time.Since(prev.t).Seconds()
-		var rate float64
-		if dt > 0 { rate = float64(cur - prev.bytes) / dt }
-		m.prev[key] = obs{bytes: cur, t: time.Now()}
-		m.rateCache[key] = rate
-		if rate > 0 && total > 0 && cur < total {
-			rem := float64(total-cur) / rate
-			m.etaCache[key] = fmt.Sprintf("%ds", int(rem+0.5))
-		} else { m.etaCache[key] = "-" }
-		m.addRateSample(key, rate)
+		// cache host if needed
+		if m.columnMode == "host" {
+			if _, ok := m.hostCache[key]; !ok {
+				m.hostCache[key] = hostOf(r.URL)
+			}
+		}
+		_, isVis := vis[key]
+		status := strings.ToLower(r.Status)
+		shouldUpdate := isVis && (status == "running" || status == "planning" || status == "pending")
+		cur := m.curBytesCache[key]
+		total := r.Size
+		if shouldUpdate {
+			c2, t2 := m.computeCurAndTotal(r)
+			cur, total = c2, t2
+			m.totalCache[key] = total
+			m.curBytesCache[key] = cur
+			prev := m.prev[key]
+			dt := time.Since(prev.t).Seconds()
+			var rate float64
+			if dt > 0 { rate = float64(cur - prev.bytes) / dt }
+			m.prev[key] = obs{bytes: cur, t: time.Now()}
+			m.rateCache[key] = rate
+			if rate > 0 && total > 0 && cur < total {
+				rem := float64(total-cur) / rate
+				m.etaCache[key] = fmt.Sprintf("%ds", int(rem+0.5))
+			} else { m.etaCache[key] = "-" }
+			m.addRateSample(key, rate)
+		}
 	}
-return tea.Tick(m.tickEvery, func(t time.Time) tea.Msg { return tickMsg(t) })
+	return tea.Tick(m.tickEvery, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
 func (m *Model) renderStats() string {
@@ -537,6 +561,12 @@ func (m *Model) renderSparklineKey(key string) string {
 
 func (m *Model) renderSparkline(key string) string { return m.renderSparklineKey(key) }
 
+func (m *Model) maxRowsOnScreen() int {
+	max := m.h - 10
+	if max < 3 { return 3 }
+	return max
+}
+
 func keyFor(r state.DownloadRow) string { return r.URL+"|"+r.Dest }
 
 func hostOf(urlStr string) string {
@@ -557,7 +587,13 @@ func (m *Model) selectionOrCurrent() []state.DownloadRow {
 	return out
 }
 
-func (m *Model) addToast(s string) { m.toasts = append(m.toasts, toast{msg: s, when: time.Now(), ttl: 3*time.Second}) }
+func (m *Model) addToast(s string) {
+	m.toasts = append(m.toasts, toast{msg: s, when: time.Now(), ttl: 3*time.Second})
+	if len(m.toasts) > 50 {
+		// keep last 50
+		m.toasts = m.toasts[len(m.toasts)-50:]
+	}
+}
 
 func (m *Model) gcToasts() {
 	now := time.Now()
