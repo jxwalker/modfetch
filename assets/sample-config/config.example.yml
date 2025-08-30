@@ -4,7 +4,7 @@ general:
   download_root: "~/Downloads/modfetch"
   partials_root: "~/Downloads/modfetch/.parts"   # optional override; else defaults to download_root/.parts
   placement_mode: "symlink"     # symlink | hardlink | copy
-  quarantine: true
+  quarantine: false
   allow_overwrite: false
   dry_run: false
   stage_partials: true           # write .part files under download_root/.parts (recommended)
@@ -12,13 +12,13 @@ general:
 
 network:
   timeout_seconds: 60
-  max_redirects: 10
+  max_redirects: 5
   tls_verify: true
   user_agent: "modfetch/0.1"
 
 concurrency:
   global_files: 4
-  per_file_chunks: 8
+  per_file_chunks: 4
   per_host_requests: 8
   chunk_size_mb: 8
   max_retries: 8
@@ -93,7 +93,7 @@ logging:
   level: "info"
   format: "human"
   file:
-    enabled: true
+    enabled: false
     path: "~/modfetch-data/logs/modfetch.log"
     max_megabytes: 50
     max_backups: 3
@@ -101,11 +101,11 @@ logging:
 
 metrics:
   prometheus_textfile:
-    enabled: true
-    path: "~/modfetch-data/metrics/prometheus.prom"
+    enabled: false
+    path: ""
 
 validation:
-  require_sha256: true
+  require_sha256: false
   accept_md5_sha1_if_provided: false
   safetensors_deep_verify_after_download: true   # verify coverage/length for .safetensors after download; fail if not exact
 
