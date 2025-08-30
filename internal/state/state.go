@@ -88,6 +88,12 @@ func (db *DB) IncDownloadRetries(url, dest string, delta int64) error {
 	return err
 }
 
+// DeleteDownload removes a download row for the given url+dest.
+func (db *DB) DeleteDownload(url, dest string) error {
+	_, err := db.SQL.Exec(`DELETE FROM downloads WHERE url=? AND dest=?`, url, dest)
+	return err
+}
+
 // ListDownloads returns a snapshot of the downloads table
 func (db *DB) ListDownloads() ([]DownloadRow, error) {
 	rows, err := db.SQL.Query(`SELECT url,dest,expected_sha256,actual_sha256,etag,last_modified,size,status,retries,updated_at FROM downloads ORDER BY updated_at DESC`)

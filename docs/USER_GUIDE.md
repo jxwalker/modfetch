@@ -108,7 +108,15 @@ modfetch tui --config ~/.config/modfetch/config.yml
 
 - Live list of downloads
 - Throughput and ETA per row
-- Keys: q (quit), r (refresh), j/k (select), d (details), / (filter), s (sort by speed), e (sort by ETA)
+- Keys:
+  - Navigation: j/k (select), / (filter), m (menu), h/? (help)
+  - Sorting: s (sort by speed), e (sort by ETA), o (clear sort)
+  - Actions: n (new), r (refresh), d (details), g (group by status), t (toggle columns)
+  - Per-row actions: p (pause/cancel), y (retry), C (copy path), U (copy URL), O (open/reveal), D (delete staged), X (clear row)
+- Behavior:
+  - Resolving spinner row appears immediately after starting, then transitions to planning → running
+  - Live speed and ETA for both chunked and single-stream fallback downloads
+  - Supports pasting CivitAI model page URLs; they’re auto-resolved to the correct direct download
 
 ## Tips
 

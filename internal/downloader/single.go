@@ -120,6 +120,11 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	if err != nil { return "", "", err }
 	defer resp.Body.Close()
 
+	// Mark as running once we have a good response
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
+		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "running"})
+	}
+
 	if start > 0 && resp.StatusCode == http.StatusOK {
 		// Server ignored Range; restart from 0
 		s.log.Warnf("server ignored Range; restarting from beginning")
@@ -129,29 +134,51 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		start = 0
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
-		// Provide a friendlier hint for 401 on known hosts
+		// Special-case: resuming beyond EOF -> already complete
+		if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && size > 0 && start >= size {
+			s.log.Infof("server returned 416 but local part matches remote size; finalizing")
+			_ = f.Sync()
+			if err := renameOrCopy(part, destPath); err != nil { return "", "", err }
+			_ = os.Remove(part)
+			if _, err := adjustSafetensors(destPath, s.log); err != nil { return "", "", err }
+			ff, err := os.Open(destPath)
+			if err != nil { return "", "", err }
+			h := sha256.New()
+			if _, err := io.Copy(h, ff); err != nil { _ = ff.Close(); return "", "", err }
+			_ = ff.Close()
+			actualSHA := hex.EncodeToString(h.Sum(nil))
+			if err := writeAndSync(destPath+".sha256", []byte(actualSHA+"  "+filepath.Base(destPath)+"\n")); err != nil { return "", "", err }
+			_ = fsyncDir(filepath.Dir(destPath))
+			_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "complete"})
+			if s.metrics != nil {
+				s.metrics.IncDownloadsSuccess()
+				s.metrics.ObserveDownloadSeconds(time.Since(startTime).Seconds())
+				_ = s.metrics.Write()
+			}
+			return destPath, actualSHA, nil
+		}
+		// Provide a friendlier hint for 401 on known hosts and persist error status
+		msg := fmt.Sprintf("unexpected status: %s", resp.Status)
 		if resp.StatusCode == http.StatusUnauthorized {
 			if u, _ := neturl.Parse(url); u != nil {
 				h := strings.ToLower(u.Hostname())
 				if strings.HasSuffix(h, "huggingface.co") {
 					env := strings.TrimSpace(s.cfg.Sources.HuggingFace.TokenEnv)
 					if env == "" { env = "HF_TOKEN" }
-					return "", "", fmt.Errorf("unexpected status: 401 Unauthorized (Hugging Face: token required; export %s and ensure access/license accepted)", env)
+					msg = fmt.Sprintf("unexpected status: 401 Unauthorized (Hugging Face: token required; export %s and ensure access/license accepted)", env)
 				}
 				if strings.HasSuffix(h, "civitai.com") {
 					env := strings.TrimSpace(s.cfg.Sources.CivitAI.TokenEnv)
 					if env == "" { env = "CIVITAI_TOKEN" }
-					return "", "", fmt.Errorf("unexpected status: 401 Unauthorized (CivitAI: token required; export %s and ensure access)", env)
+					msg = fmt.Sprintf("unexpected status: 401 Unauthorized (CivitAI: token required; export %s and ensure access)", env)
 				}
 			}
 		}
-		return "", "", fmt.Errorf("unexpected status: %s", resp.Status)
+		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error"})
+		return "", "", fmt.Errorf(msg)
 	}
 
-	// Preallocate to expected size when known
-	if size > 0 {
-		_ = f.Truncate(size)
-	}
+	// Do not preallocate for single-stream so that .part size reflects real progress
 	mw := io.MultiWriter(f, hasher)
 	nWritten, err := io.Copy(mw, resp.Body)
 	if s.metrics != nil && nWritten > 0 { s.metrics.AddBytes(nWritten) }

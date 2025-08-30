@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	neturl "net/url"
 	"strings"
@@ -48,6 +51,9 @@ type model struct {
 	tipsOn   bool
 	// running downloads control (only those started via TUI)
 	running map[string]context.CancelFunc
+	// ephemeral starters (resolving/preflight), keyed by URL|Dest
+	ephems  map[string]ephemeral
+	spin   int
 	err      error
 	width   int
 	height  int
@@ -58,7 +64,15 @@ type model struct {
 	prev map[string]obs
 }
 
-type dlDoneMsg struct { path string; err error }
+// ephemeral represents a starting download before DB row appears
+
+type ephemeral struct {
+	URL  string
+	Dest string
+	When time.Time
+}
+
+type dlDoneMsg struct { url string; dest string; path string; err error }
 
 type obs struct{ bytes int64; t time.Time }
 
@@ -83,7 +97,7 @@ func New(cfg *config.Config, st *state.DB) tea.Model {
 	}
 	ti := textinput.New()
 	ti.Placeholder = "filter (url or dest contains)"
-m := &model{cfg: cfg, st: st, refresh: time.Second, prog: p, styles: styles, filter: ti, prev: map[string]obs{}, filterPreset: "all", tipsOn: true, running: map[string]context.CancelFunc{}, menuItems: []string{"New download","Filter preset","Group by status","Toggle columns","Sort by speed","Sort by ETA","Clear sort","Help","Refresh","Quit"}}
+m := &model{cfg: cfg, st: st, refresh: time.Second, prog: p, styles: styles, filter: ti, prev: map[string]obs{}, filterPreset: "all", tipsOn: true, running: map[string]context.CancelFunc{}, ephems: map[string]ephemeral{}, menuItems: []string{"New download","Filter preset","Group by status","Toggle columns","Sort by speed","Sort by ETA","Clear sort","Help","Refresh","Quit"}}
 	// new download inputs
 	m.newURL = textinput.New(); m.newURL.Placeholder = "URL (https://..., hf://..., civitai://...)"; m.newURL.CharLimit = 4096
 	m.newDest = textinput.New(); m.newDest.Placeholder = "Destination path (optional)"; m.newDest.CharLimit = 4096
@@ -126,12 +140,17 @@ case tea.KeyMsg:
 			case "shift+tab":
 				m.newFocus = (m.newFocus + 1 + 2 - 1) % 2
 				return m, nil
-			case "enter":
+case "enter":
 				url := strings.TrimSpace(m.newURL.Value())
 				dest := strings.TrimSpace(m.newDest.Value())
 				if url == "" { m.newMsg = "URL required"; return m, nil }
+				dg := strings.TrimSpace(m.destGuess(url, dest))
+				if err := m.preflightForDownload(url, dg); err != nil { m.newMsg = "preflight failed: "+err.Error(); return m, nil }
+				m.addEphemeral(url, dg)
 				m.newMsg = "starting download..."
-				return m, m.startDownloadCmd(url, dest)
+				// close the modal immediately so focus returns to the table
+				m.newDL = false
+				return m, m.startDownloadCmd(url, dg)
 			}
 			// route typing to focused input
 			if m.newFocus == 0 { var cmd tea.Cmd; m.newURL, cmd = m.newURL.Update(msg); return m, cmd }
@@ -194,6 +213,52 @@ case "y":
 				return m, m.startDownloadCmdCtx(ctx, u, d)
 			}
 			return m, nil
+case "C":
+			// copy dest path
+			if m.selected >=0 && m.selected < len(m.rows) {
+				if err := copyToClipboard(m.rows[m.selected].Dest); err != nil { m.newMsg = "copy failed: "+err.Error() } else { m.newMsg = "copied path to clipboard" }
+			}
+			return m, nil
+case "U":
+			// copy URL
+			if m.selected >=0 && m.selected < len(m.rows) {
+				if err := copyToClipboard(m.rows[m.selected].URL); err != nil { m.newMsg = "copy failed: "+err.Error() } else { m.newMsg = "copied URL to clipboard" }
+			}
+			return m, nil
+case "O":
+			// open folder (or reveal on macOS)
+			if m.selected >=0 && m.selected < len(m.rows) {
+				p := m.rows[m.selected].Dest
+				if p != "" {
+					if err := openInFileManager(p, true); err != nil { m.newMsg = "open failed: "+err.Error() } else { m.newMsg = "opened in file manager" }
+				}
+			}
+			return m, nil
+case "D":
+			// delete staged data (.part) and clear chunk state
+			if m.selected >=0 && m.selected < len(m.rows) {
+				r := m.rows[m.selected]
+				deleted := []string{}
+				// hashed staged path
+				p1 := downloader.StagePartPath(m.cfg, r.URL, r.Dest)
+				if fi, err := os.Stat(p1); err == nil && !fi.IsDir() { if err := os.Remove(p1); err == nil { deleted = append(deleted, p1) } }
+				// next-to-dest .part
+				p2 := r.Dest + ".part"
+				if p2 != p1 { if fi, err := os.Stat(p2); err == nil && !fi.IsDir() { if err := os.Remove(p2); err == nil { deleted = append(deleted, p2) } } }
+				_ = m.st.DeleteChunks(r.URL, r.Dest)
+				if len(deleted) > 0 { m.newMsg = "deleted staged data: " + strings.Join(deleted, ", ") } else { m.newMsg = "no staged data found" }
+				return m, refreshCmd()
+			}
+			return m, nil
+case "X":
+			// clear download row from DB (useful for stuck planning rows)
+			if m.selected >=0 && m.selected < len(m.rows) {
+				r := m.rows[m.selected]
+				_ = m.st.DeleteChunks(r.URL, r.Dest)
+				if err := m.st.DeleteDownload(r.URL, r.Dest); err != nil { m.newMsg = "clear failed: "+err.Error() } else { m.newMsg = "cleared row" }
+				return m, refreshCmd()
+			}
+			return m, nil
 		case "s":
 			m.sortMode = "speed"
 			return m, refreshCmd()
@@ -210,15 +275,30 @@ case refreshMsg:
 		rows, err := m.st.ListDownloads()
 		if err != nil { return m, func() tea.Msg { return errMsg{err} } }
 		m.rows = rows
+		// Clear ephemerals when a matching DB row appears by URL or Dest.
+		if len(m.ephems) > 0 {
+			for k, e := range m.ephems {
+				cleared := false
+				for _, r := range rows {
+					if r.URL == e.URL { cleared = true; break }
+					if e.Dest != "" && r.Dest != "" && filepath.Clean(r.Dest) == filepath.Clean(e.Dest) { cleared = true; break }
+				}
+				if cleared { delete(m.ephems, k) }
+			}
+		}
 		if m.selected >= len(m.rows) { m.selected = len(m.rows) - 1 }
 		if m.selected < 0 { m.selected = 0 }
 		// Auto-hide tips once we have any rows
 		if len(m.rows) > 0 { m.tipsOn = false }
+		// advance spinner
+		m.spin++
 		return m, tickCmd(m.refresh)
 	case errMsg:
 		m.err = msg.err
 		return m, tickCmd(m.refresh)
-	case dlDoneMsg:
+case dlDoneMsg:
+		// clear ephemeral if still present
+		if strings.TrimSpace(msg.url) != "" { delete(m.ephems, ephemeralKey(msg.url, msg.dest)) }
 		if msg.err != nil {
 			m.newMsg = fmt.Sprintf("download failed: %v", msg.err)
 		} else {
@@ -312,6 +392,16 @@ func (m *model) View() string {
 	labelLeft := "DEST"; labelRight := "URL"; if m.showURLFirst { labelLeft, labelRight = "URL", "DEST" }
 	fmt.Fprintf(&b, "%s\n", m.styles.label.Render(fmt.Sprintf("%-8s  %-10s  %-10s  %-8s  %-*s  %-*s", "STATUS", "PROGRESS", "SPEED", "ETA", destW, labelLeft, urlW, labelRight)))
 rows := m.filteredRows()
+// Prepend ephemeral starters so UI never looks idle
+if len(m.ephems) > 0 {
+	keys := make([]string, 0, len(m.ephems))
+	for k := range m.ephems { keys = append(keys, k) }
+	sort.Strings(keys)
+	for _, k := range keys {
+		e := m.ephems[k]
+		rows = append([]state.DownloadRow{{URL: e.URL, Dest: e.Dest, Status: "pending", Size: 0}}, rows...)
+	}
+}
 // apply preset filters
 switch m.filterPreset {
 case "active":
@@ -347,6 +437,13 @@ case "errors":
 }
 
 func (m *model) renderProgress(r state.DownloadRow) string {
+	// Ephemeral starter: show resolving spinner
+	if _, ok := m.ephems[ephemeralKey(r.URL, r.Dest)]; ok {
+		return "resolving " + m.spinnerChar()
+	}
+	if strings.EqualFold(r.Status, "planning") {
+		return "planning " + m.spinnerChar()
+	}
 	cur, total, _, _ := m.progressFor(r)
 	if total <= 0 { return "--" }
 	ratio := float64(cur) / float64(total)
@@ -362,6 +459,13 @@ func (m *model) renderDetails(r state.DownloadRow) string {
 	if abs != "" { abs, _ = filepath.Abs(r.Dest) }
 	cur, total, rate, eta := m.progressFor(r)
 	fmt.Fprintf(&sb, "    %s %s\n", m.styles.label.Render("dest:"), abs)
+	// Guidance if stuck in planning for more than ~5s without chunks
+	if strings.EqualFold(r.Status, "planning") {
+		chunks, _ := m.st.ListChunks(r.URL, r.Dest)
+		if len(chunks) == 0 && r.UpdatedAt > 0 && time.Since(time.Unix(r.UpdatedAt, 0)) > 5*time.Second {
+			fmt.Fprintf(&sb, "    %s %s\n", m.styles.label.Render("note:"), "still planning… this can happen if the server blocks HEAD; it will auto-fallback to single. If this persists, check CIVITAI_TOKEN/HF_TOKEN and network, or press y to retry.")
+		}
+	}
 	fmt.Fprintf(&sb, "    %s %s\n", m.styles.label.Render("size:"), humanize.Bytes(uint64(total)))
 	fmt.Fprintf(&sb, "    %s %s/%s\n", m.styles.label.Render("progress:"), humanize.Bytes(uint64(cur)), humanize.Bytes(uint64(total)))
 	fmt.Fprintf(&sb, "    %s %s/s\n", m.styles.label.Render("speed:"), humanize.Bytes(uint64(rate)))
@@ -383,8 +487,10 @@ func (m *model) progressFor(r state.DownloadRow) (cur int64, total int64, rate f
 			total += 0 // already in r.Size
 		}
 	} else {
+		// No chunk info (likely single-stream). Use the staged .part path consistent with downloader.
 		if r.Dest != "" {
-			if st, err := os.Stat(r.Dest + ".part"); err == nil {
+			p := downloader.StagePartPath(m.cfg, r.URL, r.Dest)
+			if st, err := os.Stat(p); err == nil {
 				cur = st.Size()
 			} else if st, err := os.Stat(r.Dest); err == nil {
 				cur = st.Size()
@@ -451,7 +557,7 @@ func filterByStatuses(in []state.DownloadRow, want []string) []state.DownloadRow
 }
 
 func (m *model) helpView() string {
-	return "Help: j/k up/down • r refresh • n new download • f filter preset • g group by status • t toggle columns • d details • / filter • s sort by speed • e sort by ETA • o clear sort • m menu • h/? toggle this help"
+	return "Help: j/k up/down • r refresh • n new download • f filter preset • g group by status • t toggle columns • d details • / filter • s sort by speed • e sort by ETA • o clear sort • C copy path • U copy URL • O open folder • D delete staged data • X clear row • m menu • h/? toggle help"
 }
 
 func (m *model) menuView() string {
@@ -494,9 +600,25 @@ func (m *model) startDownloadCmdCtx(ctx context.Context, urlStr, dest string) te
 return func() tea.Msg {
 		resolved := urlStr
 		headers := map[string]string{}
-		if strings.HasPrefix(resolved, "hf://") || strings.HasPrefix(resolved, "civitai://") {
+		// Translate civitai model page URLs into civitai:// URIs for proper resolution
+		if strings.HasPrefix(resolved, "http://") || strings.HasPrefix(resolved, "https://") {
+			if u, err := neturl.Parse(resolved); err == nil {
+				h := strings.ToLower(u.Hostname())
+				if strings.HasSuffix(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
+					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+					if len(parts) >= 2 {
+						modelID := parts[1]
+						q := u.Query()
+						ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
+						civ := "civitai://model/" + modelID; if strings.TrimSpace(ver) != "" { civ += "?version=" + ver }
+						if res, err := resolver.Resolve(ctx, civ, m.cfg); err == nil { resolved = res.URL; headers = res.Headers }
+					}
+				}
+			}
+		}
+if strings.HasPrefix(resolved, "hf://") || strings.HasPrefix(resolved, "civitai://") {
 			res, err := resolver.Resolve(ctx, resolved, m.cfg)
-			if err != nil { return dlDoneMsg{"", err} }
+			if err != nil { return dlDoneMsg{url: urlStr, dest: dest, path: "", err: err} }
 			resolved = res.URL
 			headers = res.Headers
 		} else {
@@ -515,9 +637,125 @@ return func() tea.Msg {
 		log := logging.New("error", false)
 		dl := downloader.NewAuto(m.cfg, log, m.st, nil)
 		final, _, err := dl.Download(ctx, resolved, dest, "", headers, m.cfg.General.AlwaysNoResume)
-		return dlDoneMsg{final, err}
+		return dlDoneMsg{url: urlStr, dest: dest, path: final, err: err}
 	}
 }
 
+// Helpers
+
+func (m *model) spinnerChar() string {
+	frames := []rune{'-', '\\', '|', '/'}
+	return string(frames[m.spin%len(frames)])
+}
+
+// composite key helper for ephemerals
+func ephemeralKey(url, dest string) string { return url + "|" + dest }
+
+func (m *model) addEphemeral(url, dest string) {
+	m.ephems[ephemeralKey(url, dest)] = ephemeral{URL: url, Dest: dest, When: time.Now()}
+}
+
+func (m *model) destGuess(urlStr, dest string) string {
+	d := strings.TrimSpace(dest)
+	if d != "" { return d }
+	root := strings.TrimSpace(m.cfg.General.DownloadRoot)
+	if strings.HasPrefix(urlStr, "http://") || strings.HasPrefix(urlStr, "https://") {
+		if u, err := neturl.Parse(urlStr); err == nil {
+			b := path.Base(u.Path)
+			if b == "/" || b == "." || b == "" || b == ".." { b = "download" }
+			candidate := filepath.Join(root, b)
+			if rel, err := filepath.Rel(root, candidate); err == nil && !strings.HasPrefix(rel, "..") {
+				return candidate
+			}
+			return filepath.Join(root, "download")
+		}
+	}
+	// resolver URI; we don't know yet
+	return filepath.Join(root, "(resolving)")
+}
+
+func (m *model) preflightForDownload(urlStr, dest string) error {
+	// Ensure download_root exists and is writable
+	if err := os.MkdirAll(m.cfg.General.DownloadRoot, 0o755); err != nil { return err }
+	if err := tryWrite(m.cfg.General.DownloadRoot); err != nil { return fmt.Errorf("download_root not writable: %w", err) }
+	// Ensure staging area exists and is writable depending on stage_partials
+	if m.cfg.General.StagePartials {
+		parts := m.cfg.General.PartialsRoot
+		if strings.TrimSpace(parts) == "" { parts = filepath.Join(m.cfg.General.DownloadRoot, ".parts") }
+		if err := os.MkdirAll(parts, 0o755); err != nil { return fmt.Errorf("create parts dir: %w", err) }
+		if err := tryWrite(parts); err != nil { return fmt.Errorf("parts dir not writable: %w", err) }
+	} else {
+		// part lives next to dest; ensure its parent if dest provided
+		d := strings.TrimSpace(dest)
+		if d != "" {
+			if err := os.MkdirAll(filepath.Dir(d), 0o755); err != nil { return fmt.Errorf("create dest dir: %w", err) }
+			if err := tryWrite(filepath.Dir(d)); err != nil { return fmt.Errorf("dest dir not writable: %w", err) }
+		}
+	}
+	return nil
+}
+
+func tryWrite(dir string) error {
+	f, err := os.CreateTemp(dir, ".mf-wr-*")
+	if err != nil { return err }
+	name := f.Name(); _ = f.Close(); _ = os.Remove(name)
+	return nil
+}
+
 // Modal overlay for new download (render within View)
+
+func copyToClipboard(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" { return fmt.Errorf("empty") }
+	switch runtime.GOOS {
+	case "darwin":
+		cmd := exec.Command("pbcopy")
+		in, err := cmd.StdinPipe(); if err != nil { return err }
+		if err := cmd.Start(); err != nil { return err }
+		_, _ = in.Write([]byte(s)); _ = in.Close()
+		return cmd.Wait()
+	case "linux":
+		// try wl-copy then xclip
+		if _, err := exec.LookPath("wl-copy"); err == nil {
+			cmd := exec.Command("wl-copy")
+			in, err := cmd.StdinPipe(); if err != nil { return err }
+			if err := cmd.Start(); err != nil { return err }
+			_, _ = in.Write([]byte(s)); _ = in.Close()
+			return cmd.Wait()
+		}
+		if _, err := exec.LookPath("xclip"); err == nil {
+			cmd := exec.Command("xclip", "-selection", "clipboard")
+			in, err := cmd.StdinPipe(); if err != nil { return err }
+			if err := cmd.Start(); err != nil { return err }
+			_, _ = in.Write([]byte(s)); _ = in.Close()
+			return cmd.Wait()
+		}
+	}
+	return fmt.Errorf("no clipboard utility found")
+}
+
+func openInFileManager(p string, reveal bool) error {
+	p = strings.TrimSpace(p)
+	if p == "" { return fmt.Errorf("empty path") }
+	// Determine directory to open even if file doesn't exist yet
+	dir := p
+	if fi, err := os.Stat(p); err == nil {
+		if fi.IsDir() { dir = p } else { dir = filepath.Dir(p) }
+	} else {
+		dir = filepath.Dir(p)
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		if reveal {
+			// Reveal if possible; if that fails, fallback to opening dir
+			if err := exec.Command("open", "-R", p).Run(); err == nil { return nil }
+		}
+		return exec.Command("open", dir).Run()
+	case "linux":
+		if _, err := exec.LookPath("xdg-open"); err == nil {
+			return exec.Command("xdg-open", dir).Run()
+		}
+	}
+	return fmt.Errorf("cannot open file manager on %s", runtime.GOOS)
+}
 
