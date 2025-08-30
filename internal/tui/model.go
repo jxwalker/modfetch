@@ -30,6 +30,8 @@ type model struct {
 	showInfo bool
 	showHelp bool
 	menuOn   bool
+	menuIndex int
+	menuItems []string
 	filterOn bool
 	filter   textinput.Model
 	sortMode string // ""|"speed"|"eta"
@@ -42,6 +44,10 @@ type model struct {
 	newDest  textinput.Model
 	newFocus int
 	newMsg   string
+	// onboarding tips
+	tipsOn   bool
+	// running downloads control (only those started via TUI)
+	running map[string]context.CancelFunc
 	err      error
 	width   int
 	height  int
@@ -77,7 +83,7 @@ func New(cfg *config.Config, st *state.DB) tea.Model {
 	}
 	ti := textinput.New()
 	ti.Placeholder = "filter (url or dest contains)"
-	m := &model{cfg: cfg, st: st, refresh: time.Second, prog: p, styles: styles, filter: ti, prev: map[string]obs{}, filterPreset: "all"}
+m := &model{cfg: cfg, st: st, refresh: time.Second, prog: p, styles: styles, filter: ti, prev: map[string]obs{}, filterPreset: "all", tipsOn: true, running: map[string]context.CancelFunc{}, menuItems: []string{"New download","Filter preset","Group by status","Toggle columns","Sort by speed","Sort by ETA","Clear sort","Help","Refresh","Quit"}}
 	// new download inputs
 	m.newURL = textinput.New(); m.newURL.Placeholder = "URL (https://..., hf://..., civitai://...)"; m.newURL.CharLimit = 4096
 	m.newDest = textinput.New(); m.newDest.Placeholder = "Destination path (optional)"; m.newDest.CharLimit = 4096
@@ -97,7 +103,17 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		return m, nil
-	case tea.KeyMsg:
+case tea.KeyMsg:
+		// Handle menu navigation
+		if m.menuOn && !m.newDL {
+			sw := msg.String()
+			switch sw {
+			case "up": if m.menuIndex>0 { m.menuIndex-- }; return m, nil
+			case "down": if m.menuIndex < len(m.menuItems)-1 { m.menuIndex++ }; return m, nil
+			case "enter": m.menuOn=false; return m, m.applyMenuChoice(m.menuIndex)
+			case "esc","m": m.menuOn=false; return m, nil
+			}
+		}
 		// Handle new download modal key events first
 		if m.newDL {
 			sw := msg.String()
@@ -157,8 +173,26 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "?", "h":
 			m.showHelp = !m.showHelp
 			return m, nil
-		case "m":
+case "m":
 			m.menuOn = !m.menuOn
+			if m.menuOn { m.menuIndex = 0 }
+			return m, nil
+case "p":
+			// pause/cancel selected if running under TUI
+			if m.selected >=0 && m.selected < len(m.rows) {
+				key := m.rows[m.selected].URL+"|"+m.rows[m.selected].Dest
+				if cancel, ok := m.running[key]; ok { cancel(); delete(m.running, key); m.newMsg = "cancelled: "+m.rows[m.selected].Dest }
+			}
+			return m, nil
+case "y":
+			// retry selected
+			if m.selected >=0 && m.selected < len(m.rows) {
+				u := m.rows[m.selected].URL; d := m.rows[m.selected].Dest
+				ctx, cancel := context.WithCancel(context.Background())
+				m.running[u+"|"+d] = cancel
+				m.newMsg = "retrying..."
+				return m, m.startDownloadCmdCtx(ctx, u, d)
+			}
 			return m, nil
 		case "s":
 			m.sortMode = "speed"
@@ -172,12 +206,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tickMsg:
 		return m, refreshCmd()
-	case refreshMsg:
+case refreshMsg:
 		rows, err := m.st.ListDownloads()
 		if err != nil { return m, func() tea.Msg { return errMsg{err} } }
 		m.rows = rows
 		if m.selected >= len(m.rows) { m.selected = len(m.rows) - 1 }
 		if m.selected < 0 { m.selected = 0 }
+		// Auto-hide tips once we have any rows
+		if len(m.rows) > 0 { m.tipsOn = false }
 		return m, tickCmd(m.refresh)
 	case errMsg:
 		m.err = msg.err
@@ -239,6 +275,12 @@ func (m *model) View() string {
 		b.WriteString(m.menuView())
 		b.WriteString("\n")
 	}
+	if m.tipsOn && len(m.rows) == 0 {
+		b.WriteString(lipgloss.NewStyle().Bold(true).Render("Welcome to modfetch")+"\n")
+		b.WriteString("- Press n to add your first download (URL and optional dest)\n")
+		b.WriteString("- Press m for Menu, h for Help, / to Filter\n")
+		b.WriteString("- Config: ~/.config/modfetch/config.yml (auto-created on first run)\n\n")
+	}
 	if m.newMsg != "" {
 		b.WriteString(m.styles.label.Render(m.newMsg)+"\n")
 	}
@@ -269,7 +311,14 @@ func (m *model) View() string {
 	// Build header labels
 	labelLeft := "DEST"; labelRight := "URL"; if m.showURLFirst { labelLeft, labelRight = "URL", "DEST" }
 	fmt.Fprintf(&b, "%s\n", m.styles.label.Render(fmt.Sprintf("%-8s  %-10s  %-10s  %-8s  %-*s  %-*s", "STATUS", "PROGRESS", "SPEED", "ETA", destW, labelLeft, urlW, labelRight)))
-	rows := m.filteredRows()
+rows := m.filteredRows()
+// apply preset filters
+switch m.filterPreset {
+case "active":
+	rows = filterByStatuses(rows, []string{"planning","pending","running"})
+case "errors":
+	rows = filterByStatuses(rows, []string{"error","checksum_mismatch","verify_failed"})
+}
 	var prevStatus string
 	for i, r := range rows {
 		if m.groupOn {
@@ -391,6 +440,16 @@ func etaSeconds(cur, total int64, rate float64) float64 {
 	return float64(total-cur) / rate
 }
 
+func filterByStatuses(in []state.DownloadRow, want []string) []state.DownloadRow {
+	set := map[string]struct{}{}
+	for _, s := range want { set[strings.ToLower(s)] = struct{}{} }
+	var out []state.DownloadRow
+	for _, r := range in {
+		if _, ok := set[strings.ToLower(r.Status)]; ok { out = append(out, r) }
+	}
+	return out
+}
+
 func (m *model) helpView() string {
 	return "Help: j/k up/down • r refresh • n new download • f filter preset • g group by status • t toggle columns • d details • / filter • s sort by speed • e sort by ETA • o clear sort • m menu • h/? toggle this help"
 }
@@ -398,15 +457,41 @@ func (m *model) helpView() string {
 func (m *model) menuView() string {
 	var b strings.Builder
 	b.WriteString(lipgloss.NewStyle().Bold(true).Render("Menu") + "\n")
-	b.WriteString("  n: New download      f: Filter preset (all/active/errors)    g: Group by status    t: Toggle columns\n")
-	b.WriteString("  d: Toggle details    /: Filter                           s: Sort by speed     e: Sort by ETA\n")
-	b.WriteString("  o: Clear sort        h: Help                             r: Refresh           q: Quit\n")
+	for i, it := range m.menuItems {
+		line := fmt.Sprintf("  %s", it)
+		if i == m.menuIndex { line = "> "+it } else { line = "  "+it }
+		b.WriteString(line+"\n")
+	}
+	b.WriteString(m.styles.label.Render("Use ↑/↓ to select, Enter to apply, m or Esc to close")+"\n")
 	return b.String()
 }
 
+func (m *model) applyMenuChoice(i int) tea.Cmd {
+	if i < 0 || i >= len(m.menuItems) { return nil }
+	switch m.menuItems[i] {
+	case "New download": m.newDL = true; m.newURL.SetValue(""); m.newDest.SetValue(""); m.newFocus=0; m.newURL.Focus(); m.newMsg=""
+	case "Filter preset": if m.filterPreset=="all" { m.filterPreset="active" } else if m.filterPreset=="active" { m.filterPreset="errors" } else { m.filterPreset="all" }
+	case "Group by status": m.groupOn = !m.groupOn
+	case "Toggle columns": m.showURLFirst = !m.showURLFirst
+	case "Sort by speed": m.sortMode = "speed"
+	case "Sort by ETA": m.sortMode = "eta"
+	case "Clear sort": m.sortMode = ""
+	case "Help": m.showHelp = !m.showHelp
+	case "Refresh": return refreshCmd()
+	case "Quit": return tea.Quit
+	}
+	return nil
+}
+
 func (m *model) startDownloadCmd(urlStr, dest string) tea.Cmd {
-	return func() tea.Msg {
-		ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	key := urlStr+"|"+dest
+	m.running[key] = cancel
+	return m.startDownloadCmdCtx(ctx, urlStr, dest)
+}
+
+func (m *model) startDownloadCmdCtx(ctx context.Context, urlStr, dest string) tea.Cmd {
+return func() tea.Msg {
 		resolved := urlStr
 		headers := map[string]string{}
 		if strings.HasPrefix(resolved, "hf://") || strings.HasPrefix(resolved, "civitai://") {
