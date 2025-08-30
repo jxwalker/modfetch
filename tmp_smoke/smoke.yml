@@ -1,4 +1,0 @@
-version: 1
-general:
-  data_root: "/Users/James/Documents/code/modfetch/tmp_smoke/data"
-  download_root: "/Users/James/Documents/code/modfetch/tmp_smoke/dl"
