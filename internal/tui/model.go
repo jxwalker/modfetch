@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	neturl "net/url"
 	"strings"
@@ -192,6 +194,27 @@ case "y":
 				m.running[u+"|"+d] = cancel
 				m.newMsg = "retrying..."
 				return m, m.startDownloadCmdCtx(ctx, u, d)
+			}
+			return m, nil
+case "C":
+			// copy dest path
+			if m.selected >=0 && m.selected < len(m.rows) {
+				if err := copyToClipboard(m.rows[m.selected].Dest); err != nil { m.newMsg = "copy failed: "+err.Error() } else { m.newMsg = "copied path to clipboard" }
+			}
+			return m, nil
+case "U":
+			// copy URL
+			if m.selected >=0 && m.selected < len(m.rows) {
+				if err := copyToClipboard(m.rows[m.selected].URL); err != nil { m.newMsg = "copy failed: "+err.Error() } else { m.newMsg = "copied URL to clipboard" }
+			}
+			return m, nil
+case "O":
+			// open folder (or reveal on macOS)
+			if m.selected >=0 && m.selected < len(m.rows) {
+				p := m.rows[m.selected].Dest
+				if p != "" {
+					if err := openInFileManager(p, true); err != nil { m.newMsg = "open failed: "+err.Error() } else { m.newMsg = "opened in file manager" }
+				}
 			}
 			return m, nil
 		case "s":
@@ -451,7 +474,7 @@ func filterByStatuses(in []state.DownloadRow, want []string) []state.DownloadRow
 }
 
 func (m *model) helpView() string {
-	return "Help: j/k up/down • r refresh • n new download • f filter preset • g group by status • t toggle columns • d details • / filter • s sort by speed • e sort by ETA • o clear sort • m menu • h/? toggle this help"
+	return "Help: j/k up/down • r refresh • n new download • f filter preset • g group by status • t toggle columns • d details • / filter • s sort by speed • e sort by ETA • o clear sort • C copy path • U copy URL • O open folder • m menu • h/? toggle help"
 }
 
 func (m *model) menuView() string {
@@ -520,4 +543,53 @@ return func() tea.Msg {
 }
 
 // Modal overlay for new download (render within View)
+
+func copyToClipboard(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" { return fmt.Errorf("empty") }
+	switch runtime.GOOS {
+	case "darwin":
+		cmd := exec.Command("pbcopy")
+		in, err := cmd.StdinPipe(); if err != nil { return err }
+		if err := cmd.Start(); err != nil { return err }
+		_, _ = in.Write([]byte(s)); _ = in.Close()
+		return cmd.Wait()
+	case "linux":
+		// try wl-copy then xclip
+		if _, err := exec.LookPath("wl-copy"); err == nil {
+			cmd := exec.Command("wl-copy")
+			in, err := cmd.StdinPipe(); if err != nil { return err }
+			if err := cmd.Start(); err != nil { return err }
+			_, _ = in.Write([]byte(s)); _ = in.Close()
+			return cmd.Wait()
+		}
+		if _, err := exec.LookPath("xclip"); err == nil {
+			cmd := exec.Command("xclip", "-selection", "clipboard")
+			in, err := cmd.StdinPipe(); if err != nil { return err }
+			if err := cmd.Start(); err != nil { return err }
+			_, _ = in.Write([]byte(s)); _ = in.Close()
+			return cmd.Wait()
+		}
+	}
+	return fmt.Errorf("no clipboard utility found")
+}
+
+func openInFileManager(p string, reveal bool) error {
+	p = strings.TrimSpace(p)
+	if p == "" { return fmt.Errorf("empty path") }
+	dir := p
+	if fi, err := os.Stat(p); err == nil && !fi.IsDir() { dir = filepath.Dir(p) }
+	switch runtime.GOOS {
+	case "darwin":
+		if reveal {
+			return exec.Command("open", "-R", p).Start()
+		}
+		return exec.Command("open", dir).Start()
+	case "linux":
+		if _, err := exec.LookPath("xdg-open"); err == nil {
+			return exec.Command("xdg-open", dir).Start()
+		}
+	}
+	return fmt.Errorf("cannot open file manager on %s", runtime.GOOS)
+}
 
