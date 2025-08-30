@@ -20,7 +20,9 @@ Installation
   - Test: `make test`
   - Cross‑platform artifacts: `make release-dist`
 - Binaries: via GitHub Releases (after v0.2.0)
+  - macOS Universal binary is also provided in releases
 - Homebrew: planned
+- See CHANGELOG.md for what’s new each release
 
 Quickstart (≈1 minute)
 ```bash
@@ -137,19 +139,35 @@ Logging and metrics
 - Troubleshooting: see docs/TROUBLESHOOTING.md
 
 Contributing
-- Requirements: Go 1.22+
+- Requirements: Go 1.22+; GitHub CLI (gh) optional for releases
 - Getting started:
   
   git clone https://github.com/<you>/modfetch
   cd modfetch
   make build && make test
   
-- Branching: use feature branches; keep PRs focused.
-- Tests/docs: include tests and update docs for user‑visible changes.
-- Smoke test locally (optional):
-  
-  ./bin/modfetch download --config /path/to/config.yml --url 'https://proof.ovh.net/files/1Mb.dat'
-  
+- Development workflow:
+  - Create a feature branch per change
+  - Keep PRs focused and small; include rationale in the PR description
+  - Update docs for user‑visible changes
+  - Ensure tests pass: make test
+  - Run a quick smoke test locally:
+    
+    ./bin/modfetch download --config /path/to/config.yml --url 'https://proof.ovh.net/files/1Mb.dat'
+    
+- PR checklist:
+  - [ ] Tests pass (go test ./...)
+  - [ ] Docs updated (README/USER_GUIDE as applicable)
+  - [ ] No secrets in configs or logs
+  - [ ] Manual smoke test completed for at least one public URL
+- Release process (maintainers):
+  - Tag: git tag -a vX.Y.Z -m "modfetch vX.Y.Z" && git push origin vX.Y.Z
+  - Build artifacts: make release-dist (includes Linux/macOS binaries)
+  - macOS Universal: make macos-universal && make checksums
+  - Upload: gh release upload vX.Y.Z dist/* --clobber
+  - See CHANGELOG.md for release notes
+
+See CONTRIBUTING.md for full guidelines.
 
 Project layout
 - cmd/modfetch: CLI entry point
