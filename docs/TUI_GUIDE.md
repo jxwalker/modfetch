@@ -48,7 +48,7 @@ Notes:
 Global
 - Navigation: j/k (select), / (filter), m (menu), h or ? (help)
 - Sorting: s (by speed), e (by ETA), o (clear sort)
-- View/Columns: v (compact view), t (toggle last column URL/DEST)
+- View/Columns: v (compact view), t (cycle last column URL/DEST/HOST)
 - Actions: n (new), r (refresh), d (details), g (group by status)
 
 Per-row
@@ -99,8 +99,37 @@ Per-row
 Add these under the ui section of your config YAML:
 
 - ui.refresh_hz: integer (0-10). Controls refresh rate (ticks/sec). Default 1.
-- ui.show_url: boolean. If true, the table shows URL instead of DEST by default.
-- ui.compact: boolean. If true, uses compact table (STATUS, PROGRESS, ETA, URL/DEST).
+- ui.show_url: boolean. If true, the table shows URL instead of DEST by default. Deprecated by ui.column_mode when set.
+- ui.column_mode: string: dest | url | host. Controls the last column.
+- ui.compact: boolean. If true, uses compact table (STATUS, PROGRESS, ETA, URL/DEST/HOST).
+
+## Recording sessions (asciinema)
+
+- Install asciinema (macOS):
+
+```bash
+brew install asciinema
+```
+
+- Record a session (CTRL-D to stop):
+
+```bash
+asciinema rec -c "modfetch tui --config /path/to/config.yml --v2" out.cast
+```
+
+- Play locally:
+
+```bash
+asciinema play out.cast
+```
+
+- Upload/share:
+
+```bash
+asciinema upload out.cast
+```
+
+For animated SVGs/GIFs, consider tools like svg-term or agg (requires additional setup).
 
 ## Tips
 

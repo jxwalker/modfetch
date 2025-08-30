@@ -81,7 +81,7 @@ type Model struct {
 	showToastDrawer bool
 	showHelp bool
 	themeIndex int
-	showURL bool
+	columnMode string // dest|url|host
 	tickEvery time.Duration
 	// caches for performance
 	rateCache map[string]float64
@@ -96,6 +96,7 @@ type Model struct {
 type uiState struct {
 	ThemeIndex int    `json:"theme_index"`
 	ShowURL    bool   `json:"show_url"`
+	ColumnMode string `json:"column_mode"`
 	Compact    bool   `json:"compact"`
 	GroupBy    string `json:"group_by"`
 	SortMode   string `json:"sort_mode"`
@@ -110,12 +111,17 @@ func New(cfg *config.Config, st *state.DB) tea.Model {
 		if hz > 10 { hz = 10 }
 		refresh = time.Second / time.Duration(hz)
 	}
-m := &Model{
+// decide initial column mode
+	mode := strings.ToLower(strings.TrimSpace(cfg.UI.ColumnMode))
+	if mode != "dest" && mode != "url" && mode != "host" {
+		if cfg.UI.ShowURL { mode = "url" } else { mode = "dest" }
+	}
+	m := &Model{
 		cfg: cfg, st: st, th: defaultTheme(), activeTab: 1, prog: p, prev: map[string]obs{},
 		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
 		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{},
 		tickEvery: refresh,
-		showURL: cfg.UI.ShowURL,
+		columnMode: mode,
 	}
 	// Load UI state overrides if present
 	m.loadUIState()
@@ -153,8 +159,13 @@ case tea.KeyMsg:
 		case "e": m.sortMode = "eta"; return m, nil
 		case "o": m.sortMode = ""; return m, nil
 		case "g": if m.groupBy=="host" { m.groupBy = "" } else { m.groupBy = "host" }; return m, nil
-case "t": // toggle last column between DEST and URL
-			m.showURL = !m.showURL; m.saveUIState(); return m, nil
+case "t": // cycle last column DEST->URL->HOST
+			switch m.columnMode {
+			case "dest": m.columnMode = "url"
+			case "url": m.columnMode = "host"
+			default: m.columnMode = "dest"
+			}
+			m.saveUIState(); return m, nil
 case "v": // compact view toggle
 			m.compactToggle(); m.saveUIState()
 			return m, nil
@@ -270,7 +281,7 @@ func (m *Model) View() string {
 	// Footer
 	filterBar := ""
 	if m.filterOn { filterBar = "Filter: "+ m.filterInput.View() }
-footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • t URL/DEST • v compact • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
+footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • t last col URL/DEST/HOST • v compact • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
 	parts := []string{header, mid}
 	if help != "" { parts = append(parts, help) }
 	if drawer != "" { parts = append(parts, drawer) }
@@ -395,7 +406,8 @@ func etaSeconds(cur, total int64, rate float64) float64 {
 func (m *Model) renderTable() string {
 	rows := m.visibleRows()
 	var sb strings.Builder
-	lastLabel := "DEST"; if m.showURL { lastLabel = "URL" }
+lastLabel := "DEST"
+	if m.columnMode == "url" { lastLabel = "URL" } else if m.columnMode == "host" { lastLabel = "HOST" }
 	if m.isCompact() {
 		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-2s %-8s  %-10s  %-8s  %-s", "S", "STATUS", "PROGRESS", "ETA", lastLabel)))
 	} else {
@@ -418,8 +430,8 @@ func (m *Model) renderTable() string {
 		eta := m.etaCache[keyFor(r)]
 		thr := m.renderSparkline(keyFor(r))
 		sel := " "; if m.selectedKeys[keyFor(r)] { sel = "*" }
-		last := r.Dest
-		if m.showURL { last = logging.SanitizeURL(r.URL) }
+last := r.Dest
+		if m.columnMode == "url" { last = logging.SanitizeURL(r.URL) } else if m.columnMode == "host" { last = hostOf(r.URL) }
 		var line string
 		if m.isCompact() {
 			line = fmt.Sprintf("%-2s %-8s  %-10s  %-8s  %s", sel, r.Status, prog, eta, last)
@@ -584,7 +596,7 @@ func (m *Model) loadUIState() {
 	m.themeIndex = st.ThemeIndex
 	presets := themePresets()
 	if m.themeIndex >= 0 && m.themeIndex < len(presets) { m.th = presets[m.themeIndex] }
-	m.showURL = st.ShowURL
+if st.ColumnMode != "" { m.columnMode = st.ColumnMode } else if st.ShowURL { m.columnMode = "url" }
 	if st.Compact { m.cfg.UI.Compact = true }
 	if st.GroupBy != "" { m.groupBy = st.GroupBy }
 	if st.SortMode != "" { m.sortMode = st.SortMode }
@@ -593,7 +605,7 @@ func (m *Model) loadUIState() {
 func (m *Model) saveUIState() {
 	p := m.uiStatePath()
 	_ = os.MkdirAll(filepath.Dir(p), 0o755)
-	st := uiState{ThemeIndex: m.themeIndex, ShowURL: m.showURL, Compact: m.cfg.UI.Compact, GroupBy: m.groupBy, SortMode: m.sortMode}
+st := uiState{ThemeIndex: m.themeIndex, ShowURL: m.columnMode == "url", ColumnMode: m.columnMode, Compact: m.cfg.UI.Compact, GroupBy: m.groupBy, SortMode: m.sortMode}
 	b, _ := json.MarshalIndent(st, "", "  ")
 	_ = os.WriteFile(p, b, 0o644)
 }
@@ -609,7 +621,7 @@ func (m *Model) renderHelp() string {
 	sb.WriteString("Theme: T cycle presets\n")
 	sb.WriteString("Toasts: H toggle drawer\n")
 	sb.WriteString("Select: Space toggle • A select all • X clear selection\n")
-	sb.WriteString("Columns: t toggle URL/DEST • v compact view\n")
+sb.WriteString("Columns: t cycle URL/DEST/HOST • v compact view\n")
 	sb.WriteString("Actions: y retry • p cancel • O open • C copy path • U copy URL\n")
 	sb.WriteString("Quit: q\n")
 	return sb.String()

@@ -124,7 +124,10 @@ type UIOptions struct {
 	// Values above 10 are clamped to 10 to avoid excessive CPU usage.
 	RefreshHz int `yaml:"refresh_hz"`
 	// ShowURL sets the initial table mode to show URL instead of DEST in the last column.
+	// Deprecated in favor of ColumnMode but still honored if ColumnMode is empty.
 	ShowURL bool `yaml:"show_url"`
+	// ColumnMode controls which field is shown in the last column: dest | url | host
+	ColumnMode string `yaml:"column_mode"`
 	// Compact reduces columns in the v2 table (hides SPEED/THR) for a denser view.
 	Compact bool `yaml:"compact"`
 }
