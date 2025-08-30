@@ -147,6 +147,8 @@ case "enter":
 				if err := m.preflightForDownload(url, dest); err != nil { m.newMsg = "preflight failed: "+err.Error(); return m, nil }
 				m.addEphemeral(url, m.destGuess(url, dest))
 				m.newMsg = "starting download..."
+				// close the modal immediately so focus returns to the table
+				m.newDL = false
 				return m, m.startDownloadCmd(url, dest)
 			}
 			// route typing to focused input
@@ -247,11 +249,22 @@ case refreshMsg:
 		rows, err := m.st.ListDownloads()
 		if err != nil { return m, func() tea.Msg { return errMsg{err} } }
 		m.rows = rows
-		// clear any ephemerals that now have rows
+		// Clear any ephemerals when we see active rows likely corresponding to a just-started job.
 		if len(m.ephems) > 0 {
-			present := map[string]struct{}{}
-			for _, r := range rows { present[r.URL] = struct{}{} }
-			for u := range m.ephems { if _, ok := present[u]; ok { delete(m.ephems, u) } }
+			now := time.Now().Unix()
+			for u, e := range m.ephems {
+				cleared := false
+				for _, r := range rows {
+					if r.Dest != "" && e.Dest != "" && r.Dest == e.Dest { cleared = true; break }
+					if r.URL == u { cleared = true; break }
+					if r.Status == "planning" || r.Status == "pending" || r.Status == "running" {
+						if r.UpdatedAt >= e.When.Unix()-1 && r.UpdatedAt <= now {
+							cleared = true; break
+						}
+					}
+				}
+				if cleared { delete(m.ephems, u) }
+			}
 		}
 		if m.selected >= len(m.rows) { m.selected = len(m.rows) - 1 }
 		if m.selected < 0 { m.selected = 0 }
