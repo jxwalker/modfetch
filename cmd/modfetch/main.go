@@ -65,6 +65,8 @@ case "hostcaps":
 		return handleHostCaps(args[1:])
 case "clean":
 		return handleClean(args[1:])
+case "batch":
+		return handleBatch(args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -89,6 +91,7 @@ Commands:
   place             Place a file into configured app directories
   verify            Verify SHA256 of a file or all completed downloads
   tui               Open the interactive terminal dashboard
+  batch import      Import URLs from a text file and produce a YAML batch
   version           Print version
   help              Show this help
   completion        Generate shell completion scripts (bash|zsh|fish)

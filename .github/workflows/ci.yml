@@ -23,7 +23,45 @@ jobs:
       - name: Vet
         run: go vet ./...
       - name: Test
-        run: go test ./...
+        run: go test ./... -cover
+
+      - name: Build CLI
+        run: |
+          mkdir -p bin
+          go build -ldflags "-s -w" -o bin/modfetch ./cmd/modfetch
+
+      - name: CLI smoke and importer check (no network required)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./bin/modfetch version
+          ./bin/modfetch completion bash >/dev/null
+          ./bin/modfetch completion zsh >/dev/null
+          ./bin/modfetch completion fish >/dev/null
+
+          TMPDIR=$(mktemp -d)
+          trap 'rm -rf "$TMPDIR"' EXIT
+
+          cat > "$TMPDIR/config.yaml" <<EOF
+          version: 1
+          general:
+            data_root: $TMPDIR/data
+            download_root: $TMPDIR/dl
+          EOF
+          mkdir -p "$TMPDIR/data" "$TMPDIR/dl"
+
+          cat > "$TMPDIR/input.txt" <<'EOF'
+          https://example.com/a.bin
+          https://example.com/b.bin
+          EOF
+
+          ./bin/modfetch batch import --config="$TMPDIR/config.yaml" --input="$TMPDIR/input.txt" --output="$TMPDIR/batch.yaml" --dest-dir="$TMPDIR/dl" --sha-mode=none
+          test -s "$TMPDIR/batch.yaml"
+          grep -q "version: 1" "$TMPDIR/batch.yaml"
+          grep -q "jobs:" "$TMPDIR/batch.yaml"
+          grep -q "uri: https://example.com/a.bin" "$TMPDIR/batch.yaml"
+          grep -q "uri: https://example.com/b.bin" "$TMPDIR/batch.yaml"
+
       - name: Govulncheck
         uses: golang/govulncheck-action@v1
         with:

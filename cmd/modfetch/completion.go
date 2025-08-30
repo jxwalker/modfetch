@@ -29,7 +29,7 @@ _modfetch_completions()
 {
     local cur prev words cword
     _init_completion || return
-    local cmds="config download place verify status tui version help completion"
+    local cmds="config download place verify status tui batch version help completion"
     if [[ ${cword} -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${cmds}" -- "$cur") )
         return
@@ -47,6 +47,8 @@ _modfetch_completions()
             COMPREPLY=( $(compgen -W "--config --log-level --json" -- "$cur") ) ;;
         tui)
             COMPREPLY=( $(compgen -W "--config --log-level" -- "$cur") ) ;;
+        batch)
+            COMPREPLY=( $(compgen -W "import --config --log-level --json --input --output --dest-dir --sha-mode --type --place --mode --no-resolve-pages" -- "$cur") ) ;;
         completion)
             COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") ) ;;
         *) ;;
@@ -59,7 +61,7 @@ const zshCompletion = `#compdef modfetch
 # zsh completion for modfetch (basic)
 _modfetch() {
   local -a cmds
-  cmds=(config download place verify status tui version help completion)
+  cmds=(config download place verify status tui batch version help completion)
   if (( CURRENT == 2 )); then
     _describe 'command' cmds
     return
@@ -83,6 +85,9 @@ _modfetch() {
     tui)
       _arguments '*:options:(--config --log-level)'
       ;;
+    batch)
+      _arguments '*:options:(import --config --log-level --json --input --output --dest-dir --sha-mode --type --place --mode --no-resolve-pages)'
+      ;;
     completion)
       _arguments '*:options:(bash zsh fish)'
       ;;
@@ -102,7 +107,7 @@ complete -c modfetch -f -n "__fish_use_subcommand" -a "version" -d "print versio
 complete -c modfetch -f -n "__fish_use_subcommand" -a "completion" -d "shell completions"
 
 # Common flags
-for cmd in config download place verify status tui
+for cmd in config download place verify status tui batch
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l config -d "Path to config"
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l log-level -d "Log level"
 end
@@ -111,6 +116,16 @@ complete -c modfetch -n "__fish_seen_subcommand_from download" -l dest -d "Desti
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l sha256 -d "Expected SHA256"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l batch -d "Batch file"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l place -d "Place after download"
+# batch import flags
+complete -c modfetch -n "__fish_seen_subcommand_from batch" -a "import" -d "Import URLs to YAML batch"
+complete -c modfetch -n "__fish_seen_subcommand_from batch" -l input -d "Text file with URLs"
+complete -c modfetch -n "__fish_seen_subcommand_from batch" -l output -d "Output batch YAML"
+complete -c modfetch -n "__fish_seen_subcommand_from batch" -l dest-dir -d "Destination directory"
+complete -c modfetch -n "__fish_seen_subcommand_from batch" -l sha-mode -d "none|compute"
+complete -c modfetch -n "__fish_seen_subcommand_from batch" -l type -d "Artifact type"
+complete -c modfetch -n "__fish_seen_subcommand_from batch" -l place -d "Place after download"
+complete -c modfetch -n "__fish_seen_subcommand_from batch" -l mode -d "symlink|hardlink|copy"
+complete -c modfetch -n "__fish_seen_subcommand_from batch" -l no-resolve-pages -d "Disable civitai page -> uri"
 complete -c modfetch -n "__fish_seen_subcommand_from place" -l path -d "File to place"
 complete -c modfetch -n "__fish_seen_subcommand_from place" -l type -d "Artifact type override"
 complete -c modfetch -n "__fish_seen_subcommand_from place" -l mode -d "Placement mode"
