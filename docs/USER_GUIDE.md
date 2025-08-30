@@ -117,6 +117,7 @@ modfetch tui --config ~/.config/modfetch/config.yml
   - Resolving spinner row appears immediately after starting, then transitions to planning → running
   - Live speed and ETA for both chunked and single-stream fallback downloads
   - Supports pasting CivitAI model page URLs; they’re auto-resolved to the correct direct download
+- See the full TUI guide: docs/TUI_GUIDE.md
 
 ## Tips
 

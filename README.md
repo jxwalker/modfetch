@@ -109,6 +109,7 @@ Usage (see docs/USER_GUIDE.md for details)
     - Resolving spinner appears immediately, then planning → running
     - Live speed and ETA for both chunked and single‑stream fallback downloads
     - Accepts CivitAI model page URLs (https://civitai.com/models/ID) and rewrites them internally to the correct direct download URL
+  - See the full TUI guide: docs/TUI_GUIDE.md
 - Verify checksums in state:
   
   modfetch verify --config /path/to/config.yml --all
