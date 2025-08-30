@@ -7,11 +7,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 	neturl "net/url"
 
 	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dustin/go-humanize"
@@ -55,6 +57,8 @@ type dlDoneMsg struct{ url, dest, path string; err error }
 
 type obs struct{ bytes int64; t time.Time }
 
+type toast struct{ msg string; when time.Time; ttl time.Duration }
+
 type Model struct {
 	cfg   *config.Config
 	st    *state.DB
@@ -63,17 +67,23 @@ type Model struct {
 	activeTab int // 0: Pending, 1: Active, 2: Completed, 3: Failed
 	rows  []state.DownloadRow
 	selected int
-	filter string
+	filterOn bool
+	filterInput textinput.Model
+	sortMode string // ""|"speed"|"eta"
+	groupBy string  // ""|"host"
 	lastRefresh time.Time
 	prog  progress.Model
 	prev  map[string]obs
 	running map[string]context.CancelFunc
+	selectedKeys map[string]bool
+	toasts []toast
 	err   error
 }
 
 func New(cfg *config.Config, st *state.DB) tea.Model {
 	p := progress.New(progress.WithDefaultGradient())
-	return &Model{cfg: cfg, st: st, th: defaultTheme(), activeTab: 1, prog: p, prev: map[string]obs{}, running: map[string]context.CancelFunc{}}
+	fi := textinput.New(); fi.Placeholder = "filter (url or dest contains)"; fi.CharLimit = 4096
+	return &Model{cfg: cfg, st: st, th: defaultTheme(), activeTab: 1, prog: p, prev: map[string]obs{}, running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi}
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -85,47 +95,79 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 		return m, nil
-	case tea.KeyMsg:
+case tea.KeyMsg:
 		s := msg.String()
+		// If filter mode is on, handle input first
+		if m.filterOn {
+			switch s {
+			case "enter": m.filterOn = false; m.filterInput.Blur(); return m, nil
+			case "esc": m.filterOn = false; m.filterInput.SetValue(""); m.filterInput.Blur(); return m, nil
+			}
+			var cmd tea.Cmd
+			m.filterInput, cmd = m.filterInput.Update(msg)
+			return m, cmd
+		}
 		switch s {
 		case "q", "ctrl+c":
 			return m, tea.Quit
+		case "/":
+			m.filterOn = true; m.filterInput.Focus(); return m, nil
+		case "s": m.sortMode = "speed"; return m, nil
+		case "e": m.sortMode = "eta"; return m, nil
+		case "o": m.sortMode = ""; return m, nil
+		case "g": if m.groupBy=="host" { m.groupBy = "" } else { m.groupBy = "host" }; return m, nil
+		case "T": // theme cycle placeholder (future presets)
+			// In the scaffold, just toggle title color as a hint
+			if m.th.title.GetForeground() == lipgloss.Color("81") { m.th.title = m.th.title.Foreground(lipgloss.Color("214")) } else { m.th.title = m.th.title.Foreground(lipgloss.Color("81")) }
+			return m, nil
 		case "1": m.activeTab = 0; m.selected = 0; return m, nil
 		case "2": m.activeTab = 1; m.selected = 0; return m, nil
 		case "3": m.activeTab = 2; m.selected = 0; return m, nil
 		case "4": m.activeTab = 3; m.selected = 0; return m, nil
 		case "j", "down": if m.selected < len(m.visibleRows())-1 { m.selected++ }; return m, nil
 		case "k", "up": if m.selected > 0 { m.selected-- }; return m, nil
-		case "y": // retry
+		case " ": // toggle selection
 			rows := m.visibleRows()
 			if m.selected >=0 && m.selected < len(rows) {
-				u := rows[m.selected].URL; d := rows[m.selected].Dest
-				ctx, cancel := context.WithCancel(context.Background())
-				m.running[u+"|"+d] = cancel
-				return m, m.startDownloadCmdCtx(ctx, u, d)
+				key := keyFor(rows[m.selected])
+				if m.selectedKeys[key] { delete(m.selectedKeys, key) } else { m.selectedKeys[key] = true }
 			}
 			return m, nil
-		case "p": // pause/cancel if started via v2
-			rows := m.visibleRows()
-			if m.selected >=0 && m.selected < len(rows) {
-				key := rows[m.selected].URL+"|"+rows[m.selected].Dest
-				if cancel, ok := m.running[key]; ok { cancel(); delete(m.running, key) }
+		case "A": // select all visible
+			for _, r := range m.visibleRows() { m.selectedKeys[keyFor(r)] = true }
+			return m, nil
+case "y": // retry (batch-aware)
+			targets := m.selectionOrCurrent()
+			if len(targets) == 0 { return m, nil }
+			cmds := make([]tea.Cmd, 0, len(targets))
+			for _, r := range targets {
+				ctx, cancel := context.WithCancel(context.Background())
+				m.running[keyFor(r)] = cancel
+				cmds = append(cmds, m.startDownloadCmdCtx(ctx, r.URL, r.Dest))
 			}
+			m.addToast(fmt.Sprintf("retrying %d item(s)…", len(targets)))
+			return m, tea.Batch(cmds...)
+		case "p": // cancel (batch-aware)
+			cnt := 0
+			for _, r := range m.selectionOrCurrent() {
+				key := keyFor(r)
+				if cancel, ok := m.running[key]; ok { cancel(); delete(m.running, key); cnt++ }
+			}
+			if cnt > 0 { m.addToast(fmt.Sprintf("cancelled %d", cnt)) }
 			return m, nil
 		case "O": // open/reveal in file manager
-			rows := m.visibleRows()
-			if m.selected >=0 && m.selected < len(rows) {
-				p := rows[m.selected].Dest
-				if p != "" { _ = openInFileManager(p, true) }
+			rows := m.selectionOrCurrent()
+			if len(rows) > 0 {
+				_ = openInFileManager(rows[0].Dest, true)
 			}
 			return m, nil
-		case "C": // copy dest
-			rows := m.visibleRows()
-			if m.selected >=0 && m.selected < len(rows) { _ = copyToClipboard(rows[m.selected].Dest) }
+		case "C": // copy dest of current
+			rows := m.selectionOrCurrent()
+			if len(rows) > 0 { _ = copyToClipboard(rows[0].Dest) }
 			return m, nil
-		case "U": // copy URL
-			rows := m.visibleRows()
-			if m.selected >=0 && m.selected < len(rows) { _ = copyToClipboard(rows[m.selected].URL) }
+		case "U": // copy URL of current
+			rows := m.selectionOrCurrent()
+			if len(rows) > 0 { _ = copyToClipboard(rows[0].URL) }
 			return m, nil
 		}
 	case tickMsg:
@@ -143,7 +185,9 @@ func (m *Model) View() string {
 	// Header
 	title := m.th.title.Render("modfetch • TUI v2 (preview)")
 	stats := m.renderStats()
-	header := m.th.border.Render(lipgloss.JoinHorizontal(lipgloss.Top, title+"  ", m.th.label.Render(stats)))
+	// Toasts inline
+	toastStr := m.renderToasts()
+	header := m.th.border.Render(lipgloss.JoinHorizontal(lipgloss.Top, title+"  ", m.th.label.Render(stats), "  ", toastStr))
 	// Left tabs
 	left := m.renderTabs()
 	// Main table
@@ -161,7 +205,9 @@ func (m *Model) View() string {
 		m.th.border.Width(inspW).Render(insp),
 	)
 	// Footer
-	footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • q quit"))
+	filterBar := ""
+	if m.filterOn { filterBar = "Filter: "+ m.filterInput.View() }
+	footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • q quit\n"+filterBar))
 	return lipgloss.JoinVertical(lipgloss.Left, header, mid, footer)
 }
 
@@ -170,6 +216,7 @@ func (m *Model) refresh() tea.Cmd {
 	if err != nil { _ = logging.New("error", false) }
 	m.rows = rows
 	m.lastRefresh = time.Now()
+	m.gcToasts()
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
@@ -203,7 +250,12 @@ func (m *Model) renderTabs() string {
 	return sb.String()
 }
 
-func (m *Model) visibleRows() []state.DownloadRow { return m.filterRows(m.activeTab) }
+func (m *Model) visibleRows() []state.DownloadRow {
+	rows := m.filterRows(m.activeTab)
+	rows = m.applySearch(rows)
+	rows = m.applySort(rows)
+	return rows
+}
 
 func (m *Model) filterRows(tab int) []state.DownloadRow {
 	var out []state.DownloadRow
@@ -219,17 +271,62 @@ func (m *Model) filterRows(tab int) []state.DownloadRow {
 	return out
 }
 
+func (m *Model) applySearch(in []state.DownloadRow) []state.DownloadRow {
+	q := strings.ToLower(strings.TrimSpace(m.filterInput.Value()))
+	if q == "" { return in }
+	var out []state.DownloadRow
+	for _, r := range in {
+		if strings.Contains(strings.ToLower(r.URL), q) || strings.Contains(strings.ToLower(r.Dest), q) { out = append(out, r) }
+	}
+	return out
+}
+
+func (m *Model) applySort(in []state.DownloadRow) []state.DownloadRow {
+	if m.sortMode == "" { return in }
+	out := make([]state.DownloadRow, len(in)); copy(out, in)
+	sort.SliceStable(out, func(i, j int) bool {
+		ci, ti, ri, _ := m.progressFor(out[i])
+		cj, tj, rj, _ := m.progressFor(out[j])
+		etaI := etaSeconds(ci, ti, ri)
+		etaJ := etaSeconds(cj, tj, rj)
+		switch m.sortMode {
+		case "speed": return ri > rj
+		case "eta":
+			if etaI == 0 && etaJ == 0 { return ri > rj }
+			if etaI == 0 { return false }
+			if etaJ == 0 { return true }
+			return etaI < etaJ
+		}
+		return false
+	})
+	return out
+}
+
+func etaSeconds(cur, total int64, rate float64) float64 {
+	if rate <= 0 || total <= 0 || cur >= total { return 0 }
+	return float64(total-cur) / rate
+}
+
 func (m *Model) renderTable() string {
 	rows := m.visibleRows()
 	var sb strings.Builder
-	sb.WriteString(m.th.head.Render(fmt.Sprintf("%-8s  %-10s  %-10s  %-8s  %-s", "STATUS", "PROGRESS", "SPEED", "ETA", "DEST")))
+	sb.WriteString(m.th.head.Render(fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-8s  %-s", "S", "STATUS", "PROGRESS", "SPEED", "ETA", "DEST")))
 	sb.WriteString("\n")
 	maxRows := m.h - 10
 	if maxRows < 3 { maxRows = len(rows) }
+	var prevGroup string
 	for i, r := range rows {
+		if m.groupBy == "host" {
+			host := hostOf(r.URL)
+			if i == 0 || host != prevGroup {
+				sb.WriteString(m.th.label.Render("// "+host)+"\n")
+				prevGroup = host
+			}
+		}
 		prog := m.renderProgress(r)
 		_, _, rate, eta := m.progressFor(r)
-		line := fmt.Sprintf("%-8s  %-10s  %-10s  %-8s  %s", r.Status, prog, humanize.Bytes(uint64(rate))+"/s", eta, r.Dest)
+		sel := " "; if m.selectedKeys[keyFor(r)] { sel = "*" }
+		line := fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-8s  %s", sel, r.Status, prog, humanize.Bytes(uint64(rate))+"/s", eta, r.Dest)
 		if i == m.selected { line = m.th.rowSelected.Render(line) }
 		sb.WriteString(line+"\n")
 		if i+1 >= maxRows { break }
@@ -296,6 +393,42 @@ func (m *Model) renderProgress(r state.DownloadRow) string {
 	if ratio < 0 { ratio = 0 }
 	if ratio > 1 { ratio = 1 }
 	return m.prog.ViewAs(ratio)
+}
+
+func keyFor(r state.DownloadRow) string { return r.URL+"|"+r.Dest }
+
+func hostOf(urlStr string) string {
+	if u, err := neturl.Parse(urlStr); err == nil {
+		return u.Hostname()
+	}
+	return ""
+}
+
+func (m *Model) selectionOrCurrent() []state.DownloadRow {
+	rows := m.visibleRows()
+	if len(m.selectedKeys) == 0 {
+		if m.selected >= 0 && m.selected < len(rows) { return []state.DownloadRow{ rows[m.selected] } }
+		return nil
+	}
+	var out []state.DownloadRow
+	for _, r := range rows { if m.selectedKeys[keyFor(r)] { out = append(out, r) } }
+	return out
+}
+
+func (m *Model) addToast(s string) { m.toasts = append(m.toasts, toast{msg: s, when: time.Now(), ttl: 3*time.Second}) }
+
+func (m *Model) gcToasts() {
+	now := time.Now()
+	var keep []toast
+	for _, t := range m.toasts { if now.Sub(t.when) < t.ttl { keep = append(keep, t) } }
+	m.toasts = keep
+}
+
+func (m *Model) renderToasts() string {
+	if len(m.toasts) == 0 { return "" }
+	parts := make([]string, 0, len(m.toasts))
+	for _, t := range m.toasts { parts = append(parts, t.msg) }
+	return m.th.label.Render(strings.Join(parts, " • "))
 }
 
 func (m *Model) startDownloadCmd(urlStr, dest string) tea.Cmd {
