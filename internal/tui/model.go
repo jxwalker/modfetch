@@ -440,8 +440,10 @@ func (m *model) progressFor(r state.DownloadRow) (cur int64, total int64, rate f
 			total += 0 // already in r.Size
 		}
 	} else {
+		// No chunk info (likely single-stream). Use the staged .part path consistent with downloader.
 		if r.Dest != "" {
-			if st, err := os.Stat(r.Dest + ".part"); err == nil {
+			p := downloader.StagePartPath(m.cfg, r.URL, r.Dest)
+			if st, err := os.Stat(p); err == nil {
 				cur = st.Size()
 			} else if st, err := os.Stat(r.Dest); err == nil {
 				cur = st.Size()

@@ -31,6 +31,12 @@ func stagePartPath(cfg *config.Config, url, dest string) string {
 	return filepath.Join(partsDir, file)
 }
 
+// StagePartPath is an exported helper for UI components to locate the .part file
+// for an in-progress download, consistent with downloader behavior.
+func StagePartPath(cfg *config.Config, url, dest string) string {
+	return stagePartPath(cfg, url, dest)
+}
+
 // renameOrCopy attempts to rename, falling back to copy when cross-device.
 func renameOrCopy(src, dst string) error {
 	if err := os.Rename(src, dst); err != nil {
