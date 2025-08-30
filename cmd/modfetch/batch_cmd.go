@@ -119,6 +119,21 @@ func handleBatchImport(args []string) error {
 		probeURL := resolvedURI
 		// If resolver URI, resolve to direct URL and headers
 		if strings.HasPrefix(resolvedURI, "hf://") || strings.HasPrefix(resolvedURI, "civitai://") {
+			// Warn if token is configured but not present in env
+			if strings.HasPrefix(resolvedURI, "civitai://") && c.Sources.CivitAI.Enabled {
+				if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
+					if tok := strings.TrimSpace(os.Getenv(env)); tok == "" {
+						log.Warnf("CivitAI token env %s is not set; gated content will return 401. Export %s.", env, env)
+					}
+				}
+			}
+			if strings.HasPrefix(resolvedURI, "hf://") && c.Sources.HuggingFace.Enabled {
+				if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
+					if tok := strings.TrimSpace(os.Getenv(env)); tok == "" {
+						log.Warnf("Hugging Face token env %s is not set; gated repos will return 401. Export %s and accept the repo license.", env, env)
+					}
+				}
+			}
 			res, err := resolver.Resolve(ctx, resolvedURI, c)
 			if err != nil { return fmt.Errorf("line %d: resolve: %w", lineNum, err) }
 			probeURL = res.URL
@@ -133,12 +148,20 @@ func handleBatchImport(args []string) error {
 				h := strings.ToLower(u.Hostname())
 				if strings.HasSuffix(h, "civitai.com") && c.Sources.CivitAI.Enabled {
 					if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
-						if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer " + tok }
+						if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+							headers["Authorization"] = "Bearer " + tok
+						} else {
+							log.Warnf("CivitAI token env %s is not set; gated content will return 401. Export %s.", env, env)
+						}
 					}
 				}
 				if strings.HasSuffix(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
 					if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
-						if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer " + tok }
+						if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+							headers["Authorization"] = "Bearer " + tok
+						} else {
+							log.Warnf("Hugging Face token env %s is not set; gated repos will return 401. Export %s and accept the repo license.", env, env)
+						}
 					}
 				}
 			}
