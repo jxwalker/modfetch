@@ -210,6 +210,9 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		chunks, _ = e.st.ListChunks(url, destPath)
 	}
 
+	// Mark download as running now that chunk plan exists
+	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "running"})
+
 	// Download chunks concurrently
 	perFile := e.cfg.Concurrency.PerFileChunks
 	if perFile <= 0 { perFile = 4 }

@@ -120,6 +120,11 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	if err != nil { return "", "", err }
 	defer resp.Body.Close()
 
+	// Mark as running once we have a good response
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
+		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "running"})
+	}
+
 	if start > 0 && resp.StatusCode == http.StatusOK {
 		// Server ignored Range; restart from 0
 		s.log.Warnf("server ignored Range; restarting from beginning")

@@ -417,6 +417,9 @@ func (m *model) renderProgress(r state.DownloadRow) string {
 	if _, ok := m.ephems[r.URL]; ok {
 		return "resolving " + m.spinnerChar()
 	}
+	if strings.EqualFold(r.Status, "planning") {
+		return "planning " + m.spinnerChar()
+	}
 	cur, total, _, _ := m.progressFor(r)
 	if total <= 0 { return "--" }
 	ratio := float64(cur) / float64(total)
@@ -432,6 +435,13 @@ func (m *model) renderDetails(r state.DownloadRow) string {
 	if abs != "" { abs, _ = filepath.Abs(r.Dest) }
 	cur, total, rate, eta := m.progressFor(r)
 	fmt.Fprintf(&sb, "    %s %s\n", m.styles.label.Render("dest:"), abs)
+	// Guidance if stuck in planning for more than ~5s without chunks
+	if strings.EqualFold(r.Status, "planning") {
+		chunks, _ := m.st.ListChunks(r.URL, r.Dest)
+		if len(chunks) == 0 && r.UpdatedAt > 0 && time.Since(time.Unix(r.UpdatedAt, 0)) > 5*time.Second {
+			fmt.Fprintf(&sb, "    %s %s\n", m.styles.label.Render("note:"), "still planning… this can happen if the server blocks HEAD; it will auto-fallback to single. If this persists, check CIVITAI_TOKEN/HF_TOKEN and network, or press y to retry.")
+		}
+	}
 	fmt.Fprintf(&sb, "    %s %s\n", m.styles.label.Render("size:"), humanize.Bytes(uint64(total)))
 	fmt.Fprintf(&sb, "    %s %s/%s\n", m.styles.label.Render("progress:"), humanize.Bytes(uint64(cur)), humanize.Bytes(uint64(total)))
 	fmt.Fprintf(&sb, "    %s %s/s\n", m.styles.label.Render("speed:"), humanize.Bytes(uint64(rate)))
