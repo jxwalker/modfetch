@@ -123,6 +123,10 @@ type UIOptions struct {
 	// RefreshHz controls the TUI refresh frequency (ticks per second). If 0, defaults to 1.
 	// Values above 10 are clamped to 10 to avoid excessive CPU usage.
 	RefreshHz int `yaml:"refresh_hz"`
+	// ShowURL sets the initial table mode to show URL instead of DEST in the last column.
+	ShowURL bool `yaml:"show_url"`
+	// Compact reduces columns in the v2 table (hides SPEED/THR) for a denser view.
+	Compact bool `yaml:"compact"`
 }
 
 // Load reads, parses, expands, and validates a YAML config file.

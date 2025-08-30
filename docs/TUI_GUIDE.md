@@ -48,7 +48,8 @@ Notes:
 Global
 - Navigation: j/k (select), / (filter), m (menu), h or ? (help)
 - Sorting: s (by speed), e (by ETA), o (clear sort)
-- Actions: n (new), r (refresh), d (details), g (group by status), t (toggle columns)
+- View/Columns: v (compact view), t (toggle last column URL/DEST)
+- Actions: n (new), r (refresh), d (details), g (group by status)
 
 Per-row
 - p (pause/cancel)
@@ -57,7 +58,7 @@ Per-row
 - U (copy source URL to clipboard)
 - O (open file or reveal in file manager)
 - D (delete staged data for the row)
-- X (clear a stuck ephemeral row)
+- Space (toggle selection), A (select all), X (clear selection)
 
 ## Starting new downloads
 
@@ -92,6 +93,14 @@ Per-row
 - Open/Reveal fails: verify that `open` (macOS) or `xdg-open` (Linux) is installed and that the path exists
 - Stuck resolving row: press X to clear the ephemeral; then retry with y
 - Range/HEAD unsupported: downloader may fall back to single-stream; progress still updates with speed/ETA
+
+## Configuration options (v2)
+
+Add these under the ui section of your config YAML:
+
+- ui.refresh_hz: integer (0-10). Controls refresh rate (ticks/sec). Default 1.
+- ui.show_url: boolean. If true, the table shows URL instead of DEST by default.
+- ui.compact: boolean. If true, uses compact table (STATUS, PROGRESS, ETA, URL/DEST).
 
 ## Tips
 

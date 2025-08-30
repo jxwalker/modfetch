@@ -101,11 +101,12 @@ func New(cfg *config.Config, st *state.DB) tea.Model {
 		if hz > 10 { hz = 10 }
 		refresh = time.Second / time.Duration(hz)
 	}
-	return &Model{
+return &Model{
 		cfg: cfg, st: st, th: defaultTheme(), activeTab: 1, prog: p, prev: map[string]obs{},
 		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
 		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{},
 		tickEvery: refresh,
+		showURL: cfg.UI.ShowURL,
 	}
 }
 
@@ -139,8 +140,11 @@ case tea.KeyMsg:
 		case "e": m.sortMode = "eta"; return m, nil
 		case "o": m.sortMode = ""; return m, nil
 		case "g": if m.groupBy=="host" { m.groupBy = "" } else { m.groupBy = "host" }; return m, nil
-		case "t": // toggle last column between DEST and URL
+case "t": // toggle last column between DEST and URL
 			m.showURL = !m.showURL; return m, nil
+		case "v": // compact view toggle
+			m.compactToggle()
+			return m, nil
 case "T": // theme cycle presets
 			presets := themePresets()
 			m.themeIndex = (m.themeIndex + 1) % len(presets)
@@ -252,7 +256,7 @@ func (m *Model) View() string {
 	// Footer
 	filterBar := ""
 	if m.filterOn { filterBar = "Filter: "+ m.filterInput.View() }
-	footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • t URL/DEST • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
+footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • t URL/DEST • v compact • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
 	parts := []string{header, mid}
 	if help != "" { parts = append(parts, help) }
 	if drawer != "" { parts = append(parts, drawer) }
@@ -378,7 +382,11 @@ func (m *Model) renderTable() string {
 	rows := m.visibleRows()
 	var sb strings.Builder
 	lastLabel := "DEST"; if m.showURL { lastLabel = "URL" }
-	sb.WriteString(m.th.head.Render(fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-10s  %-8s  %-s", "S", "STATUS", "PROGRESS", "SPEED", "THR", "ETA", lastLabel)))
+	if m.isCompact() {
+		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-2s %-8s  %-10s  %-8s  %-s", "S", "STATUS", "PROGRESS", "ETA", lastLabel)))
+	} else {
+		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-10s  %-8s  %-s", "S", "STATUS", "PROGRESS", "SPEED", "THR", "ETA", lastLabel)))
+	}
 	sb.WriteString("\n")
 	maxRows := m.h - 10
 	if maxRows < 3 { maxRows = len(rows) }
@@ -398,7 +406,12 @@ func (m *Model) renderTable() string {
 		sel := " "; if m.selectedKeys[keyFor(r)] { sel = "*" }
 		last := r.Dest
 		if m.showURL { last = logging.SanitizeURL(r.URL) }
-		line := fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-10s  %-8s  %s", sel, r.Status, prog, humanize.Bytes(uint64(rate))+"/s", thr, eta, last)
+		var line string
+		if m.isCompact() {
+			line = fmt.Sprintf("%-2s %-8s  %-10s  %-8s  %s", sel, r.Status, prog, eta, last)
+		} else {
+			line = fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-10s  %-8s  %s", sel, r.Status, prog, humanize.Bytes(uint64(rate))+"/s", thr, eta, last)
+		}
 		if i == m.selected { line = m.th.rowSelected.Render(line) }
 		sb.WriteString(line+"\n")
 		if i+1 >= maxRows { break }
@@ -534,6 +547,9 @@ func (m *Model) renderToasts() string {
 	return m.th.label.Render(strings.Join(parts, " • "))
 }
 
+func (m *Model) compactToggle() { m.cfg.UI.Compact = !m.cfg.UI.Compact }
+func (m *Model) isCompact() bool { return m.cfg.UI.Compact }
+
 func (m *Model) renderHelp() string {
 	var sb strings.Builder
 	sb.WriteString(m.th.head.Render("Help (TUI v2)")+"\n")
@@ -545,7 +561,7 @@ func (m *Model) renderHelp() string {
 	sb.WriteString("Theme: T cycle presets\n")
 	sb.WriteString("Toasts: H toggle drawer\n")
 	sb.WriteString("Select: Space toggle • A select all • X clear selection\n")
-	sb.WriteString("Columns: t toggle URL/DEST\n")
+	sb.WriteString("Columns: t toggle URL/DEST • v compact view\n")
 	sb.WriteString("Actions: y retry • p cancel • O open • C copy path • U copy URL\n")
 	sb.WriteString("Quit: q\n")
 	return sb.String()
