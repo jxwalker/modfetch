@@ -21,7 +21,7 @@ BATCH="$TMPDIR/batch.yaml"
 
 cat > "$INPUT" <<'EOF'
 # Sample URLs for import
-https://speed.hetzner.de/1MB.bin
+https://github.com/favicon.ico
 # Hugging Face example (adjust to a small public file you have access to)
 # hf://owner/repo/path/to/file.bin?rev=main
 # CivitAI model page (auto-normalized) – replace with a public example if available

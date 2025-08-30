@@ -64,11 +64,11 @@ B1) Prepare an input file
   - Optional key-value pairs after URL: dest=... sha256=... type=... place=true mode=symlink
   - CivitAI model page URLs (e.g., https://civitai.com/models/<id>?version=...) are auto-normalized to civitai:// unless --no-resolve-pages is used.
   Example lines:
-  - https://speed.hetzner.de/1MB.bin
+  - https://github.com/favicon.ico
   - hf://owner/repo/path/to/file.bin?rev=main
   - civitai://model/12345?version=67890
   - https://civitai.com/models/12345?modelVersionId=67890
-  - https://speed.hetzner.de/10MB.bin dest=/Users/James/Downloads/modfetch/custom.bin type=model place=true mode=symlink
+  - https://github.com/favicon.ico dest=/Users/James/Downloads/modfetch/custom.ico type=model place=true mode=symlink
 
 B2) Import
 - Command:
