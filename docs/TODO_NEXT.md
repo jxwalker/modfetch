@@ -126,18 +126,4 @@ Additional Backlog (MF-001..MF-039)
 - MF-030: Add metrics collection for performance monitoring
 - MF-031: Implement memory-mapped file operations for large downloads
 
-5. FUTURE CONSIDERATIONS (Backlog)
-5.1 Enterprise Features
-
-- MF-032: S3-compatible storage backend support
-- MF-033: LDAP/AD authentication integration
-- MF-034: Multi-tenant support with workspace isolation
-- MF-035: RESTful API for remote management
-
-5.2 Advanced Capabilities
-
-- MF-036: Distributed download coordination across multiple nodes
-- MF-037: Blockchain-based integrity verification
-- MF-038: AI-powered download scheduling optimisation
-- MF-039: GraphQL API implementation
 
