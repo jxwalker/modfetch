@@ -233,6 +233,22 @@ case "O":
 				}
 			}
 			return m, nil
+case "D":
+			// delete staged data (.part) and clear chunk state
+			if m.selected >=0 && m.selected < len(m.rows) {
+				r := m.rows[m.selected]
+				deleted := []string{}
+				// hashed staged path
+				p1 := downloader.StagePartPath(m.cfg, r.URL, r.Dest)
+				if fi, err := os.Stat(p1); err == nil && !fi.IsDir() { if err := os.Remove(p1); err == nil { deleted = append(deleted, p1) } }
+				// next-to-dest .part
+				p2 := r.Dest + ".part"
+				if p2 != p1 { if fi, err := os.Stat(p2); err == nil && !fi.IsDir() { if err := os.Remove(p2); err == nil { deleted = append(deleted, p2) } } }
+				_ = m.st.DeleteChunks(r.URL, r.Dest)
+				if len(deleted) > 0 { m.newMsg = "deleted staged data: " + strings.Join(deleted, ", ") } else { m.newMsg = "no staged data found" }
+				return m, refreshCmd()
+			}
+			return m, nil
 		case "s":
 			m.sortMode = "speed"
 			return m, refreshCmd()
@@ -533,7 +549,7 @@ func filterByStatuses(in []state.DownloadRow, want []string) []state.DownloadRow
 }
 
 func (m *model) helpView() string {
-	return "Help: j/k up/down • r refresh • n new download • f filter preset • g group by status • t toggle columns • d details • / filter • s sort by speed • e sort by ETA • o clear sort • C copy path • U copy URL • O open folder • m menu • h/? toggle help"
+	return "Help: j/k up/down • r refresh • n new download • f filter preset • g group by status • t toggle columns • d details • / filter • s sort by speed • e sort by ETA • o clear sort • C copy path • U copy URL • O open folder • D delete staged data • m menu • h/? toggle help"
 }
 
 func (m *model) menuView() string {
