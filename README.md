@@ -110,6 +110,9 @@ Usage (see docs/USER_GUIDE.md for details)
     - Live speed and ETA for both chunked and single‑stream fallback downloads
     - Accepts CivitAI model page URLs (https://civitai.com/models/ID) and rewrites them internally to the correct direct download URL
   - See the full TUI guide: docs/TUI_GUIDE.md
+  - Preview the next‑gen TUI v2 (experimental):
+    
+    modfetch tui --config /path/to/config.yml --v2
 - Verify checksums in state:
   
   modfetch verify --config /path/to/config.yml --all
