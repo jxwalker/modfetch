@@ -22,7 +22,9 @@ func handleTUI(args []string) error {
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
 	jsonOut := fs.Bool("json", false, "json logs (not used in TUI)")
-	useV2 := fs.Bool("v2", false, "Preview the new TUI v2 (experimental)")
+	// --v2 kept for compatibility but unused since v2 is default
+	_ = fs.Bool("v2", false, "Use TUI v2 (default)")
+	useV1 := fs.Bool("v1", false, "Use legacy TUI v1 (fallback)")
 	if err := fs.Parse(args); err != nil { return err }
 	if *cfgPath == "" {
 		if env := os.Getenv("MODFETCH_CONFIG"); env != "" { *cfgPath = env }
@@ -60,10 +62,11 @@ func handleTUI(args []string) error {
 	if err != nil { return err }
 	defer st.SQL.Close()
 	var m tea.Model
-	if *useV2 {
-		m = uiv2.New(c, st)
-	} else {
+	// Default to v2 unless legacy v1 explicitly requested
+	if *useV1 {
 		m = ui.New(c, st)
+	} else {
+		m = uiv2.New(c, st)
 	}
 	p := tea.NewProgram(m)
 	_, err = p.Run()

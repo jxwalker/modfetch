@@ -46,7 +46,7 @@ _modfetch_completions()
         status)
             COMPREPLY=( $(compgen -W "--config --log-level --json" -- "$cur") ) ;;
         tui)
-            COMPREPLY=( $(compgen -W "--config --log-level" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --v1 --v2" -- "$cur") ) ;;
         batch)
             COMPREPLY=( $(compgen -W "import --config --log-level --json --input --output --dest-dir --sha-mode --type --place --mode --no-resolve-pages" -- "$cur") ) ;;
         completion)
@@ -83,7 +83,7 @@ _modfetch() {
       _arguments '*:options:(--config --log-level --json)'
       ;;
     tui)
-      _arguments '*:options:(--config --log-level)'
+      _arguments '*:options:(--config --log-level --v1 --v2)'
       ;;
     batch)
       _arguments '*:options:(import --config --log-level --json --input --output --dest-dir --sha-mode --type --place --mode --no-resolve-pages)'
