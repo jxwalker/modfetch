@@ -13,6 +13,7 @@ import (
 	"modfetch/internal/logging"
 	"modfetch/internal/state"
 	ui "modfetch/internal/tui"
+	uiv2 "modfetch/internal/tui/v2"
 	cw "modfetch/internal/tui/configwizard"
 )
 
@@ -21,6 +22,7 @@ func handleTUI(args []string) error {
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
 	jsonOut := fs.Bool("json", false, "json logs (not used in TUI)")
+	useV2 := fs.Bool("v2", false, "Preview the new TUI v2 (experimental)")
 	if err := fs.Parse(args); err != nil { return err }
 	if *cfgPath == "" {
 		if env := os.Getenv("MODFETCH_CONFIG"); env != "" { *cfgPath = env }
@@ -57,7 +59,12 @@ func handleTUI(args []string) error {
 	st, err := state.Open(c)
 	if err != nil { return err }
 	defer st.SQL.Close()
-	m := ui.New(c, st)
+	var m tea.Model
+	if *useV2 {
+		m = uiv2.New(c, st)
+	} else {
+		m = ui.New(c, st)
+	}
 	p := tea.NewProgram(m)
 	_, err = p.Run()
 	return err

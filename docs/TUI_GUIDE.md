@@ -17,6 +17,12 @@ export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 modfetch tui
 ```
 
+- Preview the next‑gen TUI v2 (experimental):
+
+```bash
+modfetch tui --config /path/to/config.yml --v2
+```
+
 ## Layout overview
 
 - Header: summary, filters, and sort indicators
