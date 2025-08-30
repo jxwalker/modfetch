@@ -577,12 +577,18 @@ func copyToClipboard(s string) error {
 func openInFileManager(p string, reveal bool) error {
 	p = strings.TrimSpace(p)
 	if p == "" { return fmt.Errorf("empty path") }
+	// Determine directory to open even if file doesn't exist yet
 	dir := p
-	if fi, err := os.Stat(p); err == nil && !fi.IsDir() { dir = filepath.Dir(p) }
+	if fi, err := os.Stat(p); err == nil {
+		if fi.IsDir() { dir = p } else { dir = filepath.Dir(p) }
+	} else {
+		dir = filepath.Dir(p)
+	}
 	switch runtime.GOOS {
 	case "darwin":
 		if reveal {
-			return exec.Command("open", "-R", p).Start()
+			// Reveal if possible; if that fails, fallback to opening dir
+			if err := exec.Command("open", "-R", p).Start(); err == nil { return nil }
 		}
 		return exec.Command("open", dir).Start()
 	case "linux":
