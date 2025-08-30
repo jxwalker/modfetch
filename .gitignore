@@ -17,3 +17,7 @@
 .vscode/
 *.code-workspace
 
+# Local smoke test artifacts and binaries
+/tmp_smoke/
+/modfetch
+*.part
