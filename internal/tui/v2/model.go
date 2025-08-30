@@ -2,6 +2,7 @@ package tui2
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -92,6 +93,14 @@ type Model struct {
 	err   error
 }
 
+type uiState struct {
+	ThemeIndex int    `json:"theme_index"`
+	ShowURL    bool   `json:"show_url"`
+	Compact    bool   `json:"compact"`
+	GroupBy    string `json:"group_by"`
+	SortMode   string `json:"sort_mode"`
+}
+
 func New(cfg *config.Config, st *state.DB) tea.Model {
 	p := progress.New(progress.WithDefaultGradient())
 	fi := textinput.New(); fi.Placeholder = "filter (url or dest contains)"; fi.CharLimit = 4096
@@ -101,13 +110,16 @@ func New(cfg *config.Config, st *state.DB) tea.Model {
 		if hz > 10 { hz = 10 }
 		refresh = time.Second / time.Duration(hz)
 	}
-return &Model{
+m := &Model{
 		cfg: cfg, st: st, th: defaultTheme(), activeTab: 1, prog: p, prev: map[string]obs{},
 		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
 		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{},
 		tickEvery: refresh,
 		showURL: cfg.UI.ShowURL,
 	}
+	// Load UI state overrides if present
+	m.loadUIState()
+	return m
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -132,7 +144,8 @@ case tea.KeyMsg:
 			return m, cmd
 		}
 		switch s {
-		case "q", "ctrl+c":
+	case "q", "ctrl+c":
+			m.saveUIState()
 			return m, tea.Quit
 		case "/":
 			m.filterOn = true; m.filterInput.Focus(); return m, nil
@@ -141,14 +154,15 @@ case tea.KeyMsg:
 		case "o": m.sortMode = ""; return m, nil
 		case "g": if m.groupBy=="host" { m.groupBy = "" } else { m.groupBy = "host" }; return m, nil
 case "t": // toggle last column between DEST and URL
-			m.showURL = !m.showURL; return m, nil
-		case "v": // compact view toggle
-			m.compactToggle()
+			m.showURL = !m.showURL; m.saveUIState(); return m, nil
+case "v": // compact view toggle
+			m.compactToggle(); m.saveUIState()
 			return m, nil
 case "T": // theme cycle presets
 			presets := themePresets()
 			m.themeIndex = (m.themeIndex + 1) % len(presets)
 			m.th = presets[m.themeIndex]
+			m.saveUIState()
 			return m, nil
 		case "H": // toggle toast drawer
 			m.showToastDrawer = !m.showToastDrawer
@@ -549,6 +563,40 @@ func (m *Model) renderToasts() string {
 
 func (m *Model) compactToggle() { m.cfg.UI.Compact = !m.cfg.UI.Compact }
 func (m *Model) isCompact() bool { return m.cfg.UI.Compact }
+
+func (m *Model) uiStatePath() string {
+	root := strings.TrimSpace(m.cfg.General.DataRoot)
+	if root == "" {
+		if h, err := os.UserHomeDir(); err == nil {
+			root = filepath.Join(h, ".config", "modfetch")
+		}
+	}
+	return filepath.Join(root, "ui_state_v2.json")
+}
+
+func (m *Model) loadUIState() {
+	p := m.uiStatePath()
+	b, err := os.ReadFile(p)
+	if err != nil { return }
+	var st uiState
+	if err := json.Unmarshal(b, &st); err != nil { return }
+	// Apply
+	m.themeIndex = st.ThemeIndex
+	presets := themePresets()
+	if m.themeIndex >= 0 && m.themeIndex < len(presets) { m.th = presets[m.themeIndex] }
+	m.showURL = st.ShowURL
+	if st.Compact { m.cfg.UI.Compact = true }
+	if st.GroupBy != "" { m.groupBy = st.GroupBy }
+	if st.SortMode != "" { m.sortMode = st.SortMode }
+}
+
+func (m *Model) saveUIState() {
+	p := m.uiStatePath()
+	_ = os.MkdirAll(filepath.Dir(p), 0o755)
+	st := uiState{ThemeIndex: m.themeIndex, ShowURL: m.showURL, Compact: m.cfg.UI.Compact, GroupBy: m.groupBy, SortMode: m.sortMode}
+	b, _ := json.MarshalIndent(st, "", "  ")
+	_ = os.WriteFile(p, b, 0o644)
+}
 
 func (m *Model) renderHelp() string {
 	var sb strings.Builder
