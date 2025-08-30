@@ -51,7 +51,7 @@ type model struct {
 	tipsOn   bool
 	// running downloads control (only those started via TUI)
 	running map[string]context.CancelFunc
-	// ephemeral starters (resolving/preflight), keyed by URL
+	// ephemeral starters (resolving/preflight), keyed by URL|Dest
 	ephems  map[string]ephemeral
 	spin   int
 	err      error
@@ -72,7 +72,7 @@ type ephemeral struct {
 	When time.Time
 }
 
-type dlDoneMsg struct { url string; path string; err error }
+type dlDoneMsg struct { url string; dest string; path string; err error }
 
 type obs struct{ bytes int64; t time.Time }
 
@@ -144,12 +144,13 @@ case "enter":
 				url := strings.TrimSpace(m.newURL.Value())
 				dest := strings.TrimSpace(m.newDest.Value())
 				if url == "" { m.newMsg = "URL required"; return m, nil }
-				if err := m.preflightForDownload(url, dest); err != nil { m.newMsg = "preflight failed: "+err.Error(); return m, nil }
-				m.addEphemeral(url, m.destGuess(url, dest))
+				dg := strings.TrimSpace(m.destGuess(url, dest))
+				if err := m.preflightForDownload(url, dg); err != nil { m.newMsg = "preflight failed: "+err.Error(); return m, nil }
+				m.addEphemeral(url, dg)
 				m.newMsg = "starting download..."
 				// close the modal immediately so focus returns to the table
 				m.newDL = false
-				return m, m.startDownloadCmd(url, dest)
+				return m, m.startDownloadCmd(url, dg)
 			}
 			// route typing to focused input
 			if m.newFocus == 0 { var cmd tea.Cmd; m.newURL, cmd = m.newURL.Update(msg); return m, cmd }
@@ -274,21 +275,15 @@ case refreshMsg:
 		rows, err := m.st.ListDownloads()
 		if err != nil { return m, func() tea.Msg { return errMsg{err} } }
 		m.rows = rows
-		// Clear any ephemerals when we see active rows likely corresponding to a just-started job.
+		// Clear ephemerals when a matching DB row appears by URL or Dest.
 		if len(m.ephems) > 0 {
-			now := time.Now().Unix()
-			for u, e := range m.ephems {
+			for k, e := range m.ephems {
 				cleared := false
 				for _, r := range rows {
-					if r.Dest != "" && e.Dest != "" && r.Dest == e.Dest { cleared = true; break }
-					if r.URL == u { cleared = true; break }
-					if r.Status == "planning" || r.Status == "pending" || r.Status == "running" {
-						if r.UpdatedAt >= e.When.Unix()-1 && r.UpdatedAt <= now {
-							cleared = true; break
-						}
-					}
+					if r.URL == e.URL { cleared = true; break }
+					if e.Dest != "" && r.Dest != "" && filepath.Clean(r.Dest) == filepath.Clean(e.Dest) { cleared = true; break }
 				}
-				if cleared { delete(m.ephems, u) }
+				if cleared { delete(m.ephems, k) }
 			}
 		}
 		if m.selected >= len(m.rows) { m.selected = len(m.rows) - 1 }
@@ -303,7 +298,7 @@ case refreshMsg:
 		return m, tickCmd(m.refresh)
 case dlDoneMsg:
 		// clear ephemeral if still present
-		if strings.TrimSpace(msg.url) != "" { delete(m.ephems, msg.url) }
+		if strings.TrimSpace(msg.url) != "" { delete(m.ephems, ephemeralKey(msg.url, msg.dest)) }
 		if msg.err != nil {
 			m.newMsg = fmt.Sprintf("download failed: %v", msg.err)
 		} else {
@@ -399,7 +394,11 @@ func (m *model) View() string {
 rows := m.filteredRows()
 // Prepend ephemeral starters so UI never looks idle
 if len(m.ephems) > 0 {
-	for _, e := range m.ephems {
+	keys := make([]string, 0, len(m.ephems))
+	for k := range m.ephems { keys = append(keys, k) }
+	sort.Strings(keys)
+	for _, k := range keys {
+		e := m.ephems[k]
 		rows = append([]state.DownloadRow{{URL: e.URL, Dest: e.Dest, Status: "pending", Size: 0}}, rows...)
 	}
 }
@@ -439,7 +438,7 @@ case "errors":
 
 func (m *model) renderProgress(r state.DownloadRow) string {
 	// Ephemeral starter: show resolving spinner
-	if _, ok := m.ephems[r.URL]; ok {
+	if _, ok := m.ephems[ephemeralKey(r.URL, r.Dest)]; ok {
 		return "resolving " + m.spinnerChar()
 	}
 	if strings.EqualFold(r.Status, "planning") {
@@ -617,9 +616,9 @@ return func() tea.Msg {
 				}
 			}
 		}
-		if strings.HasPrefix(resolved, "hf://") || strings.HasPrefix(resolved, "civitai://") {
+if strings.HasPrefix(resolved, "hf://") || strings.HasPrefix(resolved, "civitai://") {
 			res, err := resolver.Resolve(ctx, resolved, m.cfg)
-			if err != nil { return dlDoneMsg{url: urlStr, path: "", err: err} }
+			if err != nil { return dlDoneMsg{url: urlStr, dest: dest, path: "", err: err} }
 			resolved = res.URL
 			headers = res.Headers
 		} else {
@@ -638,7 +637,7 @@ return func() tea.Msg {
 		log := logging.New("error", false)
 		dl := downloader.NewAuto(m.cfg, log, m.st, nil)
 		final, _, err := dl.Download(ctx, resolved, dest, "", headers, m.cfg.General.AlwaysNoResume)
-		return dlDoneMsg{url: urlStr, path: final, err: err}
+		return dlDoneMsg{url: urlStr, dest: dest, path: final, err: err}
 	}
 }
 
@@ -649,8 +648,11 @@ func (m *model) spinnerChar() string {
 	return string(frames[m.spin%len(frames)])
 }
 
+// composite key helper for ephemerals
+func ephemeralKey(url, dest string) string { return url + "|" + dest }
+
 func (m *model) addEphemeral(url, dest string) {
-	m.ephems[url] = ephemeral{URL: url, Dest: dest, When: time.Now()}
+	m.ephems[ephemeralKey(url, dest)] = ephemeral{URL: url, Dest: dest, When: time.Now()}
 }
 
 func (m *model) destGuess(urlStr, dest string) string {
@@ -660,8 +662,12 @@ func (m *model) destGuess(urlStr, dest string) string {
 	if strings.HasPrefix(urlStr, "http://") || strings.HasPrefix(urlStr, "https://") {
 		if u, err := neturl.Parse(urlStr); err == nil {
 			b := path.Base(u.Path)
-			if b == "/" || b == "." || b == "" { b = "download" }
-			return filepath.Join(root, b)
+			if b == "/" || b == "." || b == "" || b == ".." { b = "download" }
+			candidate := filepath.Join(root, b)
+			if rel, err := filepath.Rel(root, candidate); err == nil && !strings.HasPrefix(rel, "..") {
+				return candidate
+			}
+			return filepath.Join(root, "download")
 		}
 	}
 	// resolver URI; we don't know yet
@@ -742,12 +748,12 @@ func openInFileManager(p string, reveal bool) error {
 	case "darwin":
 		if reveal {
 			// Reveal if possible; if that fails, fallback to opening dir
-			if err := exec.Command("open", "-R", p).Start(); err == nil { return nil }
+			if err := exec.Command("open", "-R", p).Run(); err == nil { return nil }
 		}
-		return exec.Command("open", dir).Start()
+		return exec.Command("open", dir).Run()
 	case "linux":
 		if _, err := exec.LookPath("xdg-open"); err == nil {
-			return exec.Command("xdg-open", dir).Start()
+			return exec.Command("xdg-open", dir).Run()
 		}
 	}
 	return fmt.Errorf("cannot open file manager on %s", runtime.GOOS)

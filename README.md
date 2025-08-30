@@ -77,6 +77,9 @@ User guide (see docs/USER_GUIDE.md for full guide)
   modfetch download --config /path/to/config.yml --url 'hf://gpt2/README.md?rev=main'
   modfetch download --config /path/to/config.yml --url 'civitai://model/123456?file=vae'
   
+  - URL forms:
+    - civitai://model/{id}[?version=...] is supported; base page URLs like https://civitai.com/models/{id} are auto-resolved to the latest version’s primary file
+    - hf://org/repo/path?rev=... is supported
   - Default filename:
     - civitai:// uses `<ModelName> - <OriginalFileName>` if `--dest` is omitted (with collision-safe suffixes)
     - others use the basename of the resolved URL
@@ -95,7 +98,15 @@ User guide (see docs/USER_GUIDE.md for full guide)
   
   modfetch tui --config /path/to/config.yml
   
-  - Keys: q (quit), r (refresh), j/k (select), d (details), / (filter), s (sort by speed), e (sort by ETA)
+  - Keys:
+    - Navigation: j/k (select), / (filter), m (menu), h/? (help)
+    - Sorting: s (sort by speed), e (sort by ETA), o (clear sort)
+    - Actions: n (new), r (refresh), d (details), g (group by status), t (toggle columns)
+    - Per-row actions: p (pause/cancel), y (retry), C (copy path), U (copy URL), O (open/reveal), D (delete staged), X (clear row)
+  - Behavior:
+    - Shows a resolving spinner row immediately after starting a download and transitions to planning → running
+    - Live speed and ETA for both chunked and single-stream fallback downloads
+    - Accepts CivitAI model page URLs (https://civitai.com/models/ID) and rewrites them internally to the correct direct download URL
 - Verify checksums in state:
   
   modfetch verify --config /path/to/config.yml --all

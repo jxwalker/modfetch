@@ -134,6 +134,29 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		start = 0
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		// Special-case: resuming beyond EOF -> already complete
+		if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && size > 0 && start >= size {
+			s.log.Infof("server returned 416 but local part matches remote size; finalizing")
+			_ = f.Sync()
+			if err := renameOrCopy(part, destPath); err != nil { return "", "", err }
+			_ = os.Remove(part)
+			if _, err := adjustSafetensors(destPath, s.log); err != nil { return "", "", err }
+			ff, err := os.Open(destPath)
+			if err != nil { return "", "", err }
+			h := sha256.New()
+			if _, err := io.Copy(h, ff); err != nil { _ = ff.Close(); return "", "", err }
+			_ = ff.Close()
+			actualSHA := hex.EncodeToString(h.Sum(nil))
+			if err := writeAndSync(destPath+".sha256", []byte(actualSHA+"  "+filepath.Base(destPath)+"\n")); err != nil { return "", "", err }
+			_ = fsyncDir(filepath.Dir(destPath))
+			_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "complete"})
+			if s.metrics != nil {
+				s.metrics.IncDownloadsSuccess()
+				s.metrics.ObserveDownloadSeconds(time.Since(startTime).Seconds())
+				_ = s.metrics.Write()
+			}
+			return destPath, actualSHA, nil
+		}
 		// Provide a friendlier hint for 401 on known hosts and persist error status
 		msg := fmt.Sprintf("unexpected status: %s", resp.Status)
 		if resp.StatusCode == http.StatusUnauthorized {
