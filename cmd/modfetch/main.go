@@ -231,6 +231,27 @@ func handleDownload(args []string) error {
 
 	resolvedURL := *url
 	headers := map[string]string{}
+	// Support CivitAI model page URLs by translating to civitai://model/{id}[?version=]
+	if strings.HasPrefix(resolvedURL, "http://") || strings.HasPrefix(resolvedURL, "https://") {
+		if u, err := neturl.Parse(resolvedURL); err == nil {
+			h := strings.ToLower(u.Hostname())
+			if strings.HasSuffix(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
+				parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+				if len(parts) >= 2 {
+					modelID := parts[1]
+					q := u.Query()
+					ver := q.Get("modelVersionId")
+					if ver == "" { ver = q.Get("version") }
+					civ := "civitai://model/" + modelID
+					if strings.TrimSpace(ver) != "" { civ += "?version=" + ver }
+					if res, err := resolver.Resolve(ctx, civ, c); err == nil {
+						resolvedURL = res.URL
+						headers = res.Headers
+					}
+				}
+			}
+		}
+	}
 	if strings.HasPrefix(resolvedURL, "hf://") || strings.HasPrefix(resolvedURL, "civitai://") {
 		res, err := resolver.Resolve(ctx, resolvedURL, c)
 		if err != nil { return err }
@@ -347,8 +368,10 @@ func handleClean(args []string) error {
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
 	jsonOut := fs.Bool("json", false, "json logs")
-	days := fs.Int("days", 7, "remove .part files older than this many days")
+	days := fs.Int("days", 7, "remove .part files older than this many days (0 = remove all)")
 	dryRun := fs.Bool("dry-run", false, "show what would be removed, but do not delete")
+	destPath := fs.String("dest", "", "remove staged .part for this destination path (overrides days)")
+	includeNext := fs.Bool("include-next-to-dest", true, "also scan download_root for *.part when stage_partials=false")
 	if err := fs.Parse(args); err != nil { return err }
 	if *cfgPath == "" { if env := os.Getenv("MODFETCH_CONFIG"); env != "" { *cfgPath = env } }
 	if *cfgPath == "" { return errors.New("--config is required or set MODFETCH_CONFIG") }
@@ -356,45 +379,86 @@ func handleClean(args []string) error {
 	c, err := config.Load(*cfgPath)
 	if err != nil { return err }
 	log := logging.New(*logLevel, *jsonOut)
-	// Determine parts dir
-	partsDir := c.General.PartialsRoot
-	if strings.TrimSpace(partsDir) == "" {
-		partsDir = filepath.Join(c.General.DownloadRoot, ".parts")
-	}
-	if fi, err := os.Stat(partsDir); err != nil || !fi.IsDir() {
-		return fmt.Errorf("parts dir not found: %s", partsDir)
-	}
-	cutoff := time.Now().Add(-time.Duration(*days)*24*time.Hour)
+
 	removed := 0
 	skipped := 0
 	var errs []string
-	entries, err := os.ReadDir(partsDir)
-	if err != nil { return err }
-	for _, e := range entries {
-		if e.IsDir() { continue }
-		name := e.Name()
-		if !strings.HasSuffix(name, ".part") { continue }
-		p := filepath.Join(partsDir, name)
+
+	// Helper to maybe remove a file
+	removeFile := func(p string) {
 		fi, err := os.Stat(p)
-		if err != nil { errs = append(errs, fmt.Sprintf("%s: %v", p, err)); continue }
-		if fi.ModTime().After(cutoff) { skipped++; continue }
+		if err != nil { errs = append(errs, fmt.Sprintf("%s: %v", p, err)); return }
+		if *destPath == "" {
+			// age-gated mode
+			cutoff := time.Now().Add(-time.Duration(*days)*24*time.Hour)
+			if *days > 0 && fi.ModTime().After(cutoff) { skipped++; return }
+		}
 		if *dryRun {
 			log.Infof("would remove: %s (age=%s)", p, time.Since(fi.ModTime()).Round(time.Second))
 			removed++
-			continue
+			return
 		}
-		if err := os.Remove(p); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", p, err))
-			continue
-		}
+		if err := os.Remove(p); err != nil { errs = append(errs, fmt.Sprintf("%s: %v", p, err)); return }
 		removed++
 	}
+
+	// If a specific dest was provided, remove its .part regardless of location
+	if strings.TrimSpace(*destPath) != "" {
+		// next-to-dest .part
+		cand := *destPath
+		if !strings.HasSuffix(cand, ".part") { cand = cand + ".part" }
+		if fi, err := os.Stat(cand); err == nil && !fi.IsDir() { removeFile(cand) }
+		// hashed in partials_root: find by base name prefix
+		partsDir := c.General.PartialsRoot
+		if strings.TrimSpace(partsDir) == "" {
+			partsDir = filepath.Join(c.General.DownloadRoot, ".parts")
+		}
+		if fi, err := os.Stat(partsDir); err == nil && fi.IsDir() {
+			entries, _ := os.ReadDir(partsDir)
+			base := filepath.Base(*destPath)
+			for _, e := range entries {
+				if e.IsDir() { continue }
+				name := e.Name()
+				if strings.HasPrefix(name, base+".") && strings.HasSuffix(name, ".part") {
+					removeFile(filepath.Join(partsDir, name))
+				}
+			}
+		}
+	} else {
+		// Bulk mode
+		// 1) partials_root or download_root/.parts
+		partsDir := c.General.PartialsRoot
+		if strings.TrimSpace(partsDir) == "" {
+			partsDir = filepath.Join(c.General.DownloadRoot, ".parts")
+		}
+		if fi, err := os.Stat(partsDir); err == nil && fi.IsDir() {
+			entries, err := os.ReadDir(partsDir)
+			if err == nil {
+				for _, e := range entries {
+					if e.IsDir() { continue }
+					name := e.Name()
+					if !strings.HasSuffix(name, ".part") { continue }
+					removeFile(filepath.Join(partsDir, name))
+				}
+			}
+		}
+		// 2) next-to-dest .part files when stage_partials is false or when includeNext is requested
+		if *includeNext {
+			root := c.General.DownloadRoot
+			_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+				if err != nil { return nil }
+				if d.IsDir() { return nil }
+				if strings.HasSuffix(d.Name(), ".part") { removeFile(p) }
+				return nil
+			})
+		}
+	}
+
 	if *jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(map[string]any{"parts_dir": partsDir, "removed": removed, "skipped": skipped, "errors": errs})
+		return enc.Encode(map[string]any{"removed": removed, "skipped": skipped, "errors": errs})
 	}
-	log.Infof("parts dir: %s", partsDir)
 	log.Infof("removed: %d skipped: %d", removed, skipped)
 	if len(errs) > 0 { log.Warnf("errors: %v", errs) }
 	return nil

@@ -155,10 +155,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		return "", "", fmt.Errorf(msg)
 	}
 
-	// Preallocate to expected size when known
-	if size > 0 {
-		_ = f.Truncate(size)
-	}
+	// Do not preallocate for single-stream so that .part size reflects real progress
 	mw := io.MultiWriter(f, hasher)
 	nWritten, err := io.Copy(mw, resp.Body)
 	if s.metrics != nil && nWritten > 0 { s.metrics.AddBytes(nWritten) }

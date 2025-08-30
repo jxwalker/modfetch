@@ -601,6 +601,22 @@ func (m *model) startDownloadCmdCtx(ctx context.Context, urlStr, dest string) te
 return func() tea.Msg {
 		resolved := urlStr
 		headers := map[string]string{}
+		// Translate civitai model page URLs into civitai:// URIs for proper resolution
+		if strings.HasPrefix(resolved, "http://") || strings.HasPrefix(resolved, "https://") {
+			if u, err := neturl.Parse(resolved); err == nil {
+				h := strings.ToLower(u.Hostname())
+				if strings.HasSuffix(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
+					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+					if len(parts) >= 2 {
+						modelID := parts[1]
+						q := u.Query()
+						ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
+						civ := "civitai://model/" + modelID; if strings.TrimSpace(ver) != "" { civ += "?version=" + ver }
+						if res, err := resolver.Resolve(ctx, civ, m.cfg); err == nil { resolved = res.URL; headers = res.Headers }
+					}
+				}
+			}
+		}
 		if strings.HasPrefix(resolved, "hf://") || strings.HasPrefix(resolved, "civitai://") {
 			res, err := resolver.Resolve(ctx, resolved, m.cfg)
 			if err != nil { return dlDoneMsg{url: urlStr, path: "", err: err} }
