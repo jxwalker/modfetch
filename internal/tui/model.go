@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -50,6 +51,9 @@ type model struct {
 	tipsOn   bool
 	// running downloads control (only those started via TUI)
 	running map[string]context.CancelFunc
+	// ephemeral starters (resolving/preflight), keyed by URL
+	ephems  map[string]ephemeral
+	spin   int
 	err      error
 	width   int
 	height  int
@@ -60,7 +64,15 @@ type model struct {
 	prev map[string]obs
 }
 
-type dlDoneMsg struct { path string; err error }
+// ephemeral represents a starting download before DB row appears
+
+type ephemeral struct {
+	URL  string
+	Dest string
+	When time.Time
+}
+
+type dlDoneMsg struct { url string; path string; err error }
 
 type obs struct{ bytes int64; t time.Time }
 
@@ -85,7 +97,7 @@ func New(cfg *config.Config, st *state.DB) tea.Model {
 	}
 	ti := textinput.New()
 	ti.Placeholder = "filter (url or dest contains)"
-m := &model{cfg: cfg, st: st, refresh: time.Second, prog: p, styles: styles, filter: ti, prev: map[string]obs{}, filterPreset: "all", tipsOn: true, running: map[string]context.CancelFunc{}, menuItems: []string{"New download","Filter preset","Group by status","Toggle columns","Sort by speed","Sort by ETA","Clear sort","Help","Refresh","Quit"}}
+m := &model{cfg: cfg, st: st, refresh: time.Second, prog: p, styles: styles, filter: ti, prev: map[string]obs{}, filterPreset: "all", tipsOn: true, running: map[string]context.CancelFunc{}, ephems: map[string]ephemeral{}, menuItems: []string{"New download","Filter preset","Group by status","Toggle columns","Sort by speed","Sort by ETA","Clear sort","Help","Refresh","Quit"}}
 	// new download inputs
 	m.newURL = textinput.New(); m.newURL.Placeholder = "URL (https://..., hf://..., civitai://...)"; m.newURL.CharLimit = 4096
 	m.newDest = textinput.New(); m.newDest.Placeholder = "Destination path (optional)"; m.newDest.CharLimit = 4096
@@ -128,10 +140,12 @@ case tea.KeyMsg:
 			case "shift+tab":
 				m.newFocus = (m.newFocus + 1 + 2 - 1) % 2
 				return m, nil
-			case "enter":
+case "enter":
 				url := strings.TrimSpace(m.newURL.Value())
 				dest := strings.TrimSpace(m.newDest.Value())
 				if url == "" { m.newMsg = "URL required"; return m, nil }
+				if err := m.preflightForDownload(url, dest); err != nil { m.newMsg = "preflight failed: "+err.Error(); return m, nil }
+				m.addEphemeral(url, m.destGuess(url, dest))
 				m.newMsg = "starting download..."
 				return m, m.startDownloadCmd(url, dest)
 			}
@@ -233,15 +247,25 @@ case refreshMsg:
 		rows, err := m.st.ListDownloads()
 		if err != nil { return m, func() tea.Msg { return errMsg{err} } }
 		m.rows = rows
+		// clear any ephemerals that now have rows
+		if len(m.ephems) > 0 {
+			present := map[string]struct{}{}
+			for _, r := range rows { present[r.URL] = struct{}{} }
+			for u := range m.ephems { if _, ok := present[u]; ok { delete(m.ephems, u) } }
+		}
 		if m.selected >= len(m.rows) { m.selected = len(m.rows) - 1 }
 		if m.selected < 0 { m.selected = 0 }
 		// Auto-hide tips once we have any rows
 		if len(m.rows) > 0 { m.tipsOn = false }
+		// advance spinner
+		m.spin++
 		return m, tickCmd(m.refresh)
 	case errMsg:
 		m.err = msg.err
 		return m, tickCmd(m.refresh)
-	case dlDoneMsg:
+case dlDoneMsg:
+		// clear ephemeral if still present
+		if strings.TrimSpace(msg.url) != "" { delete(m.ephems, msg.url) }
 		if msg.err != nil {
 			m.newMsg = fmt.Sprintf("download failed: %v", msg.err)
 		} else {
@@ -335,6 +359,12 @@ func (m *model) View() string {
 	labelLeft := "DEST"; labelRight := "URL"; if m.showURLFirst { labelLeft, labelRight = "URL", "DEST" }
 	fmt.Fprintf(&b, "%s\n", m.styles.label.Render(fmt.Sprintf("%-8s  %-10s  %-10s  %-8s  %-*s  %-*s", "STATUS", "PROGRESS", "SPEED", "ETA", destW, labelLeft, urlW, labelRight)))
 rows := m.filteredRows()
+// Prepend ephemeral starters so UI never looks idle
+if len(m.ephems) > 0 {
+	for _, e := range m.ephems {
+		rows = append([]state.DownloadRow{{URL: e.URL, Dest: e.Dest, Status: "pending", Size: 0}}, rows...)
+	}
+}
 // apply preset filters
 switch m.filterPreset {
 case "active":
@@ -370,6 +400,10 @@ case "errors":
 }
 
 func (m *model) renderProgress(r state.DownloadRow) string {
+	// Ephemeral starter: show resolving spinner
+	if _, ok := m.ephems[r.URL]; ok {
+		return "resolving " + m.spinnerChar()
+	}
 	cur, total, _, _ := m.progressFor(r)
 	if total <= 0 { return "--" }
 	ratio := float64(cur) / float64(total)
@@ -519,7 +553,7 @@ return func() tea.Msg {
 		headers := map[string]string{}
 		if strings.HasPrefix(resolved, "hf://") || strings.HasPrefix(resolved, "civitai://") {
 			res, err := resolver.Resolve(ctx, resolved, m.cfg)
-			if err != nil { return dlDoneMsg{"", err} }
+			if err != nil { return dlDoneMsg{url: urlStr, path: "", err: err} }
 			resolved = res.URL
 			headers = res.Headers
 		} else {
@@ -538,8 +572,62 @@ return func() tea.Msg {
 		log := logging.New("error", false)
 		dl := downloader.NewAuto(m.cfg, log, m.st, nil)
 		final, _, err := dl.Download(ctx, resolved, dest, "", headers, m.cfg.General.AlwaysNoResume)
-		return dlDoneMsg{final, err}
+		return dlDoneMsg{url: urlStr, path: final, err: err}
 	}
+}
+
+// Helpers
+
+func (m *model) spinnerChar() string {
+	frames := []rune{'-', '\\', '|', '/'}
+	return string(frames[m.spin%len(frames)])
+}
+
+func (m *model) addEphemeral(url, dest string) {
+	m.ephems[url] = ephemeral{URL: url, Dest: dest, When: time.Now()}
+}
+
+func (m *model) destGuess(urlStr, dest string) string {
+	d := strings.TrimSpace(dest)
+	if d != "" { return d }
+	root := strings.TrimSpace(m.cfg.General.DownloadRoot)
+	if strings.HasPrefix(urlStr, "http://") || strings.HasPrefix(urlStr, "https://") {
+		if u, err := neturl.Parse(urlStr); err == nil {
+			b := path.Base(u.Path)
+			if b == "/" || b == "." || b == "" { b = "download" }
+			return filepath.Join(root, b)
+		}
+	}
+	// resolver URI; we don't know yet
+	return filepath.Join(root, "(resolving)")
+}
+
+func (m *model) preflightForDownload(urlStr, dest string) error {
+	// Ensure download_root exists and is writable
+	if err := os.MkdirAll(m.cfg.General.DownloadRoot, 0o755); err != nil { return err }
+	if err := tryWrite(m.cfg.General.DownloadRoot); err != nil { return fmt.Errorf("download_root not writable: %w", err) }
+	// Ensure staging area exists and is writable depending on stage_partials
+	if m.cfg.General.StagePartials {
+		parts := m.cfg.General.PartialsRoot
+		if strings.TrimSpace(parts) == "" { parts = filepath.Join(m.cfg.General.DownloadRoot, ".parts") }
+		if err := os.MkdirAll(parts, 0o755); err != nil { return fmt.Errorf("create parts dir: %w", err) }
+		if err := tryWrite(parts); err != nil { return fmt.Errorf("parts dir not writable: %w", err) }
+	} else {
+		// part lives next to dest; ensure its parent if dest provided
+		d := strings.TrimSpace(dest)
+		if d != "" {
+			if err := os.MkdirAll(filepath.Dir(d), 0o755); err != nil { return fmt.Errorf("create dest dir: %w", err) }
+			if err := tryWrite(filepath.Dir(d)); err != nil { return fmt.Errorf("dest dir not writable: %w", err) }
+		}
+	}
+	return nil
+}
+
+func tryWrite(dir string) error {
+	f, err := os.CreateTemp(dir, ".mf-wr-*")
+	if err != nil { return err }
+	name := f.Name(); _ = f.Close(); _ = os.Remove(name)
+	return nil
 }
 
 // Modal overlay for new download (render within View)
