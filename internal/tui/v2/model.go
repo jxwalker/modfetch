@@ -77,13 +77,26 @@ type Model struct {
 	running map[string]context.CancelFunc
 	selectedKeys map[string]bool
 	toasts []toast
+	showToastDrawer bool
+	themeIndex int
+	// caches for performance
+	rateCache map[string]float64
+	etaCache  map[string]string
+	totalCache map[string]int64
+	curBytesCache map[string]int64
+	// rate history for sparkline
+	rateHist map[string][]float64
 	err   error
 }
 
 func New(cfg *config.Config, st *state.DB) tea.Model {
 	p := progress.New(progress.WithDefaultGradient())
 	fi := textinput.New(); fi.Placeholder = "filter (url or dest contains)"; fi.CharLimit = 4096
-	return &Model{cfg: cfg, st: st, th: defaultTheme(), activeTab: 1, prog: p, prev: map[string]obs{}, running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi}
+	return &Model{
+		cfg: cfg, st: st, th: defaultTheme(), activeTab: 1, prog: p, prev: map[string]obs{},
+		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
+		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{},
+	}
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -116,9 +129,13 @@ case tea.KeyMsg:
 		case "e": m.sortMode = "eta"; return m, nil
 		case "o": m.sortMode = ""; return m, nil
 		case "g": if m.groupBy=="host" { m.groupBy = "" } else { m.groupBy = "host" }; return m, nil
-		case "T": // theme cycle placeholder (future presets)
-			// In the scaffold, just toggle title color as a hint
-			if m.th.title.GetForeground() == lipgloss.Color("81") { m.th.title = m.th.title.Foreground(lipgloss.Color("214")) } else { m.th.title = m.th.title.Foreground(lipgloss.Color("81")) }
+		case "T": // theme cycle presets
+			presets := themePresets()
+			m.themeIndex = (m.themeIndex + 1) % len(presets)
+			m.th = presets[m.themeIndex]
+			return m, nil
+		case "H": // toggle toast drawer
+			m.showToastDrawer = !m.showToastDrawer
 			return m, nil
 		case "1": m.activeTab = 0; m.selected = 0; return m, nil
 		case "2": m.activeTab = 1; m.selected = 0; return m, nil
@@ -204,10 +221,18 @@ func (m *Model) View() string {
 		m.th.border.Width(midW).Render(main),
 		m.th.border.Width(inspW).Render(insp),
 	)
+	// Optional toast drawer
+	drawer := ""
+	if m.showToastDrawer {
+		drawer = m.th.border.Width(m.w-2).Render(m.renderToastDrawer())
+	}
 	// Footer
 	filterBar := ""
 	if m.filterOn { filterBar = "Filter: "+ m.filterInput.View() }
-	footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • q quit\n"+filterBar))
+	footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • T theme • H toasts • q quit\n"+filterBar))
+	if drawer != "" {
+		return lipgloss.JoinVertical(lipgloss.Left, header, mid, drawer, footer)
+	}
 	return lipgloss.JoinVertical(lipgloss.Left, header, mid, footer)
 }
 
@@ -217,6 +242,24 @@ func (m *Model) refresh() tea.Cmd {
 	m.rows = rows
 	m.lastRefresh = time.Now()
 	m.gcToasts()
+	// recompute caches once per tick
+	for _, r := range m.rows {
+		key := keyFor(r)
+		cur, total := m.computeCurAndTotal(r)
+		m.totalCache[key] = total
+		m.curBytesCache[key] = cur
+		prev := m.prev[key]
+		dt := time.Since(prev.t).Seconds()
+		var rate float64
+		if dt > 0 { rate = float64(cur - prev.bytes) / dt }
+		m.prev[key] = obs{bytes: cur, t: time.Now()}
+		m.rateCache[key] = rate
+		if rate > 0 && total > 0 && cur < total {
+			rem := float64(total-cur) / rate
+			m.etaCache[key] = fmt.Sprintf("%ds", int(rem+0.5))
+		} else { m.etaCache[key] = "-" }
+		m.addRateSample(key, rate)
+	}
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
@@ -231,7 +274,7 @@ func (m *Model) renderStats() string {
 		case "complete": done++
 		case "error","checksum_mismatch","verify_failed": failed++
 		}
-		_, _, rate, _ := m.progressFor(r)
+		rate := m.rateCache[keyFor(r)]
 		gRate += rate
 	}
 	return fmt.Sprintf("Pending:%d Active:%d Completed:%d Failed:%d • Rate:%s/s", pending, active, done, failed, humanize.Bytes(uint64(gRate)))
@@ -310,7 +353,7 @@ func etaSeconds(cur, total int64, rate float64) float64 {
 func (m *Model) renderTable() string {
 	rows := m.visibleRows()
 	var sb strings.Builder
-	sb.WriteString(m.th.head.Render(fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-8s  %-s", "S", "STATUS", "PROGRESS", "SPEED", "ETA", "DEST")))
+	sb.WriteString(m.th.head.Render(fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-10s  %-8s  %-s", "S", "STATUS", "PROGRESS", "SPEED", "THR", "ETA", "DEST")))
 	sb.WriteString("\n")
 	maxRows := m.h - 10
 	if maxRows < 3 { maxRows = len(rows) }
@@ -324,9 +367,11 @@ func (m *Model) renderTable() string {
 			}
 		}
 		prog := m.renderProgress(r)
-		_, _, rate, eta := m.progressFor(r)
+		rate := m.rateCache[keyFor(r)]
+		eta := m.etaCache[keyFor(r)]
+		thr := m.renderSparkline(keyFor(r))
 		sel := " "; if m.selectedKeys[keyFor(r)] { sel = "*" }
-		line := fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-8s  %s", sel, r.Status, prog, humanize.Bytes(uint64(rate))+"/s", eta, r.Dest)
+		line := fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-10s  %-8s  %s", sel, r.Status, prog, humanize.Bytes(uint64(rate))+"/s", thr, eta, r.Dest)
 		if i == m.selected { line = m.th.rowSelected.Render(line) }
 		sb.WriteString(line+"\n")
 		if i+1 >= maxRows { break }
@@ -351,39 +396,42 @@ func (m *Model) renderInspector() string {
 	sb.WriteString(r.Dest)
 	sb.WriteString("\n\n")
 	// Basic metrics
-	cur, total, rate, eta := m.progressFor(r)
+	cur := m.curBytesCache[keyFor(r)]
+	total := m.totalCache[keyFor(r)]
+	rate := m.rateCache[keyFor(r)]
+	eta := m.etaCache[keyFor(r)]
 	sb.WriteString(fmt.Sprintf("%s %s/%s\n", m.th.label.Render("Progress:"), humanize.Bytes(uint64(cur)), humanize.Bytes(uint64(total))))
 	sb.WriteString(fmt.Sprintf("%s %s/s\n", m.th.label.Render("Speed:"), humanize.Bytes(uint64(rate))))
 	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("ETA:"), eta))
+	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Throughput:"), m.renderSparkline(keyFor(r))))
 	return sb.String()
 }
 
 func (m *Model) progressFor(r state.DownloadRow) (cur int64, total int64, rate float64, eta string) {
+	key := keyFor(r)
+	cur = m.curBytesCache[key]
+	total = m.totalCache[key]
+	rate = m.rateCache[key]
+	eta = m.etaCache[key]
+	// Fallback if cache not populated yet
+	if total == 0 && r.Size > 0 { total = r.Size }
+	return
+}
+
+func (m *Model) computeCurAndTotal(r state.DownloadRow) (cur int64, total int64) {
 	total = r.Size
-	// chunked progress if any chunks exist
 	chunks, _ := m.st.ListChunks(r.URL, r.Dest)
 	if len(chunks) > 0 {
 		for _, c := range chunks {
 			if strings.EqualFold(c.Status, "complete") { cur += c.Size }
-			// total already provided by row.Size
 		}
-	} else {
-		// single-stream fallback: use staged part or final
-		if r.Dest != "" {
-			p := downloader.StagePartPath(m.cfg, r.URL, r.Dest)
-			if st, err := os.Stat(p); err == nil { cur = st.Size() } else if st, err := os.Stat(r.Dest); err == nil { cur = st.Size() }
-		}
+		return cur, total
 	}
-	key := r.URL + "|" + r.Dest
-	prev := m.prev[key]
-	dt := time.Since(prev.t).Seconds()
-	if dt > 0 { rate = float64(cur-prev.bytes) / dt }
-	m.prev[key] = obs{bytes: cur, t: time.Now()}
-	if rate > 0 && total > 0 && cur < total {
-		rem := float64(total-cur) / rate
-		eta = fmt.Sprintf("%ds", int(rem+0.5))
-	} else { eta = "-" }
-	return
+	if r.Dest != "" {
+		p := downloader.StagePartPath(m.cfg, r.URL, r.Dest)
+		if st, err := os.Stat(p); err == nil { cur = st.Size() } else if st, err := os.Stat(r.Dest); err == nil { cur = st.Size() }
+	}
+	return cur, total
 }
 
 func (m *Model) renderProgress(r state.DownloadRow) string {
@@ -394,6 +442,34 @@ func (m *Model) renderProgress(r state.DownloadRow) string {
 	if ratio > 1 { ratio = 1 }
 	return m.prog.ViewAs(ratio)
 }
+
+func (m *Model) addRateSample(key string, rate float64) {
+	h := m.rateHist[key]
+	h = append(h, rate)
+	if len(h) > 10 { h = h[len(h)-10:] }
+	m.rateHist[key] = h
+}
+
+func (m *Model) renderSparklineKey(key string) string {
+	h := m.rateHist[key]
+	if len(h) == 0 { return "" }
+	// map rates to 8 levels; normalize by max
+	max := 0.0
+	for _, v := range h { if v > max { max = v } }
+	if max <= 0 { return "──────────" }
+	levels := []rune{'▁','▂','▃','▄','▅','▆','▇','█'}
+	var sb strings.Builder
+	for _, v := range h {
+		r := int((v/max)*float64(len(levels)-1) + 0.5)
+		if r < 0 { r = 0 }; if r >= len(levels) { r = len(levels)-1 }
+		sb.WriteRune(levels[r])
+	}
+	// pad to 10
+	for sb.Len() < 10 { sb.WriteRune(' ') }
+	return sb.String()
+}
+
+func (m *Model) renderSparkline(key string) string { return m.renderSparklineKey(key) }
 
 func keyFor(r state.DownloadRow) string { return r.URL+"|"+r.Dest }
 
@@ -429,6 +505,18 @@ func (m *Model) renderToasts() string {
 	parts := make([]string, 0, len(m.toasts))
 	for _, t := range m.toasts { parts = append(parts, t.msg) }
 	return m.th.label.Render(strings.Join(parts, " • "))
+}
+
+func (m *Model) renderToastDrawer() string {
+	if len(m.toasts) == 0 { return m.th.label.Render("(no recent notifications)") }
+	now := time.Now()
+	var sb strings.Builder
+	for i := len(m.toasts)-1; i >= 0; i-- { // newest first
+		t := m.toasts[i]
+		dur := now.Sub(t.when).Round(time.Second)
+		sb.WriteString(fmt.Sprintf("%s  %s\n", t.msg, m.th.label.Render(dur.String()+" ago")))
+	}
+	return sb.String()
 }
 
 func (m *Model) startDownloadCmd(urlStr, dest string) tea.Cmd {
@@ -505,6 +593,29 @@ func openInFileManager(p string, reveal bool) error {
 		}
 	}
 	return fmt.Errorf("cannot open file manager on %s", runtime.GOOS)
+}
+
+// Theme presets
+func themePresets() []Theme {
+	base := defaultTheme()
+	neon := base
+	neon.title = neon.title.Foreground(lipgloss.Color("46")) // neon green
+	neon.head = neon.head.Foreground(lipgloss.Color("49"))
+	neon.border = neon.border.BorderForeground(lipgloss.Color("51"))
+	neon.tabActive = neon.tabActive.Foreground(lipgloss.Color("48"))
+
+	drac := base
+	drac.title = drac.title.Foreground(lipgloss.Color("213"))
+	drac.head = drac.head.Foreground(lipgloss.Color("219"))
+	drac.border = drac.border.BorderForeground(lipgloss.Color("135"))
+	drac.tabActive = drac.tabActive.Foreground(lipgloss.Color("204"))
+
+	solar := base
+	solar.title = solar.title.Foreground(lipgloss.Color("136"))
+	solar.head = solar.head.Foreground(lipgloss.Color("178"))
+	solar.border = solar.border.BorderForeground(lipgloss.Color("136"))
+	solar.tabActive = solar.tabActive.Foreground(lipgloss.Color("166"))
+	return []Theme{ base, neon, drac, solar }
 }
 
 func copyToClipboard(s string) error {
