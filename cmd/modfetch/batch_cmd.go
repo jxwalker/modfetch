@@ -22,7 +22,9 @@ import (
 )
 
 func handleBatch(args []string) error {
-	if len(args) == 0 { return errors.New("batch subcommand required: import") }
+	if len(args) == 0 {
+		return errors.New("batch subcommand required: import")
+	}
 	sub := args[0]
 	switch sub {
 	case "import":
@@ -45,16 +47,30 @@ func handleBatchImport(args []string) error {
 	defPlace := fs.Bool("place", false, "Default place flag for jobs (override per-line via place=")
 	defMode := fs.String("mode", "", "Default placement mode: symlink|hardlink|copy (override per-line via mode=")
 	noResolvePages := fs.Bool("no-resolve-pages", false, "Disable civitai.com model page -> civitai:// uri normalization")
-	if err := fs.Parse(args); err != nil { return err }
-	if *cfgPath == "" { if env := os.Getenv("MODFETCH_CONFIG"); env != "" { *cfgPath = env } }
-	if *cfgPath == "" { return errors.New("--config is required or set MODFETCH_CONFIG") }
-	if *inPath == "" { return errors.New("--input is required") }
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *cfgPath == "" {
+		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
+			*cfgPath = env
+		}
+	}
+	if *cfgPath == "" {
+		return errors.New("--config is required or set MODFETCH_CONFIG")
+	}
+	if *inPath == "" {
+		return errors.New("--input is required")
+	}
 	c, err := config.Load(*cfgPath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	log := logging.New(*logLevel, *jsonOut)
 
 	f, err := os.Open(*inPath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer f.Close()
 	s := bufio.NewScanner(f)
 	s.Buffer(make([]byte, 0, 1024), 1024*1024)
@@ -63,18 +79,28 @@ func handleBatchImport(args []string) error {
 	out := &batch.File{Version: 1}
 	ctx := context.Background()
 	root := strings.TrimSpace(*destDir)
-	if root == "" { root = c.General.DownloadRoot }
-	if err := os.MkdirAll(root, 0o755); err != nil { return err }
+	if root == "" {
+		root = c.General.DownloadRoot
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return err
+	}
 
 	lineNum := 0
 	for s.Scan() {
 		lineNum++
 		line := strings.TrimSpace(s.Text())
-		if line == "" { continue }
-		if strings.HasPrefix(strings.TrimSpace(line), "#") { continue }
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
 		// Split into tokens
 		toks := strings.Fields(line)
-		if len(toks) == 0 { continue }
+		if len(toks) == 0 {
+			continue
+		}
 		uri := toks[0]
 		jDest := ""
 		jSHA := ""
@@ -82,16 +108,26 @@ func handleBatchImport(args []string) error {
 		jPlace := *defPlace
 		jMode := strings.TrimSpace(*defMode)
 		for _, t := range toks[1:] {
-			if !strings.Contains(t, "=") { continue }
+			if !strings.Contains(t, "=") {
+				continue
+			}
 			kv := strings.SplitN(t, "=", 2)
 			k := strings.ToLower(strings.TrimSpace(kv[0]))
-			v := ""; if len(kv) > 1 { v = strings.TrimSpace(kv[1]) }
+			v := ""
+			if len(kv) > 1 {
+				v = strings.TrimSpace(kv[1])
+			}
 			switch k {
-			case "dest": jDest = v
-			case "sha256": jSHA = v
-			case "type": jType = v
-			case "place": jPlace = strings.EqualFold(v, "true") || v == "1" || strings.EqualFold(v, "yes")
-			case "mode": jMode = v
+			case "dest":
+				jDest = v
+			case "sha256":
+				jSHA = v
+			case "type":
+				jType = v
+			case "place":
+				jPlace = strings.EqualFold(v, "true") || v == "1" || strings.EqualFold(v, "yes")
+			case "mode":
+				jMode = v
 			}
 		}
 
@@ -106,9 +142,14 @@ func handleBatchImport(args []string) error {
 					if len(parts) >= 2 {
 						modelID := parts[1]
 						q := u.Query()
-						ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
-					civ := "civitai://model/" + modelID
-						if strings.TrimSpace(ver) != "" { civ += "?version=" + neturl.QueryEscape(ver) }
+						ver := q.Get("modelVersionId")
+						if ver == "" {
+							ver = q.Get("version")
+						}
+						civ := "civitai://model/" + modelID
+						if strings.TrimSpace(ver) != "" {
+							civ += "?version=" + neturl.QueryEscape(ver)
+						}
 						resolvedURI = civ
 					}
 				}
@@ -147,12 +188,16 @@ func handleBatchImport(args []string) error {
 				}
 			}
 			res, err := resolver.Resolve(ctx, resolvedURI, c)
-			if err != nil { return fmt.Errorf("line %d: resolve: %w", lineNum, err) }
+			if err != nil {
+				return fmt.Errorf("line %d: resolve: %w", lineNum, err)
+			}
 			probeURL = res.URL
 			headers = res.Headers
 			// For civitai, if no dest given, prefer SuggestedFilename with version hint
 			if jDest == "" && strings.HasPrefix(resolvedURI, "civitai://") && strings.TrimSpace(res.SuggestedFilename) != "" {
-				if p, err := util.UniquePath(root, res.SuggestedFilename, res.VersionID); err == nil { jDest = p }
+				if p, err := util.UniquePath(root, res.SuggestedFilename, res.VersionID); err == nil {
+					jDest = p
+				}
 			}
 		} else {
 			// Attach auth headers for known hosts (direct URLs)
@@ -189,12 +234,16 @@ func handleBatchImport(args []string) error {
 			name := strings.TrimSpace(meta.Filename)
 			if name == "" {
 				base := meta.FinalURL
-				if base == "" { base = probeURL }
+				if base == "" {
+					base = probeURL
+				}
 				name = filepath.Base(base)
 			}
 			name = util.SafeFileName(name)
 			p, err := util.UniquePath(root, name, "")
-			if err != nil { return fmt.Errorf("line %d: dest compute: %w", lineNum, err) }
+			if err != nil {
+				return fmt.Errorf("line %d: dest compute: %w", lineNum, err)
+			}
 			jDest = p
 		}
 
@@ -202,23 +251,32 @@ func handleBatchImport(args []string) error {
 		if strings.EqualFold(strings.TrimSpace(*shaMode), "compute") && strings.TrimSpace(jSHA) == "" {
 			log.Infof("computing sha256 for %s (this may take a while)", uri)
 			sha, err := downloader.ComputeRemoteSHA256(ctx, c, probeURL, headers)
-			if err != nil { return fmt.Errorf("line %d: compute sha: %w", lineNum, err) }
+			if err != nil {
+				return fmt.Errorf("line %d: compute sha: %w", lineNum, err)
+			}
 			jSHA = sha
 		}
 
 		out.Jobs = append(out.Jobs, batch.BatchJob{URI: resolvedURI, Dest: jDest, SHA256: jSHA, Type: jType, Place: jPlace, Mode: jMode})
 	}
-	if err := s.Err(); err != nil { return err }
+	if err := s.Err(); err != nil {
+		return err
+	}
 
 	// Emit YAML
 	if strings.TrimSpace(*outPath) == "" {
 		// stdout
 		enc, _ := yamlEncoder()
-		if err := enc.Encode(out); err != nil { return err }
+		if err := enc.Encode(out); err != nil {
+			return err
+		}
 		return nil
 	}
-	if err := batch.Save(*outPath, out); err != nil { return err }
+	if err := batch.Save(*outPath, out); err != nil {
+		return err
+	}
 	fmt.Fprintf(os.Stderr, "wrote batch: %s (%d jobs)\n", *outPath, len(out.Jobs))
+	fmt.Fprintf(os.Stderr, "run with: modfetch download --batch %s [--batch-parallel N]\n", *outPath)
 	return nil
 }
 
@@ -228,4 +286,3 @@ func yamlEncoder() (*yaml.Encoder, error) {
 	enc.SetIndent(2)
 	return enc, nil
 }
-

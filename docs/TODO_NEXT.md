@@ -12,7 +12,7 @@ Priority 2
 - Placement and classifier improvements
   - Better SD/LLM heuristics, presets for ComfyUI/A1111, `place --write-paths` to generate extra_model_paths.yaml, diff in dry-run.
 - Batch runner improvements
-  - Per-job naming/placement overrides, global concurrency, batch summary JSON, retry policies, stop-on-failure.
+  - Per-job naming/placement overrides, batch summary JSON, retry policies, stop-on-failure. Document and polish new `--batch-parallel` concurrency flag.
 - Partials management polish
   - `clean --parts-only`, `--older-than`, show reclaimed space, startup warnings when stale .part present; docs for partials_root.
 - Metrics expansion
