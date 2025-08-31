@@ -113,6 +113,7 @@ type Model struct {
 	lastRefresh     time.Time
 	prog            progress.Model
 	prev            map[string]obs
+	prevStatus      map[string]string
 	running         map[string]context.CancelFunc
 	selectedKeys    map[string]bool
 	toasts          []toast
@@ -193,7 +194,7 @@ p := progress.New(progress.WithDefaultGradient(), progress.WithWidth(16))
 		if cfg.UI.ShowURL { mode = "url" } else { mode = "dest" }
 	}
 m := &Model{
-		cfg: cfg, st: st, th: defaultTheme(), activeTab: -1, prog: p, prev: map[string]obs{},
+		cfg: cfg, st: st, th: defaultTheme(), activeTab: -1, prog: p, prev: map[string]obs{}, prevStatus: map[string]string{},
 		build: strings.TrimSpace(version),
 		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
 		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{}, hostCache: map[string]string{},
@@ -780,6 +781,17 @@ func (m *Model) refresh() tea.Cmd {
 			if _, ok := m.hostCache[key]; !ok {
 				m.hostCache[key] = hostOf(r.URL)
 			}
+		}
+		// detect status transitions for rate limit holds
+		prev := m.prevStatus[key]
+		curr := strings.ToLower(strings.TrimSpace(r.Status)) + "|" + strings.ToLower(strings.TrimSpace(r.LastError))
+		if prev != curr {
+			// toast when entering hold due to rate limit sleep
+			if strings.HasPrefix(curr, "hold|") && strings.Contains(curr, "rate limited") || (strings.HasPrefix(curr, "hold|") && strings.Contains(curr, "waiting") && strings.Contains(curr, "retry-after")) {
+				h := hostOf(r.URL)
+				m.addToast("on hold due to rate limiting: " + h)
+			}
+			m.prevStatus[key] = curr
 		}
 		_, isVis := vis[key]
 		status := strings.ToLower(r.Status)

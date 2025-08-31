@@ -89,8 +89,8 @@ func initSchema(db *sql.DB) error {
 func (db *DB) prepareStatements() error {
 	var err error
 	db.stmtUpsertDownload, err = db.SQL.Prepare(`INSERT INTO downloads(url, dest, expected_sha256, actual_sha256, etag, last_modified, size, status, last_error, created_at, updated_at)
-                VALUES(?,?,?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(url, dest) DO UPDATE SET expected_sha256=excluded.expected_sha256, actual_sha256=excluded.actual_sha256, etag=excluded.etag, last_modified=excluded.last_modified, size=excluded.size, status=excluded.status, last_error=excluded.last_error, updated_at=?`)
+	                VALUES(?,?,?,?,?,?,?,?,?,?,?)
+	                ON CONFLICT(url, dest) DO UPDATE SET expected_sha256=excluded.expected_sha256, actual_sha256=excluded.actual_sha256, etag=excluded.etag, last_modified=excluded.last_modified, size=excluded.size, status=excluded.status, last_error=excluded.last_error, updated_at=?`)
 	if err != nil {
 		return err
 	}
@@ -99,18 +99,24 @@ func (db *DB) prepareStatements() error {
 		return err
 	}
 	db.stmtListDownloads, err = db.SQL.Prepare(`SELECT url, dest,
-    COALESCE(expected_sha256, ''),
-    COALESCE(actual_sha256, ''),
-    COALESCE(etag, ''),
-    COALESCE(last_modified, ''),
-    COALESCE(size, 0),
-    COALESCE(status, ''),
-    COALESCE(retries, 0),
-    created_at,
-    updated_at,
-    COALESCE(last_error, '')
-  FROM downloads
-  ORDER BY updated_at DESC`)
+	    COALESCE(expected_sha256, ''),
+	    COALESCE(actual_sha256, ''),
+	    COALESCE(etag, ''),
+	    COALESCE(last_modified, ''),
+	    COALESCE(size, 0),
+	    COALESCE(status, ''),
+	    COALESCE(retries, 0),
+	    created_at,
+	    updated_at,
+	    COALESCE(last_error, '')
+	  FROM downloads
+	  ORDER BY updated_at DESC`)
+	return err
+}
+
+// UpdateDownloadStatus updates only status and last_error, preserving other fields.
+func (db *DB) UpdateDownloadStatus(url, dest, status, lastError string) error {
+	_, err := db.SQL.Exec(`UPDATE downloads SET status=?, last_error=?, updated_at=strftime('%s','now') WHERE url=? AND dest=?`, status, lastError, url, dest)
 	return err
 }
 

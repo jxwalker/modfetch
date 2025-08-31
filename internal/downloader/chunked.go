@@ -492,11 +492,17 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 				if maxb <= 0 { maxb = 30000 }
 				wait = time.Duration(min)*time.Millisecond + time.Duration(rand.Intn(maxb-min+1))*time.Millisecond
 			}
+			// Log and set DB status to hold while sleeping due to rate limiting
+			secs := int(wait.Seconds() + 0.5)
+			msg := fmt.Sprintf("rate limited: waiting %ds (Retry-After)", secs)
+			e.log.WarnfThrottled(fmt.Sprintf("rl:%s|%s", url, destPath), 2*time.Second, msg)
+			_ = e.st.UpdateDownloadStatus(url, destPath, "hold", msg)
 			select {
 			case <-ctx.Done():
 				return "", ctx.Err()
 			case <-time.After(wait):
 			}
+			_ = e.st.UpdateDownloadStatus(url, destPath, "running", "")
 			continue
 		}
 		// default backoff
@@ -645,11 +651,16 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 			if capSec <= 0 { capSec = 600 }
 			capDur := time.Duration(capSec) * time.Second
 			if wait > 0 && wait <= capDur {
+				secs := int(wait.Seconds() + 0.5)
+				msg := fmt.Sprintf("rate limited: waiting %ds (Retry-After)", secs)
+				e.log.WarnfThrottled(fmt.Sprintf("rl:%s|%s", url, destPath), 2*time.Second, msg)
+				_ = e.st.UpdateDownloadStatus(url, destPath, "hold", msg)
 				select {
 				case <-ctx.Done():
 					return "", "", ctx.Err()
 				case <-time.After(wait):
 				}
+				_ = e.st.UpdateDownloadStatus(url, destPath, "running", "")
 				continue
 			}
 		}
