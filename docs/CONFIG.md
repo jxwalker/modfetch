@@ -32,6 +32,8 @@ Quick start: interactive wizard
 - `placement`
   - `apps`: map of app names → base + relative paths
   - `mapping`: artifact type → list of targets (app/path_key)
+- `classifier`
+  - `rules`: list of regex → type entries evaluated before built-in detection
 - `logging`
   - `level`, `format`, `file`: path and rotation
 - `metrics`
@@ -78,6 +80,23 @@ placement:
           path_key: lora
         - app: a1111
           path_key: lora
+```
+
+
+## Classifier overrides
+
+`classifier.rules` lets you override artifact type detection. Each rule provides a
+regular expression and the type to return when the pattern matches the file's
+basename. Rules are evaluated before built-in heuristics, allowing you to
+override or extend detection.
+
+Example:
+
+```yaml
+classifier:
+  rules:
+    - regex: "^special.*\.bin$"
+      type: "llm.gguf"
 ```
 
 

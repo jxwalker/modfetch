@@ -88,6 +88,10 @@ placement:
       targets:
         - app: "vllm"
           path_key: "models"
+classifier:
+  rules:
+    - regex: "^special"
+      type: "sd.lora"
 
 logging:
   level: "info"
