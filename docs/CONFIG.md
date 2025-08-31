@@ -29,6 +29,8 @@ Quick start: interactive wizard
 - `sources`
   - `huggingface`: `enabled`, `token_env`
   - `civitai`: `enabled`, `token_env`
+- `resolver`
+  - `cache_ttl_hours`: Hours to keep resolver results before re-querying (default 24)
 - `placement`
   - `apps`: map of app names → base + relative paths
   - `mapping`: artifact type → list of targets (app/path_key)
@@ -47,8 +49,13 @@ See `assets/sample-config/config.example.yml` for a full example.
 ## Tokens / environment variables
 - Set in environment, not in YAML:
   - `HF_TOKEN`: Hugging Face token (Bearer), used when sources.huggingface.enabled is true
-  - `CIVITAI_TOKEN`: CivitAI token (Bearer), used when sources.civitai.enabled is true
+- `CIVITAI_TOKEN`: CivitAI token (Bearer), used when sources.civitai.enabled is true
 - Do not print secrets back to the terminal; export them in your shell profile or a secure env file
+
+## Resolver cache
+- Resolved URIs are cached in `resolver-cache.json` under `data_root`.
+- Entries expire after `resolver.cache_ttl_hours` (default 24); 0 disables caching.
+- Cache entries are refreshed on 404 responses or when expired.
 
 ## Placement mapping
 - Map artifact types to target apps/paths. Common types:

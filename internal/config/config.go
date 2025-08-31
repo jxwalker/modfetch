@@ -19,6 +19,7 @@ type Config struct {
 	Network     Network          `yaml:"network"`
 	Concurrency Concurrency      `yaml:"concurrency"`
 	Sources     Sources          `yaml:"sources"`
+	Resolver    ResolverConf     `yaml:"resolver"`
 	Placement   Placement        `yaml:"placement"`
 	Classifier  ClassifierConfig `yaml:"classifier"`
 	Logging     Logging          `yaml:"logging"`
@@ -45,6 +46,10 @@ type Network struct {
 	MaxRedirects   int    `yaml:"max_redirects"`
 	TLSVerify      bool   `yaml:"tls_verify"`
 	UserAgent      string `yaml:"user_agent"`
+}
+
+type ResolverConf struct {
+	CacheTTLHours int `yaml:"cache_ttl_hours"`
 }
 
 type Concurrency struct {
@@ -210,6 +215,9 @@ func (c *Config) Validate() error {
 	}
 	if c.General.DownloadRoot == "" {
 		return errors.New("general.download_root is required")
+	}
+	if c.Resolver.CacheTTLHours < 0 {
+		return fmt.Errorf("resolver.cache_ttl_hours must be >= 0")
 	}
 	lvl := stringsLower(c.Logging.Level)
 	switch lvl {
