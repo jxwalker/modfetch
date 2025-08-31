@@ -65,7 +65,6 @@ jobs:
           name: ${{ github.ref_name }}
           draft: false
           prerelease: false
-          files: |
-            dist/**/modfetch_*
-            dist/**/modfetch_*.sha256
+          # Single glob to avoid double-matching .sha256 files which caused duplicate uploads
+          files: dist/**/modfetch_*
 
