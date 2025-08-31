@@ -865,6 +865,11 @@ func (m *Model) renderInspector() string {
 	if strings.EqualFold(strings.TrimSpace(r.Status), "complete") && r.CreatedAt > 0 && r.UpdatedAt >= r.CreatedAt {
 		dur := time.Duration((r.UpdatedAt - r.CreatedAt)) * time.Second
 		sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Duration:"), dur.String()))
+		// Start/End wall times
+		startAt := time.Unix(r.CreatedAt, 0).Local().Format("2006-01-02 15:04:05")
+		endAt := time.Unix(r.UpdatedAt, 0).Local().Format("2006-01-02 15:04:05")
+		sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Started:"), startAt))
+		sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Finished:"), endAt))
 		if r.Size > 0 && dur > 0 {
 			avg := float64(r.Size) / dur.Seconds()
 			sb.WriteString(fmt.Sprintf("%s %s/s\n", m.th.label.Render("Avg Speed:"), humanize.Bytes(uint64(avg))))
@@ -1597,6 +1602,17 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer "+tok }
 				}
 			}
+		}
+		// Merge any pre-inserted row under the original URL into the resolved URL key to avoid duplicates
+		origKey := urlStr+"|"+dest
+		resKey := resolved+"|"+dest
+		if origKey != resKey {
+			// Mirror placement overrides
+			if m.autoPlace[origKey] { m.autoPlace[resKey] = true; delete(m.autoPlace, origKey) }
+			if t := m.placeType[origKey]; strings.TrimSpace(t) != "" { m.placeType[resKey] = t; delete(m.placeType, origKey) }
+			// Remove the old pending row and create/refresh the resolved one as pending
+			_ = m.st.DeleteDownload(urlStr, dest)
+			_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "pending"})
 		}
 		if start {
 			// Quick reachability probe; if network-unreachable, put job on hold and do not start download
