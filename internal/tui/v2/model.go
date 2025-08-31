@@ -129,6 +129,8 @@ type Model struct {
 	rateHist map[string][]float64
 	// cache for hostnames
 	hostCache map[string]string
+	// transient retrying indicator per key
+	retrying map[string]time.Time
 	err   error
 	// token/env status
 	hfTokenSet bool
@@ -165,6 +167,7 @@ m := &Model{
 		build: strings.TrimSpace(version),
 		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
 		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{}, hostCache: map[string]string{},
+		retrying: map[string]time.Time{},
 		tickEvery: refresh,
 		columnMode: mode,
 		placeType: map[string]string{}, autoPlace: map[string]bool{},
@@ -361,9 +364,11 @@ case "y": // retry (batch-aware)
 			targets := m.selectionOrCurrent()
 			if len(targets) == 0 { return m, nil }
 			cmds := make([]tea.Cmd, 0, len(targets))
+			now := time.Now()
 			for _, r := range targets {
 				ctx, cancel := context.WithCancel(context.Background())
 				m.running[keyFor(r)] = cancel
+				m.retrying[keyFor(r)] = now
 				cmds = append(cmds, m.startDownloadCmdCtx(ctx, r.URL, r.Dest))
 			}
 			m.addToast(fmt.Sprintf("retrying %d item(s)…", len(targets)))
@@ -796,6 +801,15 @@ if m.isCompact() {
 		eta := m.etaCache[keyFor(r)]
 		thr := m.renderSparkline(keyFor(r))
 		sel := " "; if m.selectedKeys[keyFor(r)] { sel = "*" }
+		// status label with transient retrying overlay
+		statusLabel := r.Status
+		if ts, ok := m.retrying[keyFor(r)]; ok {
+			if time.Since(ts) < 4*time.Second {
+				statusLabel = "retrying"
+			} else {
+				delete(m.retrying, keyFor(r))
+			}
+		}
 		last := r.Dest
 		if m.columnMode == "url" { last = logging.SanitizeURL(r.URL) } else if m.columnMode == "host" { last = hostOf(r.URL) }
 		src := hostOf(r.URL)
@@ -804,9 +818,9 @@ if m.isCompact() {
 		last = truncateMiddle(last, lw)
 		var line string
 if m.isCompact() {
-			line = fmt.Sprintf("%-1s %-8s %-3d  %-16s  %-4s  %-12s  %-8s  %s", sel, r.Status, r.Retries, prog, pct, src, eta, last)
+			line = fmt.Sprintf("%-1s %-8s %-3d  %-16s  %-4s  %-12s  %-8s  %s", sel, statusLabel, r.Retries, prog, pct, src, eta, last)
 		} else {
-			line = fmt.Sprintf("%-1s %-8s %-3d  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %s", sel, r.Status, r.Retries, prog, pct, humanize.Bytes(uint64(rate))+"/s", thr, src, eta, last)
+			line = fmt.Sprintf("%-1s %-8s %-3d  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %s", sel, statusLabel, r.Retries, prog, pct, humanize.Bytes(uint64(rate))+"/s", thr, src, eta, last)
 		}
 		if i == m.selected { line = m.th.rowSelected.Render(line) }
 		sb.WriteString(line+"\n")
@@ -840,9 +854,22 @@ func (m *Model) renderInspector() string {
 	sb.WriteString(fmt.Sprintf("%s %s/s\n", m.th.label.Render("Speed:"), humanize.Bytes(uint64(rate))))
 	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("ETA:"), eta))
 	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Throughput:"), m.renderSparkline(keyFor(r))))
-	// Retries and status
+	// Retries and status (with transient retrying overlay)
+	statusLabel := r.Status
+	if ts, ok := m.retrying[keyFor(r)]; ok {
+		if time.Since(ts) < 4*time.Second { statusLabel = "retrying" } else { delete(m.retrying, keyFor(r)) }
+	}
 	sb.WriteString(fmt.Sprintf("%s %d\n", m.th.label.Render("Retries:"), r.Retries))
-	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Status:"), r.Status))
+	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Status:"), statusLabel))
+	// Completed job duration and average speed
+	if strings.EqualFold(strings.TrimSpace(r.Status), "complete") && r.CreatedAt > 0 && r.UpdatedAt >= r.CreatedAt {
+		dur := time.Duration((r.UpdatedAt - r.CreatedAt)) * time.Second
+		sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Duration:"), dur.String()))
+		if r.Size > 0 && dur > 0 {
+			avg := float64(r.Size) / dur.Seconds()
+			sb.WriteString(fmt.Sprintf("%s %s/s\n", m.th.label.Render("Avg Speed:"), humanize.Bytes(uint64(avg))))
+		}
+	}
 	// Verification details
 	if strings.TrimSpace(r.ExpectedSHA256) != "" || strings.TrimSpace(r.ActualSHA256) != "" {
 		sb.WriteString(m.th.label.Render("SHA256:"))

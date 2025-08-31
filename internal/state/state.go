@@ -71,6 +71,7 @@ type DownloadRow struct {
 	Size           int64
 	Status         string
 	Retries        int64
+	CreatedAt      int64
 	UpdatedAt      int64
 	LastError      string
 }
@@ -107,6 +108,7 @@ rows, err := db.SQL.Query(`SELECT url, dest,
     COALESCE(size, 0),
     COALESCE(status, ''),
     COALESCE(retries, 0),
+    created_at,
     updated_at,
     COALESCE(last_error, '')
   FROM downloads
@@ -116,7 +118,7 @@ rows, err := db.SQL.Query(`SELECT url, dest,
 	var out []DownloadRow
 	for rows.Next() {
 		var r DownloadRow
-		if err := rows.Scan(&r.URL, &r.Dest, &r.ExpectedSHA256, &r.ActualSHA256, &r.ETag, &r.LastModified, &r.Size, &r.Status, &r.Retries, &r.UpdatedAt, &r.LastError); err != nil { return nil, err }
+		if err := rows.Scan(&r.URL, &r.Dest, &r.ExpectedSHA256, &r.ActualSHA256, &r.ETag, &r.LastModified, &r.Size, &r.Status, &r.Retries, &r.CreatedAt, &r.UpdatedAt, &r.LastError); err != nil { return nil, err }
 		out = append(out, r)
 	}
 	return out, rows.Err()
