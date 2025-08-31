@@ -114,6 +114,8 @@ type Model struct {
 	autoPlace map[string]bool
 	// Normalization note (shown after URL entry)
 	newNormNote string
+	// Types derived from config placement mapping (for hints)
+	configTypes []string
 
 	themeIndex int
 	columnMode string // dest|url|host
@@ -167,6 +169,7 @@ m := &Model{
 		columnMode: mode,
 		placeType: map[string]string{}, autoPlace: map[string]bool{},
 	}
+	m.configTypes = computeTypesFromConfig(cfg)
 	// Load UI state overrides if present
 	m.loadUIState()
 	return m
@@ -626,6 +629,27 @@ func (m *Model) renderNewJobModal() string {
 		"4) Destination path",
 	}
 	sb.WriteString(m.th.label.Render(strings.Join(steps, " • "))+"\n\n")
+	// Step-specific helper text
+	switch m.newStep {
+	case 1:
+sb.WriteString(m.th.label.Render("Enter an HTTP URL or a resolver URI (hf://owner/repo/path?rev=..., civitai://model/ID?version=...).")+"\n")
+	case 2:
+		// Show available types from config mapping
+		if len(m.configTypes) > 0 {
+sb.WriteString(m.th.label.Render("Types from your config: "+strings.Join(m.configTypes, ", "))+"\n")
+		}
+sb.WriteString(m.th.label.Render("Type helps choose placement directories. Leave blank to skip placement or if unsure.")+"\n")
+	case 3:
+sb.WriteString(m.th.label.Render("y: Place into mapped app directories after download • n: Save only to download_root.")+"\n")
+	case 4:
+		if m.newAutoPlace {
+			cand := strings.TrimSpace(m.newAutoSuggested)
+if cand != "" { sb.WriteString(m.th.label.Render("Will place into: "+cand)+"\n") }
+sb.WriteString(m.th.label.Render("Edit the destination to override.")+"\n")
+		} else {
+sb.WriteString(m.th.label.Render("Choose where to save the file. You can place later via 'place'.")+"\n")
+		}
+	}
 	cur := ""
 	if m.newStep == 1 { cur = "Enter URL or resolver URI" }
 	if m.newStep == 2 { cur = "Artifact type (optional)" }
@@ -1109,6 +1133,21 @@ func (m *Model) resolveMetaCmd(raw string) tea.Cmd {
 		}
 		return metaMsg{url: raw}
 	}
+}
+
+func computeTypesFromConfig(cfg *config.Config) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, r := range cfg.Placement.Mapping {
+		t := strings.TrimSpace(r.Match)
+		if t == "" { continue }
+		if !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func truncateMiddle(s string, max int) string {
