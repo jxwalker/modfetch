@@ -7,6 +7,8 @@ STATE_DIR=".pr_monitor"
 BACKLOG="docs/backlog/pr-${PR_NUMBER}.md"
 AUTO_COMMIT="${AUTO_COMMIT:-1}"
 POST_COMMENT="${POST_COMMENT:-1}"
+AUTHORS="${AUTHORS:-coderabbitai,codex}"
+AUTHORS_PATTERN="$(printf '%s' "$AUTHORS" | sed 's/,/|/g')"
 
 # Ensure we operate from the repo root
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -16,11 +18,15 @@ mkdir -p "$STATE_DIR" "$(dirname "$BACKLOG")"
 LAST_COUNT_FILE="${STATE_DIR}/pr_${PR_NUMBER}_coderabbit_count.txt"
 
 get_count() {
-  gh pr view "$PR_NUMBER" --json comments --jq '((.comments | map(select(.author.login=="coderabbitai")) | length) // 0)' 2>/dev/null || echo "0"
+  gh pr view "$PR_NUMBER" --json comments 2>/dev/null | jq -r --arg re "$AUTHORS_PATTERN" '((.comments | map(select(.author.login|test($re))) | length) // 0)' || echo "0"
 }
 
 get_last_body() {
-  gh pr view "$PR_NUMBER" --json comments --jq '((.comments | map(select(.author.login=="coderabbitai")) | last | .body) // "")' 2>/dev/null || echo ""
+  gh pr view "$PR_NUMBER" --json comments 2>/dev/null | jq -r --arg re "$AUTHORS_PATTERN" '((.comments | map(select(.author.login|test($re))) | last | .body) // "")' || echo ""
+}
+
+get_last_author() {
+  gh pr view "$PR_NUMBER" --json comments 2>/dev/null | jq -r --arg re "$AUTHORS_PATTERN" '((.comments | map(select(.author.login|test($re))) | last | .author.login) // "")' || echo ""
 }
 
 extract_tasks() {
@@ -54,7 +60,7 @@ post_summary_comment() {
 init_count="$(get_count || echo 0)"
 echo "$init_count" > "$LAST_COUNT_FILE"
 
-echo "Polling PR #$PR_NUMBER for CodeRabbit comments every $INTERVAL seconds; writing to $BACKLOG" >&2
+echo "Polling PR #$PR_NUMBER for comments by [$AUTHORS] every $INTERVAL seconds; writing to $BACKLOG" >&2
 
 while true; do
   sleep "$INTERVAL"
@@ -63,11 +69,12 @@ while true; do
   if [[ "$new_count" =~ ^[0-9]+$ ]] && [[ "$last_count" =~ ^[0-9]+$ ]]; then
     if (( new_count > last_count )); then
       body="$(get_last_body)"
+      author="$(get_last_author)"
       ts="$(date -u +"%Y-%m-%d %H:%M:%SZ")"
       tasks_block="$(printf "%s\n" "$body" | extract_tasks || true)"
       {
         echo ""
-        echo "## $ts CodeRabbit"
+        echo "## $ts $author"
         echo ""
         echo "Raw comment excerpt:"
         echo ""
@@ -95,7 +102,7 @@ while true; do
 
       # Post a summary comment to the PR
       if [[ "$POST_COMMENT" == "1" ]]; then
-        post_summary_comment "$ts" "$tasks_block"
+post_summary_comment "$ts" "$tasks_block"
       fi
 
       echo "$new_count" > "$LAST_COUNT_FILE"
