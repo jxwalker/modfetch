@@ -60,6 +60,12 @@ Per-row
 - D (delete staged data for the row)
 - Space (toggle selection), A (select all), X (clear selection)
 
+## Mouse support
+
+- Click a row to select it
+- Scroll the mouse wheel to move through the list
+- In modal dialogs, click the buttons to confirm or cancel
+
 ## Starting new downloads
 
 - Press n to open the new-download modal
