@@ -73,7 +73,8 @@ Per-row
 
 ## Filtering and grouping
 
-- Press / to filter by substring (e.g., part of the filename or URL)
+ - Press / to filter using fuzzy search across URL and destination
+   - Results are ranked by best match and highlighted in the table
 - Press g to toggle grouping by status
 - Sorting works with or without grouping
 
