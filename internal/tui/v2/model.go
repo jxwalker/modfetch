@@ -249,6 +249,8 @@ case tea.KeyMsg:
 						m.addToast("dest not writable: "+err.Error())
 						return m, nil
 					}
+					// Make the job visible immediately as pending before background download begins
+					_ = m.st.UpsertDownload(state.DownloadRow{URL: urlStr, Dest: dest, Status: "pending"})
 					cmd := m.startDownloadCmd(urlStr, dest)
 					key := urlStr+"|"+dest
 					if strings.TrimSpace(m.newType) != "" { m.placeType[key] = m.newType }
