@@ -316,9 +316,9 @@ func handleDownload(ctx context.Context, args []string) error {
 						// If still no destCandidate, try probing to compute a safe filename and reserve it
 						if destCandidate == "" {
 							meta, _ := downloader.ProbeURL(gctx, c, resolvedURL, headers)
-							base := meta.Filename
-							if strings.TrimSpace(base) == "" {
-								if meta.FinalURL != "" { base = filepath.Base(meta.FinalURL) } else { base = filepath.Base(resolvedURL) }
+							base := strings.TrimSpace(meta.Filename)
+							if base == "" {
+								if meta.FinalURL != "" { base = util.URLPathBase(meta.FinalURL) } else { base = util.URLPathBase(resolvedURL) }
 							}
 							p, err := reserveUnique(c.General.DownloadRoot, base, "")
 							if err != nil { return fmt.Errorf("job %d dest reserve: %v", it.idx, err) }
@@ -476,7 +476,8 @@ func handleDownload(ctx context.Context, args []string) error {
 			}
 		}
 		if candDest == "" {
-			candDest = filepath.Join(c.General.DownloadRoot, filepath.Base(resolvedURL))
+			base := util.URLPathBase(resolvedURL)
+			candDest = filepath.Join(c.General.DownloadRoot, util.SafeFileName(base))
 		}
 		stopProg = startProgressLoop(ctx, st, c, resolvedURL, candDest)
 	}

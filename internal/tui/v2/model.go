@@ -26,6 +26,7 @@ import (
 	"modfetch/internal/placer"
 	"modfetch/internal/resolver"
 	"modfetch/internal/state"
+	"modfetch/internal/util"
 )
 
 type Theme struct {
@@ -1475,7 +1476,7 @@ func (m *Model) immediateDestCandidate(urlStr string) string {
 			if base == "" {
 				base = "download"
 			}
-			return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(base))
+return filepath.Join(m.cfg.General.DownloadRoot, util.SafeFileName(base))
 		}
 	}
 	// HTTP(S)
@@ -1487,10 +1488,10 @@ func (m *Model) immediateDestCandidate(urlStr string) string {
 				if len(parts) >= 5 && parts[2] == "blob" {
 					base := filepath.Base(strings.Join(parts[4:], "/"))
 					if base != "" {
-						return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(base))
+						return filepath.Join(m.cfg.General.DownloadRoot, util.SafeFileName(base))
 					}
 				}
-				return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(filepath.Base(u.Path)))
+				return filepath.Join(m.cfg.General.DownloadRoot, util.SafeFileName(filepath.Base(u.Path)))
 			}
 		}
 		if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
@@ -1499,23 +1500,23 @@ func (m *Model) immediateDestCandidate(urlStr string) string {
 			if len(parts) >= 2 {
 				id := parts[1]
 				if id != "" {
-					return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(id))
+					return filepath.Join(m.cfg.General.DownloadRoot, util.SafeFileName(id))
 				}
 			}
 		}
 		// Fallback to path base
-		base := filepath.Base(s)
+		base := util.URLPathBase(s)
 		if base == "" || base == "/" || base == "." {
 			base = "download"
 		}
-		return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(base))
+		return filepath.Join(m.cfg.General.DownloadRoot, util.SafeFileName(base))
 	}
 	// raw fallback
-	base := filepath.Base(s)
+	base := util.URLPathBase(s)
 	if base == "" || base == "/" || base == "." {
 		base = "download"
 	}
-	return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(base))
+	return filepath.Join(m.cfg.General.DownloadRoot, util.SafeFileName(base))
 }
 
 // Background suggestion using resolver (may perform network I/O)
@@ -1528,7 +1529,7 @@ func (m *Model) suggestDestCmd(urlStr string) tea.Cmd {
 				h := strings.ToLower(u.Hostname())
 				if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/api/download/") {
 					if name := m.headFilename(urlStr); strings.TrimSpace(name) != "" {
-						name = utilSafe(name)
+name = util.SafeFileName(name)
 						d = filepath.Join(m.cfg.General.DownloadRoot, name)
 					}
 				}
@@ -1605,7 +1606,7 @@ func (m *Model) computePlacementSuggestionImmediate(urlStr, atype string) string
 	if strings.TrimSpace(base) == "" {
 		base = "download"
 	}
-	return filepath.Join(dirs[0], utilSafe(base))
+return filepath.Join(dirs[0], util.SafeFileName(base))
 }
 
 func (m *Model) inferExt() string {
@@ -1668,7 +1669,7 @@ func (m *Model) suggestPlacementCmd(urlStr, atype string) tea.Cmd {
 		if strings.TrimSpace(base) == "" {
 			base = "download"
 		}
-		d := filepath.Join(dirs[0], utilSafe(base))
+d := filepath.Join(dirs[0], util.SafeFileName(base))
 		return destSuggestMsg{url: urlStr, dest: d}
 	}
 }
@@ -2036,9 +2037,9 @@ func (m *Model) computeDefaultDest(urlStr string) string {
 		if res, err := resolver.Resolve(ctx, u, m.cfg); err == nil {
 			name := res.SuggestedFilename
 			if strings.TrimSpace(name) == "" {
-				name = filepath.Base(res.URL)
+			name = util.URLPathBase(res.URL)
 			}
-			name = utilSafe(name)
+			name = util.SafeFileName(name)
 			return filepath.Join(m.cfg.General.DownloadRoot, name)
 		}
 	}
@@ -2064,7 +2065,7 @@ func (m *Model) computeDefaultDest(urlStr string) string {
 						if strings.TrimSpace(name) == "" {
 							name = filepath.Base(res.URL)
 						}
-						name = utilSafe(name)
+						name = util.SafeFileName(name)
 						return filepath.Join(m.cfg.General.DownloadRoot, name)
 					}
 				}
@@ -2078,19 +2079,19 @@ func (m *Model) computeDefaultDest(urlStr string) string {
 					filePath := strings.Join(parts[4:], "/")
 					hf := "hf://" + owner + "/" + repo + "/" + filePath + "?rev=" + rev
 					if res, err := resolver.Resolve(ctx, hf, m.cfg); err == nil {
-						name := filepath.Base(res.URL)
-						name = utilSafe(name)
+						name := util.URLPathBase(res.URL)
+						name = util.SafeFileName(name)
 						return filepath.Join(m.cfg.General.DownloadRoot, name)
 					}
 				}
 			}
 		}
 	}
-	base := filepath.Base(u)
+	base := util.URLPathBase(u)
 	if base == "" || base == "/" || base == "." {
 		base = "download"
 	}
-	return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(base))
+	return filepath.Join(m.cfg.General.DownloadRoot, util.SafeFileName(base))
 }
 
 func (m *Model) importBatchFile(path string) tea.Cmd {
@@ -2148,16 +2149,6 @@ func (m *Model) importBatchFile(path string) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// utilSafe mirrors util.SafeFileName without import cycle here
-func utilSafe(name string) string {
-	name = strings.TrimSpace(name)
-	name = strings.ReplaceAll(name, "\\", "_")
-	name = strings.ReplaceAll(name, "/", "_")
-	if name == "" {
-		return "download"
-	}
-	return name
-}
 
 func (m *Model) startDownloadCmd(urlStr, dest string) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
