@@ -321,6 +321,8 @@ case "T": // theme cycle presets
 		case "X": // clear selection
 			m.selectedKeys = map[string]bool{}
 			return m, nil
+		case "r": // start selected (alias of retry)
+			fallthrough
 case "y": // retry (batch-aware)
 			targets := m.selectionOrCurrent()
 			if len(targets) == 0 { return m, nil }
@@ -354,6 +356,19 @@ case "y": // retry (batch-aware)
 			rows := m.selectionOrCurrent()
 			if len(rows) > 0 { _ = copyToClipboard(rows[0].URL) }
 			return m, nil
+		case "D": // delete selected rows from DB (even if planning)
+			rows := m.selectionOrCurrent()
+			if len(rows) == 0 { return m, nil }
+			deleted := 0
+			for _, r := range rows {
+				key := keyFor(r)
+				if cancel, ok := m.running[key]; ok { cancel(); delete(m.running, key) }
+				_ = m.st.DeleteChunks(r.URL, r.Dest)
+				if err := m.st.DeleteDownload(r.URL, r.Dest); err == nil { deleted++ }
+				delete(m.selectedKeys, key)
+			}
+			if deleted > 0 { m.addToast(fmt.Sprintf("deleted %d", deleted)) }
+			return m, m.refresh()
 		}
 	case tickMsg:
 		return m, m.refresh()
@@ -450,7 +465,7 @@ titleBar := m.th.border.Width(m.w-2).Render(lipgloss.JoinHorizontal(lipgloss.Top
 	// Footer with filter bar
 	filterBar := ""
 	if m.filterOn { filterBar = "Filter: "+ m.filterInput.View() }
-footer := m.th.border.Width(m.w-2).Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • t last col URL/DEST/HOST • v compact • i inspector • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
+footer := m.th.border.Width(m.w-2).Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y/r start • p cancel • D delete • O open • / filter • s/e sort • o clear • g group host • t last col URL/DEST/HOST • v compact • i inspector • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
 
 	parts := []string{titleBar, topRow, bottom}
 	if help != "" { parts = append(parts, help) }
@@ -538,7 +553,7 @@ func (m *Model) renderTopLeftHints() string {
 		"Filter: / enter • Enter apply • Esc clear",
 		"Sort: s speed • e ETA • o clear | Group: g host",
 		"Select: Space toggle • A all • X clear",
-		"Actions: y retry • p cancel | Open: O • Copy: C/U",
+		"Actions: y/r start • p cancel • D delete | Open: O • Copy: C/U",
 		"View: t column • v compact • i inspector • T theme • H toasts • ? help • q quit",
 	}
 	return strings.Join(lines, "\n")
@@ -1025,7 +1040,7 @@ func (m *Model) renderHelp() string {
 	sb.WriteString("Toasts: H toggle drawer\n")
 	sb.WriteString("Select: Space toggle • A select all • X clear selection\n")
 sb.WriteString("Columns: t cycle URL/DEST/HOST • v compact view\n")
-	sb.WriteString("Actions: y retry • p cancel • O open • C copy path • U copy URL\n")
+	sb.WriteString("Actions: y/r start • p cancel • D delete • O open • C copy path • U copy URL\n")
 	sb.WriteString("Quit: q\n")
 	return sb.String()
 }
