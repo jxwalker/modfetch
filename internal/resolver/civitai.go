@@ -117,6 +117,7 @@ func (c *CivitAI) Resolve(ctx context.Context, uri string, cfg *config.Config) (
 		}
 	}
 	suggested = util.SafeFileName(suggested)
+	suggested = slugFilename(suggested)
 
 return &Resolved{URL: download, Headers: headers, ModelName: modelName, VersionName: verName, VersionID: verID, FileName: fileName, FileType: files[pick].Type, SuggestedFilename: suggested}, nil
 }
@@ -195,5 +196,30 @@ func normalizeAlphaNum(s string) string {
 		}
 	}
 	return bld.String()
+}
+
+// slugFilename converts a filename into a hyphenated form: sequences of non-alphanumeric
+// characters (excluding the dot before extension) are collapsed into single '-'.
+// The extension casing and base casing are preserved.
+func slugFilename(name string) string {
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	var b strings.Builder
+	b.Grow(len(base))
+	prevHyphen := false
+	for _, r := range base {
+		if (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {
+			b.WriteRune(r)
+			prevHyphen = false
+		} else {
+			if !prevHyphen {
+				b.WriteRune('-')
+				prevHyphen = true
+			}
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if out == "" { out = "download" }
+	return out + ext
 }
 
