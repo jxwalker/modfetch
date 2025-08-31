@@ -168,10 +168,12 @@ Contributing
   - [ ] Manual smoke test completed for at least one public URL
 - Release process (maintainers):
   - Tag: git tag -a vX.Y.Z -m "modfetch vX.Y.Z" && git push origin vX.Y.Z
-  - Build artifacts: make release-dist (includes Linux/macOS binaries)
-  - macOS Universal: make macos-universal && make checksums
-  - Upload: gh release upload vX.Y.Z dist/* --clobber
+  - CI will build and publish artifacts automatically for:
+    - Linux: amd64, arm64
+    - macOS: amd64, arm64, universal (fat) binary
+    - Checksums (.sha256) for all artifacts
   - See CHANGELOG.md for release notes
+  - Optional (local): `make release-dist` and `make macos-universal` if you want to reproduce artifacts locally
 
 See CONTRIBUTING.md for full guidelines.
 
