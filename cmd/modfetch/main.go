@@ -8,8 +8,10 @@ import (
 	"fmt"
 	neturl "net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -29,13 +31,15 @@ import (
 var version = "dev"
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	if err := run(ctx, os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-func run(args []string) error {
+func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		usage()
 		return errors.New("no command provided")
@@ -45,28 +49,28 @@ func run(args []string) error {
 	cmd := args[0]
 	switch cmd {
 	case "config":
-		return handleConfig(args[1:])
+		return handleConfig(ctx, args[1:])
 	case "status":
-		return handleStatus(args[1:])
+		return handleStatus(ctx, args[1:])
 	case "download":
-		return handleDownload(args[1:])
+		return handleDownload(ctx, args[1:])
 	case "place":
-		return handlePlace(args[1:])
+		return handlePlace(ctx, args[1:])
 	case "verify":
-		return handleVerify(args[1:])
+		return handleVerify(ctx, args[1:])
 	case "tui":
-		return handleTUI(args[1:])
+		return handleTUI(ctx, args[1:])
 	case "version":
 		fmt.Println(version)
 		return nil
 	case "completion":
-		return handleCompletion(args[1:])
+		return handleCompletion(ctx, args[1:])
 	case "hostcaps":
-		return handleHostCaps(args[1:])
+		return handleHostCaps(ctx, args[1:])
 	case "clean":
-		return handleClean(args[1:])
+		return handleClean(ctx, args[1:])
 	case "batch":
-		return handleBatch(args[1:])
+		return handleBatch(ctx, args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -105,7 +109,7 @@ Flags:
 `))
 }
 
-func handleStatus(args []string) error {
+func handleStatus(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
@@ -150,7 +154,7 @@ func handleStatus(args []string) error {
 	return nil
 }
 
-func handleConfig(args []string) error {
+func handleConfig(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New("config subcommand required: validate | print")
 	}
@@ -168,13 +172,13 @@ func handleConfig(args []string) error {
 			return enc.Encode(c)
 		})
 	case "wizard":
-		return handleConfigWizard(args[1:])
+		return handleConfigWizard(ctx, args[1:])
 	default:
 		return fmt.Errorf("unknown config subcommand: %s", sub)
 	}
 }
 
-func handleDownload(args []string) error {
+func handleDownload(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("download", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
@@ -215,7 +219,6 @@ func handleDownload(args []string) error {
 		return err
 	}
 	defer st.SQL.Close()
-	ctx := context.Background()
 	startWall := time.Now()
 	// Metrics manager (Prometheus textfile), if enabled
 	m := metrics.New(c)
@@ -436,7 +439,7 @@ func handleDownload(args []string) error {
 	return nil
 }
 
-func handlePlace(args []string) error {
+func handlePlace(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("place", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
@@ -467,7 +470,7 @@ func handlePlace(args []string) error {
 	if *dryRun {
 		atype := *artType
 		if atype == "" {
-			atype = classifier.Detect(c, *filePath)
+			atype = classifier.Detect(*filePath)
 		}
 		targets, err := placer.ComputeTargets(c, atype)
 		if err != nil {
@@ -489,7 +492,7 @@ func handlePlace(args []string) error {
 	return nil
 }
 
-func handleClean(args []string) error {
+func handleClean(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("clean", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
