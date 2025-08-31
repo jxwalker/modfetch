@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.1 — 2025-08-31
+
+Maintenance
+- CI: Fix release workflow to avoid duplicate asset uploads that caused a softprops/action-gh-release error. No code changes since v0.3.0.
+
 ## v0.3.0 — 2025-08-31
 
 Highlights
