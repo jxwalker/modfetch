@@ -37,9 +37,17 @@ type Chunked struct {
 	}
 }
 
-func NewChunked(cfg *config.Config, log *logging.Logger, st *state.DB, m interface{ AddBytes(int64); IncRetries(int64); IncDownloadsSuccess(); ObserveDownloadSeconds(float64); Write() error }) *Chunked {
+func NewChunked(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
+	AddBytes(int64)
+	IncRetries(int64)
+	IncDownloadsSuccess()
+	ObserveDownloadSeconds(float64)
+	Write() error
+}) *Chunked {
 	timeout := time.Duration(cfg.Network.TimeoutSeconds) * time.Second
-	if timeout <= 0 { timeout = 60 * time.Second }
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
 	return &Chunked{cfg: cfg, log: log, st: st, client: newHTTPClient(cfg), metrics: m}
 }
 
@@ -55,9 +63,13 @@ type headInfo struct {
 func (e *Chunked) head(ctx context.Context, url string, headers map[string]string) (headInfo, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
 	req.Header.Set("User-Agent", userAgent(e.cfg))
-	for k, v := range headers { req.Header.Set(k, v) }
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := e.client.Do(req)
-	if err != nil { return headInfo{}, err }
+	if err != nil {
+		return headInfo{}, err
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		return headInfo{}, fmt.Errorf("HEAD status: %s", resp.Status)
@@ -65,21 +77,36 @@ func (e *Chunked) head(ctx context.Context, url string, headers map[string]strin
 	var h headInfo
 	h.etag = resp.Header.Get("ETag")
 	h.lastMod = resp.Header.Get("Last-Modified")
-	if cl := resp.Header.Get("Content-Length"); cl != "" { _, _ = fmt.Sscan(cl, &h.size) }
+	if cl := resp.Header.Get("Content-Length"); cl != "" {
+		_, _ = fmt.Sscan(cl, &h.size)
+	}
 	h.acceptRange = strings.Contains(strings.ToLower(resp.Header.Get("Accept-Ranges")), "bytes")
 	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
-		if fn := parseDispositionFilename(cd); fn != "" { h.filename = fn }
+		if fn := parseDispositionFilename(cd); fn != "" {
+			h.filename = fn
+		}
 	}
 	return h, nil
 }
 
 // Download orchestrates a chunked download if possible; otherwise falls back to single-stream.
 func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string, noResume bool) (string, string, error) {
-	if url == "" { return "", "", errors.New("url required") }
+	if url == "" {
+		return "", "", errors.New("url required")
+	}
 	// Ensure download root exists; we will finalize destPath after probing headers
-	if err := os.MkdirAll(e.cfg.General.DownloadRoot, 0o755); err != nil { return "", "", err }
+	if err := os.MkdirAll(e.cfg.General.DownloadRoot, 0o755); err != nil {
+		return "", "", err
+	}
 	startTime := time.Now()
-	if a, ok := e.metrics.(interface{ IncActive(int64); Write() error }); ok { a.IncActive(1); _ = a.Write(); defer func(){ a.IncActive(-1); _ = a.Write() }() }
+	if a, ok := e.metrics.(interface {
+		IncActive(int64)
+		Write() error
+	}); ok {
+		a.IncActive(1)
+		_ = a.Write()
+		defer func() { a.IncActive(-1); _ = a.Write() }()
+	}
 
 	// Host capability cache is advisory only; we always probe to avoid stale data.
 	h, err := e.head(ctx, url, headers)
@@ -117,9 +144,15 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	// If caller did not supply a destination, derive a good filename now
 	if destPath == "" {
 		var name string
-		if h.filename != "" { name = h.filename }
-		if name == "" && h.finalURL != "" { name = baseNameFromURL(h.finalURL) }
-		if name == "" { name = baseNameFromURL(url) }
+		if h.filename != "" {
+			name = h.filename
+		}
+		if name == "" && h.finalURL != "" {
+			name = baseNameFromURL(h.finalURL)
+		}
+		if name == "" {
+			name = baseNameFromURL(url)
+		}
 		name = util.SafeFileName(name)
 		destPath = filepath.Join(e.cfg.General.DownloadRoot, name)
 	}
@@ -154,38 +187,62 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	if _, err := os.Stat(part); errors.Is(err, os.ErrNotExist) {
 		if _, err2 := os.Stat(destPath); err2 == nil {
 			e.log.Warnf("dest exists; moving to staging .part for verification")
-			if err := renameOrCopy(destPath, part); err != nil { return "", "", err }
+			if err := renameOrCopy(destPath, part); err != nil {
+				return "", "", err
+			}
 		}
 	}
 
+	// Cleanup on cancellation
+	defer func() {
+		if ctx.Err() != nil {
+			_ = os.Remove(part)
+			_ = e.st.DeleteChunks(url, destPath)
+			_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "canceled"})
+		}
+	}()
 	f, err := os.OpenFile(part, os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil { return "", "", err }
+	if err != nil {
+		return "", "", err
+	}
 	defer f.Close()
 	// If starting from an empty .part, clear any stale chunk state
 	if fi, _ := os.Stat(part); fi != nil && fi.Size() == 0 {
 		_ = e.st.DeleteChunks(url, destPath)
 	}
 	if fi, _ := f.Stat(); fi.Size() != h.size {
-		if err := f.Truncate(h.size); err != nil { return "", "", err }
+		if err := f.Truncate(h.size); err != nil {
+			return "", "", err
+		}
 	}
 
 	// Plan chunks and persist state
 	chunks, err := e.st.ListChunks(url, destPath)
-	if err != nil { return "", "", err }
+	if err != nil {
+		return "", "", err
+	}
 	if len(chunks) == 0 {
 		chunkSize := int64(e.cfg.Concurrency.ChunkSizeMB) * 1024 * 1024
-		if chunkSize <= 0 { chunkSize = 8 * 1024 * 1024 }
+		if chunkSize <= 0 {
+			chunkSize = 8 * 1024 * 1024
+		}
 		var idx int
 		for start := int64(0); start < h.size; start += chunkSize {
 			end := start + chunkSize - 1
-			if end >= h.size { end = h.size - 1 }
+			if end >= h.size {
+				end = h.size - 1
+			}
 			sz := end - start + 1
 			cr := state.ChunkRow{URL: url, Dest: destPath, Index: idx, Start: start, End: end, Size: sz, Status: "pending"}
-			if err := e.st.UpsertChunk(cr); err != nil { return "", "", err }
+			if err := e.st.UpsertChunk(cr); err != nil {
+				return "", "", err
+			}
 			idx++
 		}
 		chunks, err = e.st.ListChunks(url, destPath)
-		if err != nil { return "", "", err }
+		if err != nil {
+			return "", "", err
+		}
 	}
 
 	// Preflight: verify any previously complete chunks before writing further
@@ -194,7 +251,9 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		for _, c := range chunks {
 			if strings.EqualFold(c.Status, "complete") {
 				sha2, err := hashRange(f, c.Start, c.Size)
-				if err != nil { return "", "", err }
+				if err != nil {
+					return "", "", err
+				}
 				if !stringsEqualHex(sha2, c.SHA256) {
 					e.log.Debugf("chunk %d sha mismatch on resume; marking dirty", c.Index)
 					_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
@@ -215,8 +274,12 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 
 	// Download chunks concurrently
 	perFile := e.cfg.Concurrency.PerFileChunks
-	if perFile <= 0 { perFile = 4 }
-	if ph := e.cfg.Concurrency.PerHostRequests; ph > 0 && perFile > ph { perFile = ph }
+	if perFile <= 0 {
+		perFile = 4
+	}
+	if ph := e.cfg.Concurrency.PerHostRequests; ph > 0 && perFile > ph {
+		perFile = ph
+	}
 	sem := make(chan struct{}, perFile)
 	var wg sync.WaitGroup
 	var dErr error
@@ -225,12 +288,27 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	downloadOne := func(c state.ChunkRow) {
 		defer wg.Done()
 		sem <- struct{}{}
-		defer func(){ <-sem }()
+		defer func() { <-sem }()
 
-		if c.Status == "complete" { return }
-if err := e.st.UpdateChunkStatus(url, destPath, c.Index, "running"); err != nil { setErr(&dErr, &dMu, err); return }
-sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
-		if err != nil { setErr(&dErr, &dMu, err); return }
+		select {
+		case <-ctx.Done():
+			setErr(&dErr, &dMu, ctx.Err())
+			return
+		default:
+		}
+
+		if c.Status == "complete" {
+			return
+		}
+		if err := e.st.UpdateChunkStatus(url, destPath, c.Index, "running"); err != nil {
+			setErr(&dErr, &dMu, err)
+			return
+		}
+		sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
+		if err != nil {
+			setErr(&dErr, &dMu, err)
+			return
+		}
 		_ = e.st.UpdateChunkSHA(url, destPath, c.Index, sha)
 		_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "complete")
 	}
@@ -240,6 +318,9 @@ sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 		go downloadOne(c)
 	}
 	wg.Wait()
+	if ctx.Err() != nil {
+		return "", "", ctx.Err()
+	}
 	if dErr != nil {
 		// Fallback to single-stream with retry if chunked failed (e.g., server ignored Range)
 		_ = f.Close()
@@ -250,15 +331,24 @@ sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 	chunks, _ = e.st.ListChunks(url, destPath)
 	repaired := false
 	for _, c := range chunks {
-		if !strings.EqualFold(c.Status, "complete") { continue }
+		if ctx.Err() != nil {
+			return "", "", ctx.Err()
+		}
+		if !strings.EqualFold(c.Status, "complete") {
+			continue
+		}
 		sha2, err := hashRange(f, c.Start, c.Size)
-		if err != nil { return "", "", err }
+		if err != nil {
+			return "", "", err
+		}
 		if c.SHA256 != "" && !stringsEqualHex(sha2, c.SHA256) {
 			// re-download this chunk
 			e.log.WarnfThrottled(fmt.Sprintf("repair:%s|%s", url, destPath), 2*time.Second, "chunk %d sha mismatch on self-check; re-fetching", c.Index)
 			_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
-sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
-			if err != nil { return "", "", err }
+			sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
+			if err != nil {
+				return "", "", err
+			}
 			_ = e.st.UpdateChunkSHA(url, destPath, c.Index, sha3)
 			_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "complete")
 			repaired = true
@@ -266,22 +356,33 @@ sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 	}
 	// Verify final SHA by streaming the part file
 	hasher := sha256.New()
-	if _, err := f.Seek(0, io.SeekStart); err != nil { return "", "", err }
-	if _, err := io.Copy(hasher, f); err != nil { return "", "", err }
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return "", "", err
+	}
+	if _, err := io.Copy(hasher, f); err != nil {
+		return "", "", err
+	}
 	finalSHA := hex.EncodeToString(hasher.Sum(nil))
 	if expectedSHA != "" && !stringsEqualHex(expectedSHA, finalSHA) {
 		e.log.Warnf("final sha mismatch; scanning chunks for corruption")
 		// Re-hash each chunk and compare with recorded chunk sha
 		chunks, _ = e.st.ListChunks(url, destPath)
 		for _, c := range chunks {
+			if ctx.Err() != nil {
+				return "", "", ctx.Err()
+			}
 			sha2, err := hashRange(f, c.Start, c.Size)
-			if err != nil { return "", "", err }
+			if err != nil {
+				return "", "", err
+			}
 			if !stringsEqualHex(sha2, c.SHA256) {
 				// re-download this chunk
 				e.log.Debugf("chunk %d sha mismatch; re-fetching", c.Index)
 				_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
-sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
-				if err != nil { return "", "", err }
+				sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
+				if err != nil {
+					return "", "", err
+				}
 				_ = e.st.UpdateChunkSHA(url, destPath, c.Index, sha3)
 				_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "complete")
 				repaired = true
@@ -289,24 +390,35 @@ sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 		}
 		if repaired {
 			// re-hash full file
-			if _, err := f.Seek(0, io.SeekStart); err != nil { return "", "", err }
+			if _, err := f.Seek(0, io.SeekStart); err != nil {
+				return "", "", err
+			}
 			hasher.Reset()
-			if _, err := io.Copy(hasher, f); err != nil { return "", "", err }
+			if _, err := io.Copy(hasher, f); err != nil {
+				return "", "", err
+			}
 			finalSHA = hex.EncodeToString(hasher.Sum(nil))
 		}
 		if expectedSHA != "" && !stringsEqualHex(expectedSHA, finalSHA) {
-		_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: finalSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "checksum_mismatch"})
+			_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: finalSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "checksum_mismatch"})
 			return "", finalSHA, fmt.Errorf("sha256 mismatch after repair: expected=%s got=%s", expectedSHA, finalSHA)
 		}
 	}
 
 	// Ensure part file is flushed before finalize
 	_ = f.Sync()
+	if ctx.Err() != nil {
+		return "", "", ctx.Err()
+	}
 	// Finalize (cross-filesystem safe)
-	if err := renameOrCopy(part, destPath); err != nil { return "", "", err }
+	if err := renameOrCopy(part, destPath); err != nil {
+		return "", "", err
+	}
 	_ = os.Remove(part)
 	// If safetensors, trim any trailing bytes beyond header-declared size (and fail if incomplete)
-	if _, err := adjustSafetensors(destPath, e.log); err != nil { return "", "", err }
+	if _, err := adjustSafetensors(destPath, e.log); err != nil {
+		return "", "", err
+	}
 	// Optional deep verify for safetensors
 	if e.cfg.Validation.SafetensorsDeepVerifyAfterDownload && (strings.HasSuffix(strings.ToLower(destPath), ".safetensors") || strings.HasSuffix(strings.ToLower(destPath), ".sft")) {
 		ok, _, verr := deepVerifySafetensors(destPath)
@@ -318,13 +430,20 @@ sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 	// Recompute SHA after any adjustment
 	{
 		ff, err := os.Open(destPath)
-		if err != nil { return "", "", err }
+		if err != nil {
+			return "", "", err
+		}
 		h := sha256.New()
-		if _, err := io.Copy(h, ff); err != nil { _ = ff.Close(); return "", "", err }
+		if _, err := io.Copy(h, ff); err != nil {
+			_ = ff.Close()
+			return "", "", err
+		}
 		_ = ff.Close()
 		finalSHA = hex.EncodeToString(h.Sum(nil))
 	}
-	if err := writeAndSync(destPath+".sha256", []byte(finalSHA+"  "+filepath.Base(destPath)+"\n")); err != nil { return "", "", err }
+	if err := writeAndSync(destPath+".sha256", []byte(finalSHA+"  "+filepath.Base(destPath)+"\n")); err != nil {
+		return "", "", err
+	}
 	_ = fsyncDir(filepath.Dir(destPath))
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: finalSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "complete"})
 	if e.metrics != nil {
@@ -338,32 +457,65 @@ sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
 func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string) (string, error) {
 	// retry loop
 	max := e.cfg.Concurrency.MaxRetries
-	if max <= 0 { max = 8 }
+	if max <= 0 {
+		max = 8
+	}
 	var lastErr error
 	for attempt := 0; attempt < max; attempt++ {
-sha, err := e.tryFetchChunk(ctx, url, h, f, c, headers)
-		if err == nil { return sha, nil }
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
+		sha, err := e.tryFetchChunk(ctx, url, h, f, c, headers)
+		if err == nil {
+			return sha, nil
+		}
+		if ctx.Err() != nil {
+			return "", ctx.Err()
+		}
 		lastErr = err
-		if e.metrics != nil { e.metrics.IncRetries(1) }
+		if e.metrics != nil {
+			e.metrics.IncRetries(1)
+		}
 		_ = e.st.IncDownloadRetries(url, destPath, 1)
 		// backoff
 		b := e.cfg.Concurrency.Backoff
-		min := b.MinMS; if min <= 0 { min = 200 }
-		maxb := b.MaxMS; if maxb <= 0 { maxb = 30000 }
+		min := b.MinMS
+		if min <= 0 {
+			min = 200
+		}
+		maxb := b.MaxMS
+		if maxb <= 0 {
+			maxb = 30000
+		}
 		dur := time.Duration(min)*time.Millisecond + time.Duration(rand.Intn(maxb-min+1))*time.Millisecond
-		time.Sleep(dur)
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-time.After(dur):
+		}
+	}
+	if ctx.Err() != nil {
+		return "", ctx.Err()
 	}
 	return "", lastErr
 }
 
 func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string) (string, error) {
-req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	req.Header.Set("User-Agent", userAgent(e.cfg))
-	for k, v := range headers { req.Header.Set(k, v) }
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", c.Start, c.End))
-	if h.etag != "" { req.Header.Set("If-Range", h.etag) } else if h.lastMod != "" { req.Header.Set("If-Range", h.lastMod) }
+	if h.etag != "" {
+		req.Header.Set("If-Range", h.etag)
+	} else if h.lastMod != "" {
+		req.Header.Set("If-Range", h.lastMod)
+	}
 	resp, err := e.client.Do(req)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	defer resp.Body.Close()
 	// Require 206 for partial ranges; allow 200 only if the requested range is the entire file
 	if resp.StatusCode == http.StatusOK {
@@ -374,7 +526,9 @@ req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		// Friendly error for common auth cases; include chunk index for context
 		host := hostFromURL(req.URL.String())
 		hadAuth := false
-		if _, ok := headers["Authorization"]; ok && strings.TrimSpace(headers["Authorization"]) != "" { hadAuth = true }
+		if _, ok := headers["Authorization"]; ok && strings.TrimSpace(headers["Authorization"]) != "" {
+			hadAuth = true
+		}
 		msg := friendlyHTTPStatusMessage(e.cfg, host, resp.StatusCode, resp.Status, hadAuth)
 		return "", fmt.Errorf("chunk %d: %s", c.Index, msg)
 	}
@@ -383,9 +537,15 @@ req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	ow := &offsetWriterAt{w: f, off: c.Start}
 	mw := io.MultiWriter(ow, hasher)
 	written, err := io.CopyN(mw, resp.Body, c.Size)
-	if e.metrics != nil && written > 0 { e.metrics.AddBytes(written) }
-	if err != nil && !errors.Is(err, io.EOF) { return "", err }
-	if written != c.Size { return "", fmt.Errorf("chunk %d: short write %d!=%d", c.Index, written, c.Size) }
+	if e.metrics != nil && written > 0 {
+		e.metrics.AddBytes(written)
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return "", err
+	}
+	if written != c.Size {
+		return "", fmt.Errorf("chunk %d: short write %d!=%d", c.Index, written, c.Size)
+	}
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
@@ -394,10 +554,14 @@ req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 func (e *Chunked) probeRangeGET(ctx context.Context, url string, headers map[string]string) (headInfo, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	req.Header.Set("User-Agent", userAgent(e.cfg))
-	for k, v := range headers { req.Header.Set(k, v) }
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	req.Header.Set("Range", "bytes=0-0")
 	resp, err := e.client.Do(req)
-	if err != nil { return headInfo{}, err }
+	if err != nil {
+		return headInfo{}, err
+	}
 	defer resp.Body.Close()
 	// Expect 206 Partial Content
 	if resp.StatusCode != http.StatusPartialContent {
@@ -415,27 +579,54 @@ func (e *Chunked) probeRangeGET(ctx context.Context, url string, headers map[str
 	h.etag = resp.Header.Get("ETag")
 	h.lastMod = resp.Header.Get("Last-Modified")
 	if cd := resp.Header.Get("Content-Disposition"); cd != "" {
-		if fn := parseDispositionFilename(cd); fn != "" { h.filename = fn }
+		if fn := parseDispositionFilename(cd); fn != "" {
+			h.filename = fn
+		}
 	}
-	if resp.Request != nil && resp.Request.URL != nil { h.finalURL = resp.Request.URL.String() }
+	if resp.Request != nil && resp.Request.URL != nil {
+		h.finalURL = resp.Request.URL.String()
+	}
 	return h, nil
 }
 
 func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string, noResume bool) (string, string, error) {
 	max := e.cfg.Concurrency.MaxRetries
-	if max <= 0 { max = 8 }
+	if max <= 0 {
+		max = 8
+	}
 	var lastErr error
 	for attempt := 0; attempt < max; attempt++ {
+		if ctx.Err() != nil {
+			return "", "", ctx.Err()
+		}
 		final, sha, err := NewSingle(e.cfg, e.log, e.st, e.metrics).Download(ctx, url, destPath, expectedSHA, headers, noResume)
-		if err == nil { return final, sha, nil }
+		if err == nil {
+			return final, sha, nil
+		}
+		if ctx.Err() != nil {
+			return "", "", ctx.Err()
+		}
 		lastErr = err
 		_ = e.st.IncDownloadRetries(url, destPath, 1)
 		// backoff between attempts
 		b := e.cfg.Concurrency.Backoff
-		min := b.MinMS; if min <= 0 { min = 200 }
-		maxb := b.MaxMS; if maxb <= 0 { maxb = 30000 }
+		min := b.MinMS
+		if min <= 0 {
+			min = 200
+		}
+		maxb := b.MaxMS
+		if maxb <= 0 {
+			maxb = 30000
+		}
 		dur := time.Duration(min)*time.Millisecond + time.Duration(rand.Intn(maxb-min+1))*time.Millisecond
-		time.Sleep(dur)
+		select {
+		case <-ctx.Done():
+			return "", "", ctx.Err()
+		case <-time.After(dur):
+		}
+	}
+	if ctx.Err() != nil {
+		return "", "", ctx.Err()
 	}
 	return "", "", lastErr
 }
@@ -453,7 +644,9 @@ func parseDispositionFilename(cd string) string {
 			// format: UTF-8''percent-encoded
 			if i := strings.Index(v, "''"); i >= 0 && i+2 < len(v) {
 				enc := v[i+2:]
-				if dec, err := neturl.QueryUnescape(enc); err == nil { return util.SafeFileName(dec) }
+				if dec, err := neturl.QueryUnescape(enc); err == nil {
+					return util.SafeFileName(dec)
+				}
 			}
 			return util.SafeFileName(v)
 		}
@@ -473,38 +666,58 @@ func parseDispositionFilename(cd string) string {
 // baseNameFromURL returns the last path segment from a URL, ignoring query/fragments.
 func baseNameFromURL(uStr string) string {
 	u, err := neturl.Parse(uStr)
-	if err != nil || u.Path == "" { return "download" }
+	if err != nil || u.Path == "" {
+		return "download"
+	}
 	b := path.Base(u.Path)
-	if b == "/" || b == "." || b == "" { return "download" }
+	if b == "/" || b == "." || b == "" {
+		return "download"
+	}
 	return b
 }
 
-
 func hashRange(f *os.File, start, size int64) (string, error) {
-	if _, err := f.Seek(start, io.SeekStart); err != nil { return "", err }
+	if _, err := f.Seek(start, io.SeekStart); err != nil {
+		return "", err
+	}
 	h := sha256.New()
-	if _, err := io.CopyN(h, f, size); err != nil && !errors.Is(err, io.EOF) { return "", err }
+	if _, err := io.CopyN(h, f, size); err != nil && !errors.Is(err, io.EOF) {
+		return "", err
+	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func setErr(dst *error, mu *sync.Mutex, err error) {
-	mu.Lock(); defer mu.Unlock()
-	if *dst == nil { *dst = err }
+	mu.Lock()
+	defer mu.Unlock()
+	if *dst == nil {
+		*dst = err
+	}
 }
 
 func stringsEqualHex(a, b string) bool {
-	if len(a) != len(b) { return false }
+	if len(a) != len(b) {
+		return false
+	}
 	return equalFoldHex(a, b)
 }
 
 func equalFoldHex(a, b string) bool {
 	// case-insensitive compare for hex
-	if len(a) != len(b) { return false }
+	if len(a) != len(b) {
+		return false
+	}
 	for i := 0; i < len(a); i++ {
 		ca, cb := a[i], b[i]
-		if ca >= 'A' && ca <= 'F' { ca += 32 }
-		if cb >= 'A' && cb <= 'F' { cb += 32 }
-		if ca != cb { return false }
+		if ca >= 'A' && ca <= 'F' {
+			ca += 32
+		}
+		if cb >= 'A' && cb <= 'F' {
+			cb += 32
+		}
+		if ca != cb {
+			return false
+		}
 	}
 	return true
 }
@@ -520,4 +733,3 @@ func (o *offsetWriterAt) Write(p []byte) (int, error) {
 	o.off += int64(n)
 	return n, err
 }
-

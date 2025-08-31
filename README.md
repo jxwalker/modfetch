@@ -11,6 +11,7 @@ Highlights
 - Batch YAML execution with verify and status
 - Rich TUI dashboard and CLI progress with throughput and ETA
 - Structured logging, metrics, and resilient SQLite state
+- Graceful cancellation on SIGINT/SIGTERM cleans up partial downloads
 
 Status: MVP feature‑complete for resolvers and downloads; ongoing polish in TUI and docs.
 
@@ -87,6 +88,7 @@ Usage (see docs/USER_GUIDE.md for details)
     - others use the basename of the resolved URL
   - Quiet mode: add `--quiet`
   - On completion, a summary is printed (dest, size, SHA256, duration, average speed)
+  - Cancel with Ctrl+C (SIGINT/SIGTERM); partial files are cleaned up
 - Place artifacts into apps:
   
   modfetch place --config /path/to/config.yml --path /path/to/model.safetensors

@@ -20,7 +20,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dustin/go-humanize"
-	"github.com/lithammer/fuzzysearch/fuzzy"
 	"modfetch/internal/config"
 	"modfetch/internal/downloader"
 	"modfetch/internal/logging"
@@ -41,7 +40,6 @@ type Theme struct {
 	footer      lipgloss.Style
 	ok          lipgloss.Style
 	bad         lipgloss.Style
-	match       lipgloss.Style
 }
 
 func defaultTheme() Theme {
@@ -58,7 +56,6 @@ func defaultTheme() Theme {
 		footer:      lipgloss.NewStyle().Faint(true),
 		ok:          lipgloss.NewStyle().Foreground(lipgloss.Color("42")),
 		bad:         lipgloss.NewStyle().Foreground(lipgloss.Color("196")),
-		match:       lipgloss.NewStyle().Underline(true),
 	}
 }
 
@@ -178,36 +175,36 @@ type uiState struct {
 }
 
 func New(cfg *config.Config, st *state.DB, version string) tea.Model {
-	p := progress.New(progress.WithDefaultGradient(), progress.WithWidth(16))
-	fi := textinput.New()
-	fi.Placeholder = "filter (url or dest contains)"
-	fi.CharLimit = 4096
+p := progress.New(progress.WithDefaultGradient(), progress.WithWidth(16))
+	fi := textinput.New(); fi.Placeholder = "filter (url or dest contains)"; fi.CharLimit = 4096
 	// compute refresh
 	refresh := time.Second
 	if hz := cfg.UI.RefreshHz; hz > 0 {
-		if hz > 10 {
-			hz = 10
-		}
+		if hz > 10 { hz = 10 }
 		refresh = time.Second / time.Duration(hz)
 	}
-	// decide initial column mode
+// decide initial column mode
 	mode := strings.ToLower(strings.TrimSpace(cfg.UI.ColumnMode))
 	if mode != "dest" && mode != "url" && mode != "host" {
-		if cfg.UI.ShowURL {
-			mode = "url"
-		} else {
-			mode = "dest"
-		}
+		if cfg.UI.ShowURL { mode = "url" } else { mode = "dest" }
 	}
-	m := &Model{
+m := &Model{
 		cfg: cfg, st: st, th: defaultTheme(), activeTab: -1, prog: p, prev: map[string]obs{},
-		build:   strings.TrimSpace(version),
+		build: strings.TrimSpace(version),
 		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
 		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{}, hostCache: map[string]string{},
-		retrying:   map[string]time.Time{},
-		tickEvery:  refresh,
+		retrying: map[string]time.Time{},
+		tickEvery: refresh,
 		columnMode: mode,
-		placeType:  map[string]string{}, autoPlace: map[string]bool{},
+		placeType: map[string]string{}, autoPlace: map[string]bool{},
+	}
+	// Apply config.theme if provided (initial preset); UI state may override
+	if name := strings.TrimSpace(cfg.UI.Theme); name != "" {
+		if idx := themeIndexByName(name); idx >= 0 {
+			presets := themePresets()
+			m.themeIndex = idx
+			m.th = presets[idx]
+		}
 	}
 	m.configTypes = computeTypesFromConfig(cfg)
 	// Load UI state overrides if present
@@ -225,361 +222,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.w, m.h = msg.Width, msg.Height
 		return m, nil
 	case tea.KeyMsg:
-		s := msg.String()
-		// New job modal handling
 		if m.newJob {
-			switch s {
-			case "esc":
-				m.newJob = false
-				return m, nil
-			case "tab":
-				// Path completion on Destination step
-				if m.newStep == 4 {
-					cur := strings.TrimSpace(m.newInput.Value())
-					comp := m.completePath(cur)
-					if strings.TrimSpace(comp) != "" {
-						m.newInput.SetValue(comp)
-						m.newAutoSuggested = comp
-					}
-					return m, nil
-				}
-				return m, nil
-			case "x", "X":
-				// Accept suggested extension if available on Step 4
-				if m.newStep == 4 && strings.TrimSpace(m.newSuggestExt) != "" {
-					cur := strings.TrimSpace(m.newInput.Value())
-					if filepath.Ext(cur) == "" {
-						m.newInput.SetValue(cur + m.newSuggestExt)
-						m.newSuggestExt = ""
-					}
-				}
-				return m, nil
-			case "enter":
-				val := strings.TrimSpace(m.newInput.Value())
-				if m.newStep == 1 {
-					if val == "" {
-						return m, nil
-					}
-					m.newURL = val
-					// Show normalization note if applicable
-					if norm, ok := m.normalizeURLForNote(val); ok {
-						m.newNormNote = norm
-					} else {
-						m.newNormNote = ""
-					}
-					// Next: ask for artifact type
-					m.newInput.SetValue("")
-					m.newInput.Placeholder = "Artifact type (optional, e.g. sd.checkpoint)"
-					m.newStep = 2
-					// Resolve metadata in background (detect type, name)
-					return m, m.resolveMetaCmd(m.newURL)
-				} else if m.newStep == 2 {
-					// Got type; ask for autoplace
-					m.newType = val
-					m.newInput.SetValue("")
-					m.newInput.Placeholder = "Auto place after download? y/n (default n)"
-					m.newStep = 3
-					return m, nil
-				} else if m.newStep == 3 {
-					// Decide on destination suggestion based on autoplace choice
-					v := strings.ToLower(strings.TrimSpace(val))
-					m.newAutoPlace = v == "y" || v == "yes" || v == "true" || v == "1"
-					var cand string
-					if m.newAutoPlace {
-						cand = m.computePlacementSuggestionImmediate(m.newURL, m.newType)
-						// Background refine using resolver and placer targets
-						m.newAutoSuggested = cand
-						m.newInput.SetValue(cand)
-						m.newInput.Placeholder = "Destination path (Enter to accept)"
-						m.newStep = 4
-						// Suggest extension if missing
-						if filepath.Ext(cand) == "" {
-							m.newSuggestExt = m.inferExt()
-						} else {
-							m.newSuggestExt = ""
-						}
-						return m, m.suggestPlacementCmd(m.newURL, m.newType)
-					}
-					// No autoplace: suggest download_root path
-					cand = m.immediateDestCandidate(m.newURL)
-					m.newAutoSuggested = cand
-					m.newInput.SetValue(cand)
-					m.newInput.Placeholder = "Destination path (Enter to accept)"
-					m.newStep = 4
-					// Suggest extension if missing
-					if filepath.Ext(cand) == "" {
-						m.newSuggestExt = m.inferExt()
-					} else {
-						m.newSuggestExt = ""
-					}
-					return m, m.suggestDestCmd(m.newURL)
-				} else if m.newStep == 4 {
-					// Finalize destination and start download
-					urlStr := m.newURL
-					dest := strings.TrimSpace(val)
-					if dest == "" {
-						if m.newAutoPlace {
-							dest = m.computePlacementSuggestionImmediate(urlStr, m.newType)
-						} else {
-							dest = m.computeDefaultDest(urlStr)
-						}
-					}
-					// Preflight: ensure destination directory is writable
-					if err := m.preflightDest(dest); err != nil {
-						m.addToast("dest not writable: " + err.Error())
-						return m, nil
-					}
-					// Make the job visible immediately as pending before background download begins
-					_ = m.st.UpsertDownload(state.DownloadRow{URL: urlStr, Dest: dest, Status: "pending"})
-					cmd := m.startDownloadCmd(urlStr, dest)
-					key := urlStr + "|" + dest
-					if strings.TrimSpace(m.newType) != "" {
-						m.placeType[key] = m.newType
-					}
-					if m.newAutoPlace {
-						m.autoPlace[key] = true
-					}
-					m.addToast("started: " + truncateMiddle(dest, 40))
-					m.newJob = false
-					return m, cmd
-				}
-			}
-			var cmd tea.Cmd
-			m.newInput, cmd = m.newInput.Update(msg)
-			return m, cmd
+			return m.updateNewJob(msg)
 		}
-		// Batch modal handling
 		if m.batchMode {
-			switch s {
-			case "esc":
-				m.batchMode = false
-				return m, nil
-			}
-			if s == "enter" {
-				path := strings.TrimSpace(m.batchInput.Value())
-				var cmd tea.Cmd
-				if path != "" {
-					cmd = m.importBatchFile(path)
-				}
-				m.batchMode = false
-				return m, cmd
-			}
-			var cmd tea.Cmd
-			m.batchInput, cmd = m.batchInput.Update(msg)
-			return m, cmd
+			return m.updateBatchMode(msg)
 		}
-		// If filter mode is on, handle input first (swallow other keys into the input)
 		if m.filterOn {
-			switch s {
-			case "enter":
-				m.filterOn = false
-				m.filterInput.Blur()
-				return m, nil
-			case "esc":
-				m.filterOn = false
-				m.filterInput.SetValue("")
-				m.filterInput.Blur()
-				return m, nil
-			}
-			var cmd tea.Cmd
-			m.filterInput, cmd = m.filterInput.Update(msg)
-			return m, cmd
+			return m.updateFilter(msg)
 		}
-		// Normal key handling
-		switch s {
-		case "q", "ctrl+c":
-			m.saveUIState()
-			return m, tea.Quit
-		case "/":
-			m.filterOn = true
-			m.filterInput.Focus()
-			return m, nil
-		case "n": // new download wizard
-			m.newJob = true
-			m.newStep = 1
-			m.newInput = textinput.New()
-			m.newInput.Placeholder = "Enter URL or resolver URI"
-			m.newInput.Focus()
-			return m, nil
-		case "b": // batch import from text file
-			m.batchMode = true
-			m.batchInput = textinput.New()
-			m.batchInput.Placeholder = "Path to text file with URLs"
-			m.batchInput.Focus()
-			return m, nil
-		case "s":
-			m.sortMode = "speed"
-			return m, nil
-		case "e":
-			m.sortMode = "eta"
-			return m, nil
-		case "o":
-			m.sortMode = ""
-			return m, nil
-		case "g":
-			if m.groupBy == "host" {
-				m.groupBy = ""
-			} else {
-				m.groupBy = "host"
-			}
-			return m, nil
-		case "t": // cycle last column DEST->URL->HOST
-			switch m.columnMode {
-			case "dest":
-				m.columnMode = "url"
-			case "url":
-				m.columnMode = "host"
-			default:
-				m.columnMode = "dest"
-			}
-			m.saveUIState()
-			return m, nil
-		case "v": // compact view toggle
-			m.compactToggle()
-			m.saveUIState()
-			return m, nil
-		case "T": // theme cycle presets
-			presets := themePresets()
-			m.themeIndex = (m.themeIndex + 1) % len(presets)
-			m.th = presets[m.themeIndex]
-			m.saveUIState()
-			return m, nil
-		case "H": // toggle toast drawer
-			m.showToastDrawer = !m.showToastDrawer
-			return m, nil
-		case "P": // re-probe reachability for selected/current without starting
-			rows := m.selectionOrCurrent()
-			if len(rows) == 0 {
-				return m, nil
-			}
-			return m, m.probeSelectedCmd(rows)
-		case "?":
-			m.showHelp = !m.showHelp
-			return m, nil
-		case "i": // toggle inspector panel
-			m.showInspector = !m.showInspector
-			return m, nil
-		case "0":
-			m.activeTab = -1
-			m.selected = 0
-			return m, nil
-		case "1":
-			m.activeTab = 0
-			m.selected = 0
-			return m, nil
-		case "2":
-			m.activeTab = 1
-			m.selected = 0
-			return m, nil
-		case "3":
-			m.activeTab = 2
-			m.selected = 0
-			return m, nil
-		case "4":
-			m.activeTab = 3
-			m.selected = 0
-			return m, nil
-		case "j", "down":
-			if m.selected < len(m.visibleRows())-1 {
-				m.selected++
-			}
-			return m, nil
-		case "k", "up":
-			if m.selected > 0 {
-				m.selected--
-			}
-			return m, nil
-		case " ": // toggle selection
-			rows := m.visibleRows()
-			if m.selected >= 0 && m.selected < len(rows) {
-				key := keyFor(rows[m.selected])
-				if m.selectedKeys[key] {
-					delete(m.selectedKeys, key)
-				} else {
-					m.selectedKeys[key] = true
-				}
-			}
-			return m, nil
-		case "A": // select all visible
-			for _, r := range m.visibleRows() {
-				m.selectedKeys[keyFor(r)] = true
-			}
-			return m, nil
-		case "X": // clear selection
-			m.selectedKeys = map[string]bool{}
-			return m, nil
-		case "r": // start selected (alias of retry)
-			fallthrough
-		case "y": // retry (batch-aware)
-			targets := m.selectionOrCurrent()
-			if len(targets) == 0 {
-				return m, nil
-			}
-			cmds := make([]tea.Cmd, 0, len(targets))
-			now := time.Now()
-			for _, r := range targets {
-				ctx, cancel := context.WithCancel(context.Background())
-				m.running[keyFor(r)] = cancel
-				m.retrying[keyFor(r)] = now
-				cmds = append(cmds, m.startDownloadCmdCtx(ctx, r.URL, r.Dest))
-			}
-			m.addToast(fmt.Sprintf("retrying %d item(s)…", len(targets)))
-			return m, tea.Batch(cmds...)
-		case "p": // cancel (batch-aware)
-			cnt := 0
-			for _, r := range m.selectionOrCurrent() {
-				key := keyFor(r)
-				if cancel, ok := m.running[key]; ok {
-					cancel()
-					delete(m.running, key)
-					cnt++
-				}
-			}
-			if cnt > 0 {
-				m.addToast(fmt.Sprintf("cancelled %d", cnt))
-			}
-			return m, nil
-		case "O": // open/reveal in file manager
-			rows := m.selectionOrCurrent()
-			if len(rows) > 0 {
-				_ = openInFileManager(rows[0].Dest, true)
-			}
-			return m, nil
-		case "C": // copy dest of current
-			rows := m.selectionOrCurrent()
-			if len(rows) > 0 {
-				_ = copyToClipboard(rows[0].Dest)
-			}
-			return m, nil
-		case "U": // copy URL of current
-			rows := m.selectionOrCurrent()
-			if len(rows) > 0 {
-				_ = copyToClipboard(rows[0].URL)
-			}
-			return m, nil
-		case "D": // delete selected rows from DB (even if planning)
-			rows := m.selectionOrCurrent()
-			if len(rows) == 0 {
-				return m, nil
-			}
-			deleted := 0
-			for _, r := range rows {
-				key := keyFor(r)
-				if cancel, ok := m.running[key]; ok {
-					cancel()
-					delete(m.running, key)
-				}
-				_ = m.st.DeleteChunks(r.URL, r.Dest)
-				if err := m.st.DeleteDownload(r.URL, r.Dest); err == nil {
-					deleted++
-				}
-				delete(m.selectedKeys, key)
-			}
-			if deleted > 0 {
-				m.addToast(fmt.Sprintf("deleted %d", deleted))
-			}
-			return m, m.refresh()
-		}
+		return m.updateNormal(msg)
 	case tickMsg:
 		return m, m.refresh()
 	case destSuggestMsg:
@@ -659,6 +311,352 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			delete(m.autoPlace, key)
 			delete(m.placeType, key)
+		}
+		return m, m.refresh()
+	}
+	return m, nil
+}
+
+func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	s := msg.String()
+	switch s {
+	case "esc":
+		m.newJob = false
+		return m, nil
+	case "tab":
+		if m.newStep == 4 {
+			cur := strings.TrimSpace(m.newInput.Value())
+			comp := m.completePath(cur)
+			if strings.TrimSpace(comp) != "" {
+				m.newInput.SetValue(comp)
+				m.newAutoSuggested = comp
+			}
+			return m, nil
+		}
+		return m, nil
+	case "x", "X":
+		if m.newStep == 4 && strings.TrimSpace(m.newSuggestExt) != "" {
+			cur := strings.TrimSpace(m.newInput.Value())
+			if filepath.Ext(cur) == "" {
+				m.newInput.SetValue(cur + m.newSuggestExt)
+				m.newSuggestExt = ""
+			}
+		}
+		return m, nil
+	case "enter":
+		val := strings.TrimSpace(m.newInput.Value())
+		if m.newStep == 1 {
+			if val == "" {
+				return m, nil
+			}
+			m.newURL = val
+			if norm, ok := m.normalizeURLForNote(val); ok {
+				m.newNormNote = norm
+			} else {
+				m.newNormNote = ""
+			}
+			m.newInput.SetValue("")
+			m.newInput.Placeholder = "Artifact type (optional, e.g. sd.checkpoint)"
+			m.newStep = 2
+			return m, m.resolveMetaCmd(m.newURL)
+		} else if m.newStep == 2 {
+			m.newType = val
+			m.newInput.SetValue("")
+			m.newInput.Placeholder = "Auto place after download? y/n (default n)"
+			m.newStep = 3
+			return m, nil
+		} else if m.newStep == 3 {
+			v := strings.ToLower(strings.TrimSpace(val))
+			m.newAutoPlace = v == "y" || v == "yes" || v == "true" || v == "1"
+			var cand string
+			if m.newAutoPlace {
+				cand = m.computePlacementSuggestionImmediate(m.newURL, m.newType)
+				m.newAutoSuggested = cand
+				m.newInput.SetValue(cand)
+				m.newInput.Placeholder = "Destination path (Enter to accept)"
+				m.newStep = 4
+				if filepath.Ext(cand) == "" {
+					m.newSuggestExt = m.inferExt()
+				} else {
+					m.newSuggestExt = ""
+				}
+				return m, m.suggestPlacementCmd(m.newURL, m.newType)
+			}
+			cand = m.immediateDestCandidate(m.newURL)
+			m.newAutoSuggested = cand
+			m.newInput.SetValue(cand)
+			m.newInput.Placeholder = "Destination path (Enter to accept)"
+			m.newStep = 4
+			if filepath.Ext(cand) == "" {
+				m.newSuggestExt = m.inferExt()
+			} else {
+				m.newSuggestExt = ""
+			}
+			return m, m.suggestDestCmd(m.newURL)
+		} else if m.newStep == 4 {
+			urlStr := m.newURL
+			dest := strings.TrimSpace(val)
+			if dest == "" {
+				if m.newAutoPlace {
+					dest = m.computePlacementSuggestionImmediate(urlStr, m.newType)
+				} else {
+					dest = m.computeDefaultDest(urlStr)
+				}
+			}
+			if err := m.preflightDest(dest); err != nil {
+				m.addToast("dest not writable: " + err.Error())
+				return m, nil
+			}
+			_ = m.st.UpsertDownload(state.DownloadRow{URL: urlStr, Dest: dest, Status: "pending"})
+			cmd := m.startDownloadCmd(urlStr, dest)
+			key := urlStr + "|" + dest
+			if strings.TrimSpace(m.newType) != "" {
+				m.placeType[key] = m.newType
+			}
+			if m.newAutoPlace {
+				m.autoPlace[key] = true
+			}
+			m.addToast("started: " + truncateMiddle(dest, 40))
+			m.newJob = false
+			return m, cmd
+		}
+	}
+	var cmd tea.Cmd
+	m.newInput, cmd = m.newInput.Update(msg)
+	return m, cmd
+}
+
+func (m *Model) updateBatchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	s := msg.String()
+	switch s {
+	case "esc":
+		m.batchMode = false
+		return m, nil
+	case "enter":
+		path := strings.TrimSpace(m.batchInput.Value())
+		var cmd tea.Cmd
+		if path != "" {
+			cmd = m.importBatchFile(path)
+		}
+		m.batchMode = false
+		return m, cmd
+	}
+	var cmd tea.Cmd
+	m.batchInput, cmd = m.batchInput.Update(msg)
+	return m, cmd
+}
+
+func (m *Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	s := msg.String()
+	switch s {
+	case "enter":
+		m.filterOn = false
+		m.filterInput.Blur()
+		return m, nil
+	case "esc":
+		m.filterOn = false
+		m.filterInput.SetValue("")
+		m.filterInput.Blur()
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.filterInput, cmd = m.filterInput.Update(msg)
+	return m, cmd
+}
+
+func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	s := msg.String()
+	switch s {
+	case "q", "ctrl+c":
+		m.saveUIState()
+		return m, tea.Quit
+	case "/":
+		m.filterOn = true
+		m.filterInput.Focus()
+		return m, nil
+	case "n":
+		m.newJob = true
+		m.newStep = 1
+		m.newInput = textinput.New()
+		m.newInput.Placeholder = "Enter URL or resolver URI"
+		m.newInput.Focus()
+		return m, nil
+	case "b":
+		m.batchMode = true
+		m.batchInput = textinput.New()
+		m.batchInput.Placeholder = "Path to text file with URLs"
+		m.batchInput.Focus()
+		return m, nil
+	case "s":
+		m.sortMode = "speed"
+		return m, nil
+	case "e":
+		m.sortMode = "eta"
+		return m, nil
+	case "o":
+		m.sortMode = ""
+		return m, nil
+	case "g":
+		if m.groupBy == "host" {
+			m.groupBy = ""
+		} else {
+			m.groupBy = "host"
+		}
+		return m, nil
+	case "t":
+		switch m.columnMode {
+		case "dest":
+			m.columnMode = "url"
+		case "url":
+			m.columnMode = "host"
+		default:
+			m.columnMode = "dest"
+		}
+		m.saveUIState()
+		return m, nil
+	case "v":
+		m.compactToggle()
+		m.saveUIState()
+		return m, nil
+	case "T":
+		presets := themePresets()
+		m.themeIndex = (m.themeIndex + 1) % len(presets)
+		m.th = presets[m.themeIndex]
+		m.saveUIState()
+		return m, nil
+	case "H":
+		m.showToastDrawer = !m.showToastDrawer
+		return m, nil
+	case "P":
+		rows := m.selectionOrCurrent()
+		if len(rows) == 0 {
+			return m, nil
+		}
+		return m, m.probeSelectedCmd(rows)
+	case "?":
+		m.showHelp = !m.showHelp
+		return m, nil
+	case "i":
+		m.showInspector = !m.showInspector
+		return m, nil
+	case "0":
+		m.activeTab = -1
+		m.selected = 0
+		return m, nil
+	case "1":
+		m.activeTab = 0
+		m.selected = 0
+		return m, nil
+	case "2":
+		m.activeTab = 1
+		m.selected = 0
+		return m, nil
+	case "3":
+		m.activeTab = 2
+		m.selected = 0
+		return m, nil
+	case "4":
+		m.activeTab = 3
+		m.selected = 0
+		return m, nil
+	case "j", "down":
+		if m.selected < len(m.visibleRows())-1 {
+			m.selected++
+		}
+		return m, nil
+	case "k", "up":
+		if m.selected > 0 {
+			m.selected--
+		}
+		return m, nil
+	case " ":
+		rows := m.visibleRows()
+		if m.selected >= 0 && m.selected < len(rows) {
+			key := keyFor(rows[m.selected])
+			if m.selectedKeys[key] {
+				delete(m.selectedKeys, key)
+			} else {
+				m.selectedKeys[key] = true
+			}
+		}
+		return m, nil
+	case "A":
+		for _, r := range m.visibleRows() {
+			m.selectedKeys[keyFor(r)] = true
+		}
+		return m, nil
+	case "X":
+		m.selectedKeys = map[string]bool{}
+		return m, nil
+	case "r":
+		fallthrough
+	case "y":
+		targets := m.selectionOrCurrent()
+		if len(targets) == 0 {
+			return m, nil
+		}
+		cmds := make([]tea.Cmd, 0, len(targets))
+		now := time.Now()
+		for _, r := range targets {
+			ctx, cancel := context.WithCancel(context.Background())
+			m.running[keyFor(r)] = cancel
+			m.retrying[keyFor(r)] = now
+			cmds = append(cmds, m.startDownloadCmdCtx(ctx, r.URL, r.Dest))
+		}
+		m.addToast(fmt.Sprintf("retrying %d item(s)…", len(targets)))
+		return m, tea.Batch(cmds...)
+	case "p":
+		cnt := 0
+		for _, r := range m.selectionOrCurrent() {
+			key := keyFor(r)
+			if cancel, ok := m.running[key]; ok {
+				cancel()
+				delete(m.running, key)
+				cnt++
+			}
+		}
+		if cnt > 0 {
+			m.addToast(fmt.Sprintf("cancelled %d", cnt))
+		}
+		return m, nil
+	case "O":
+		rows := m.selectionOrCurrent()
+		if len(rows) > 0 {
+			_ = openInFileManager(rows[0].Dest, true)
+		}
+		return m, nil
+	case "C":
+		rows := m.selectionOrCurrent()
+		if len(rows) > 0 {
+			_ = copyToClipboard(rows[0].Dest)
+		}
+		return m, nil
+	case "U":
+		rows := m.selectionOrCurrent()
+		if len(rows) > 0 {
+			_ = copyToClipboard(rows[0].URL)
+		}
+		return m, nil
+	case "D":
+		rows := m.selectionOrCurrent()
+		if len(rows) == 0 {
+			return m, nil
+		}
+		deleted := 0
+		for _, r := range rows {
+			key := keyFor(r)
+			if cancel, ok := m.running[key]; ok {
+				cancel()
+				delete(m.running, key)
+			}
+			_ = m.st.DeleteChunks(r.URL, r.Dest)
+			if err := m.st.DeleteDownload(r.URL, r.Dest); err == nil {
+				deleted++
+			}
+			delete(m.selectedKeys, key)
+		}
+		if deleted > 0 {
+			m.addToast(fmt.Sprintf("deleted %d", deleted))
 		}
 		return m, m.refresh()
 	}
@@ -1012,33 +1010,15 @@ func (m *Model) filterRows(tab int) []state.DownloadRow {
 }
 
 func (m *Model) applySearch(in []state.DownloadRow) []state.DownloadRow {
-	q := strings.TrimSpace(m.filterInput.Value())
+	q := strings.ToLower(strings.TrimSpace(m.filterInput.Value()))
 	if q == "" {
 		return in
 	}
-
-	type scored struct {
-		row  state.DownloadRow
-		rank int
-	}
-	var matches []scored
+	var out []state.DownloadRow
 	for _, r := range in {
-		candidates := []string{r.URL, r.Dest}
-		best := -1
-		for _, c := range candidates {
-			if rank := fuzzy.RankMatchFold(q, c); rank != -1 && (best == -1 || rank < best) {
-				best = rank
-			}
+		if strings.Contains(strings.ToLower(r.URL), q) || strings.Contains(strings.ToLower(r.Dest), q) {
+			out = append(out, r)
 		}
-		if best != -1 {
-			matches = append(matches, scored{row: r, rank: best})
-		}
-	}
-
-	sort.SliceStable(matches, func(i, j int) bool { return matches[i].rank < matches[j].rank })
-	out := make([]state.DownloadRow, len(matches))
-	for i, s := range matches {
-		out[i] = s.row
 	}
 	return out
 }
@@ -1149,23 +1129,9 @@ func (m *Model) renderTable() string {
 			last = hostOf(r.URL)
 		}
 		src := hostOf(r.URL)
+		src = truncateMiddle(src, 12)
 		lw := m.lastColumnWidth(m.isCompact())
-		q := strings.TrimSpace(m.filterInput.Value())
-		if q != "" {
-			if fuzzy.MatchFold(q, src) {
-				src = m.th.match.Render(truncateMiddle(src, 12))
-			} else {
-				src = truncateMiddle(src, 12)
-			}
-			if fuzzy.MatchFold(q, last) {
-				last = m.th.match.Render(truncateMiddle(last, lw))
-			} else {
-				last = truncateMiddle(last, lw)
-			}
-		} else {
-			src = truncateMiddle(src, 12)
-			last = truncateMiddle(last, lw)
-		}
+		last = truncateMiddle(last, lw)
 		// Speed column value
 		speedStr := humanize.Bytes(uint64(rate)) + "/s"
 		if strings.EqualFold(strings.TrimSpace(r.Status), "complete") {
@@ -2424,7 +2390,23 @@ func themePresets() []Theme {
 	solar.head = solar.head.Foreground(lipgloss.Color("178"))
 	solar.border = solar.border.BorderForeground(lipgloss.Color("136"))
 	solar.tabActive = solar.tabActive.Foreground(lipgloss.Color("166"))
-	return []Theme{base, neon, drac, solar}
+	return []Theme{ base, neon, drac, solar }
+}
+
+func themeIndexByName(name string) int {
+	s := strings.ToLower(strings.TrimSpace(name))
+	switch s {
+	case "", "default":
+		return 0
+	case "neon":
+		return 1
+	case "drac", "dracula":
+		return 2
+	case "solar", "solarized":
+		return 3
+	default:
+		return -1
+	}
 }
 
 func copyToClipboard(s string) error {

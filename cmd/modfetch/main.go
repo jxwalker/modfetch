@@ -8,11 +8,15 @@ import (
 	"fmt"
 	neturl "net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
+	"sync"
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"golang.org/x/sync/errgroup"
 
 	"modfetch/internal/batch"
 	"modfetch/internal/classifier"
@@ -29,13 +33,15 @@ import (
 var version = "dev"
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	if err := run(ctx, os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-func run(args []string) error {
+func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		usage()
 		return errors.New("no command provided")
@@ -45,28 +51,28 @@ func run(args []string) error {
 	cmd := args[0]
 	switch cmd {
 	case "config":
-		return handleConfig(args[1:])
+		return handleConfig(ctx, args[1:])
 	case "status":
-		return handleStatus(args[1:])
+		return handleStatus(ctx, args[1:])
 	case "download":
-		return handleDownload(args[1:])
+		return handleDownload(ctx, args[1:])
 	case "place":
-		return handlePlace(args[1:])
+		return handlePlace(ctx, args[1:])
 	case "verify":
-		return handleVerify(args[1:])
+		return handleVerify(ctx, args[1:])
 	case "tui":
-		return handleTUI(args[1:])
+		return handleTUI(ctx, args[1:])
 	case "version":
 		fmt.Println(version)
 		return nil
 	case "completion":
-		return handleCompletion(args[1:])
+		return handleCompletion(ctx, args[1:])
 	case "hostcaps":
-		return handleHostCaps(args[1:])
+		return handleHostCaps(ctx, args[1:])
 	case "clean":
-		return handleClean(args[1:])
+		return handleClean(ctx, args[1:])
 	case "batch":
-		return handleBatch(args[1:])
+		return handleBatch(ctx, args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -99,13 +105,13 @@ Commands:
   clean             Prune staged partials and other cached artifacts
 
 Flags:
-  --config PATH     Path to YAML config file (or MODFETCH_CONFIG env var)
+  --config PATH     Path to YAML config file (or MODFETCH_CONFIG env var; default: ~/.config/modfetch/config.yml)
   --log-level L     Log level: debug|info|warn|error (per command)
   --json            JSON log output (per command)
 `))
 }
 
-func handleStatus(args []string) error {
+func handleStatus(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
@@ -116,10 +122,11 @@ func handleStatus(args []string) error {
 	if *cfgPath == "" {
 		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
 			*cfgPath = env
+		} else {
+			if h, err := os.UserHomeDir(); err == nil && h != "" {
+				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
+			}
 		}
-	}
-	if *cfgPath == "" {
-		return errors.New("--config is required or set MODFETCH_CONFIG")
 	}
 	if _, err := os.Stat(*cfgPath); err != nil {
 		return fmt.Errorf("config file not found: %s", *cfgPath)
@@ -150,7 +157,7 @@ func handleStatus(args []string) error {
 	return nil
 }
 
-func handleConfig(args []string) error {
+func handleConfig(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New("config subcommand required: validate | print")
 	}
@@ -168,13 +175,13 @@ func handleConfig(args []string) error {
 			return enc.Encode(c)
 		})
 	case "wizard":
-		return handleConfigWizard(args[1:])
+		return handleConfigWizard(ctx, args[1:])
 	default:
 		return fmt.Errorf("unknown config subcommand: %s", sub)
 	}
 }
 
-func handleDownload(args []string) error {
+func handleDownload(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("download", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
@@ -187,16 +194,18 @@ func handleDownload(args []string) error {
 	batchPath := fs.String("batch", "", "YAML batch file with download jobs")
 	placeFlag := fs.Bool("place", false, "place files after successful download")
 	summaryJSON := fs.Bool("summary-json", false, "print a JSON summary when a download completes")
+	batchParallel := fs.Int("batch-parallel", 0, "max parallel downloads when using --batch (default: config concurrency per_host_requests)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if *cfgPath == "" {
 		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
 			*cfgPath = env
+		} else {
+			if h, err := os.UserHomeDir(); err == nil && h != "" {
+				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
+			}
 		}
-	}
-	if *cfgPath == "" {
-		return errors.New("--config is required or set MODFETCH_CONFIG")
 	}
 	if _, err := os.Stat(*cfgPath); err != nil {
 		return fmt.Errorf("config file not found: %s", *cfgPath)
@@ -215,7 +224,6 @@ func handleDownload(args []string) error {
 		return err
 	}
 	defer st.SQL.Close()
-	ctx := context.Background()
 	startWall := time.Now()
 	// Metrics manager (Prometheus textfile), if enabled
 	m := metrics.New(c)
@@ -225,51 +233,151 @@ func handleDownload(args []string) error {
 		if err != nil {
 			return err
 		}
-		dl := downloader.NewAuto(c, log, st, m)
-		for i, job := range bf.Jobs {
-			resolvedURL := job.URI
-			headers := map[string]string{}
-			destCandidate := strings.TrimSpace(job.Dest)
-			if strings.HasPrefix(resolvedURL, "hf://") || strings.HasPrefix(resolvedURL, "civitai://") {
-				res, err := resolver.Resolve(ctx, resolvedURL, c)
-				if err != nil {
-					return fmt.Errorf("job %d resolve: %w", i, err)
+		// Destination reservation to avoid two workers writing the same path concurrently
+		var destMu sync.Mutex
+		reserved := map[string]struct{}{}
+		reserveSpecific := func(p string) bool {
+			destMu.Lock(); defer destMu.Unlock()
+			if _, ok := reserved[p]; ok { return false }
+			reserved[p] = struct{}{}
+			return true
+		}
+		reserveUnique := func(dir, base, versionHint string) (string, error) {
+			destMu.Lock(); defer destMu.Unlock()
+			base = util.SafeFileName(base)
+			ext := filepath.Ext(base)
+			name := strings.TrimSuffix(base, ext)
+			// try plain
+			p := filepath.Join(dir, base)
+			if _, err := os.Stat(p); os.IsNotExist(err) {
+				if _, ok := reserved[p]; !ok { reserved[p] = struct{}{}; return p, nil }
+			}
+			// try version
+			if strings.TrimSpace(versionHint) != "" {
+				cand := filepath.Join(dir, fmt.Sprintf("%s (v%s)%s", name, versionHint, ext))
+				if _, err := os.Stat(cand); os.IsNotExist(err) {
+					if _, ok := reserved[cand]; !ok { reserved[cand] = struct{}{}; return cand, nil }
 				}
-				resolvedURL = res.URL
-				headers = res.Headers
-				if destCandidate == "" && strings.HasPrefix(job.URI, "civitai://") && strings.TrimSpace(res.SuggestedFilename) != "" {
-					if p, err := util.UniquePath(c.General.DownloadRoot, res.SuggestedFilename, res.VersionID); err == nil {
-						destCandidate = p
+			}
+			for i := 2; ; i++ {
+				cand := filepath.Join(dir, fmt.Sprintf("%s (%d)%s", name, i, ext))
+				if _, err := os.Stat(cand); os.IsNotExist(err) {
+					if _, ok := reserved[cand]; !ok { reserved[cand] = struct{}{}; return cand, nil }
+				}
+			}
+		}
+		parallel := c.Concurrency.PerHostRequests
+		if *batchParallel > 0 {
+			parallel = *batchParallel
+		}
+		if parallel < 1 {
+			parallel = 1
+		}
+
+		type jobItem struct {
+			idx int
+			job batch.BatchJob
+		}
+
+		jobs := make(chan jobItem)
+		g, gctx := errgroup.WithContext(ctx)
+		var logMu sync.Mutex
+
+		for i := 0; i < parallel; i++ {
+			g.Go(func() error {
+				dl := downloader.NewAuto(c, log, st, m)
+				for {
+					select {
+					case <-gctx.Done():
+						return gctx.Err()
+					case it, ok := <-jobs:
+						if !ok {
+							return nil
+						}
+						job := it.job
+						resolvedURL := job.URI
+						headers := map[string]string{}
+						destCandidate := strings.TrimSpace(job.Dest)
+						if strings.HasPrefix(resolvedURL, "hf://") || strings.HasPrefix(resolvedURL, "civitai://") {
+							res, err := resolver.Resolve(gctx, resolvedURL, c)
+							if err != nil {
+								return fmt.Errorf("job %d resolve: %w", it.idx, err)
+							}
+							resolvedURL = res.URL
+							headers = res.Headers
+							if destCandidate == "" && strings.HasPrefix(job.URI, "civitai://") && strings.TrimSpace(res.SuggestedFilename) != "" {
+								if p, err := reserveUnique(c.General.DownloadRoot, res.SuggestedFilename, res.VersionID); err == nil {
+									destCandidate = p
+								} else {
+									return fmt.Errorf("job %d dest reserve: %v", it.idx, err)
+								}
+							}
+						}
+						// If still no destCandidate, try probing to compute a safe filename and reserve it
+						if destCandidate == "" {
+							meta, _ := downloader.ProbeURL(gctx, c, resolvedURL, headers)
+							base := meta.Filename
+							if strings.TrimSpace(base) == "" {
+								if meta.FinalURL != "" { base = filepath.Base(meta.FinalURL) } else { base = filepath.Base(resolvedURL) }
+							}
+							p, err := reserveUnique(c.General.DownloadRoot, base, "")
+							if err != nil { return fmt.Errorf("job %d dest reserve: %v", it.idx, err) }
+							destCandidate = p
+						}
+						// If user provided explicit dest, ensure single writer
+						if job.Dest != "" {
+							if ok := reserveSpecific(destCandidate); !ok {
+								logMu.Lock(); log.Warnf("skipping job %d: destination already reserved: %s", it.idx, destCandidate); logMu.Unlock()
+								continue
+							}
+						}
+						final, sum, err := dl.Download(gctx, resolvedURL, destCandidate, job.SHA256, headers, false)
+						if err != nil {
+							return fmt.Errorf("job %d download: %w", it.idx, err)
+						}
+						var placed []string
+						if job.Place || *placeFlag {
+							var err2 error
+							placed, err2 = placer.Place(c, final, job.Type, job.Mode)
+							if err2 != nil {
+								return fmt.Errorf("job %d place: %w", it.idx, err2)
+							}
+						}
+						logMu.Lock()
+						log.Infof("downloaded: %s (sha256=%s)", final, sum)
+						for _, p := range placed {
+							log.Infof("placed: %s", p)
+						}
+						if *summaryJSON {
+							enc := json.NewEncoder(os.Stdout)
+							enc.SetIndent("", "  ")
+							_ = enc.Encode(map[string]any{
+								"url":    logging.SanitizeURL(resolvedURL),
+								"dest":   final,
+								"sha256": sum,
+								"placed": placed,
+								"status": "ok",
+							})
+						}
+						logMu.Unlock()
 					}
 				}
-			}
-			final, sum, err := dl.Download(ctx, resolvedURL, destCandidate, job.SHA256, headers, false)
-			if err != nil {
-				return fmt.Errorf("job %d download: %w", i, err)
-			}
-			log.Infof("downloaded: %s (sha256=%s)", final, sum)
-			var placed []string
-			if job.Place || *placeFlag {
-				var err2 error
-				placed, err2 = placer.Place(c, final, job.Type, job.Mode)
-				if err2 != nil {
-					return fmt.Errorf("job %d place: %w", i, err2)
-				}
-				for _, p := range placed {
-					log.Infof("placed: %s", p)
+			})
+		}
+
+		go func() {
+			defer close(jobs)
+			for i, job := range bf.Jobs {
+				select {
+				case <-gctx.Done():
+					return
+				case jobs <- jobItem{idx: i, job: job}:
 				}
 			}
-			if *summaryJSON {
-				enc := json.NewEncoder(os.Stdout)
-				enc.SetIndent("", "  ")
-				_ = enc.Encode(map[string]any{
-					"url":    logging.SanitizeURL(resolvedURL),
-					"dest":   final,
-					"sha256": sum,
-					"placed": placed,
-					"status": "ok",
-				})
-			}
+		}()
+
+		if err := g.Wait(); err != nil {
+			return err
 		}
 		return nil
 	}
@@ -436,7 +544,7 @@ func handleDownload(args []string) error {
 	return nil
 }
 
-func handlePlace(args []string) error {
+func handlePlace(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("place", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
@@ -489,7 +597,7 @@ func handlePlace(args []string) error {
 	return nil
 }
 
-func handleClean(args []string) error {
+func handleClean(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("clean", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
@@ -504,10 +612,11 @@ func handleClean(args []string) error {
 	if *cfgPath == "" {
 		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
 			*cfgPath = env
+		} else {
+			if h, err := os.UserHomeDir(); err == nil && h != "" {
+				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
+			}
 		}
-	}
-	if *cfgPath == "" {
-		return errors.New("--config is required or set MODFETCH_CONFIG")
 	}
 	if _, err := os.Stat(*cfgPath); err != nil {
 		return fmt.Errorf("config file not found: %s", *cfgPath)
@@ -640,10 +749,11 @@ func configOp(args []string, fn func(*config.Config, *logging.Logger) error) err
 	if *cfgPath == "" {
 		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
 			*cfgPath = env
+		} else {
+			if h, err := os.UserHomeDir(); err == nil && h != "" {
+				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
+			}
 		}
-	}
-	if *cfgPath == "" {
-		return errors.New("--config is required or set MODFETCH_CONFIG")
 	}
 	if _, err := os.Stat(*cfgPath); err != nil {
 		return fmt.Errorf("config file not found: %s", *cfgPath)

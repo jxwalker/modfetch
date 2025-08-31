@@ -29,6 +29,8 @@ Quick start: interactive wizard
 - `sources`
   - `huggingface`: `enabled`, `token_env`
   - `civitai`: `enabled`, `token_env`
+- `resolver`
+  - `cache_ttl_hours`: Hours to keep resolver results before re-querying (default 24)
 - `placement`
   - `apps`: map of app names → base + relative paths
   - `mapping`: artifact type → list of targets (app/path_key)
@@ -41,14 +43,21 @@ Quick start: interactive wizard
 - `validation`
   - `require_sha256`, `accept_md5_sha1_if_provided`
   - `safetensors_deep_verify_after_download`: when true, perform deep coverage/length verification of .safetensors files immediately after download; fail the command if invalid
+- `ui`
+  - `refresh_hz`, `column_mode`, `compact`, `theme`
 
 See `assets/sample-config/config.example.yml` for a full example.
 
 ## Tokens / environment variables
 - Set in environment, not in YAML:
   - `HF_TOKEN`: Hugging Face token (Bearer), used when sources.huggingface.enabled is true
-  - `CIVITAI_TOKEN`: CivitAI token (Bearer), used when sources.civitai.enabled is true
+- `CIVITAI_TOKEN`: CivitAI token (Bearer), used when sources.civitai.enabled is true
 - Do not print secrets back to the terminal; export them in your shell profile or a secure env file
+
+## Resolver cache
+- Resolved URIs are cached in `resolver-cache.json` under `data_root`.
+- Entries expire after `resolver.cache_ttl_hours` (default 24); 0 disables caching.
+- Cache entries are refreshed on 404 responses or when expired.
 
 ## Placement mapping
 - Map artifact types to target apps/paths. Common types:
@@ -81,6 +90,27 @@ placement:
         - app: a1111
           path_key: lora
 ```
+
+## UI options
+
+Configure visual aspects of the TUI under the `ui` section:
+
+```yaml
+ui:
+  refresh_hz: 1            # refresh rate (0-10)
+  column_mode: dest        # dest | url | host
+  compact: false           # compact table view
+  theme:                  # optional color overrides (8-bit codes)
+    border: "63"
+    title: "81"
+    tab_active: "219"
+    tab_inactive: "240"
+    head: "213"
+    ok: "42"
+    bad: "196"
+```
+
+Press `T` in the TUI to cycle built-in themes; the selection is saved to `ui_state_v2.json`.
 
 
 ## Classifier overrides

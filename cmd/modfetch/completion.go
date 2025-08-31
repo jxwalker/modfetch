@@ -1,15 +1,20 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 )
 
-func handleCompletion(args []string) error {
+func handleCompletion(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("completion", flag.ContinueOnError)
-	if err := fs.Parse(args); err != nil { return err }
-	if fs.NArg() < 1 { return errors.New("usage: modfetch completion [bash|zsh|fish]") }
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() < 1 {
+		return errors.New("usage: modfetch completion [bash|zsh|fish]")
+	}
 	shell := fs.Arg(0)
 	switch shell {
 	case "bash":
@@ -132,4 +137,3 @@ complete -c modfetch -n "__fish_seen_subcommand_from place" -l mode -d "Placemen
 complete -c modfetch -n "__fish_seen_subcommand_from verify" -l path -d "File to verify"
 complete -c modfetch -n "__fish_seen_subcommand_from verify" -l all -d "Verify all"
 `
-
