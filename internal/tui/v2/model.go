@@ -185,32 +185,46 @@ case tea.KeyMsg:
 					m.newURL = val
 					// Show normalization note if applicable
 					if norm, ok := m.normalizeURLForNote(val); ok { m.newNormNote = norm } else { m.newNormNote = "" }
-					// Set an immediate, non-blocking suggestion, then resolve better suggestion asynchronously
-					cand := m.immediateDestCandidate(val)
-					m.newAutoSuggested = cand
-					m.newInput.SetValue(cand)
-					m.newInput.Placeholder = "Destination path (Enter to accept)"
-					m.newStep = 2
-					return m, m.suggestDestCmd(val)
-				} else if m.newStep == 2 {
-					m.newDest = val
+					// Next: ask for artifact type
 					m.newInput.SetValue("")
 					m.newInput.Placeholder = "Artifact type (optional, e.g. sd-checkpoint)"
-					m.newStep = 3
+					m.newStep = 2
 					return m, nil
-				} else if m.newStep == 3 {
+				} else if m.newStep == 2 {
+					// Got type; ask for autoplace
 					m.newType = val
 					m.newInput.SetValue("")
 					m.newInput.Placeholder = "Auto place after download? y/n (default n)"
-					m.newStep = 4
+					m.newStep = 3
 					return m, nil
-				} else if m.newStep == 4 {
+				} else if m.newStep == 3 {
+					// Decide on destination suggestion based on autoplace choice
 					v := strings.ToLower(strings.TrimSpace(val))
 					m.newAutoPlace = v == "y" || v == "yes" || v == "true" || v == "1"
-					// Start download
+					var cand string
+					if m.newAutoPlace {
+						cand = m.computePlacementSuggestionImmediate(m.newURL, m.newType)
+						// Background refine using resolver and placer targets
+						m.newAutoSuggested = cand
+						m.newInput.SetValue(cand)
+						m.newInput.Placeholder = "Destination path (Enter to accept)"
+						m.newStep = 4
+						return m, m.suggestPlacementCmd(m.newURL, m.newType)
+					}
+					// No autoplace: suggest download_root path
+					cand = m.immediateDestCandidate(m.newURL)
+					m.newAutoSuggested = cand
+					m.newInput.SetValue(cand)
+					m.newInput.Placeholder = "Destination path (Enter to accept)"
+					m.newStep = 4
+					return m, m.suggestDestCmd(m.newURL)
+				} else if m.newStep == 4 {
+					// Finalize destination and start download
 					urlStr := m.newURL
-					dest := strings.TrimSpace(m.newDest)
-					if dest == "" { dest = m.computeDefaultDest(urlStr) }
+					dest := strings.TrimSpace(val)
+					if dest == "" {
+						if m.newAutoPlace { dest = m.computePlacementSuggestionImmediate(urlStr, m.newType) } else { dest = m.computeDefaultDest(urlStr) }
+					}
 					cmd := m.startDownloadCmd(urlStr, dest)
 					key := urlStr+"|"+dest
 					if strings.TrimSpace(m.newType) != "" { m.placeType[key] = m.newType }
@@ -391,7 +405,7 @@ func (m *Model) View() string {
 	// Title bar + inline toasts
 	title := m.th.title.Render("modfetch • TUI v2 (preview)")
 	toastStr := m.renderToasts()
-	titleBar := m.th.border.Render(lipgloss.JoinHorizontal(lipgloss.Top, title, "  ", toastStr))
+titleBar := m.th.border.Width(m.w-2).Render(lipgloss.JoinHorizontal(lipgloss.Top, title, "  ", toastStr))
 
 	// Top panels: fixed height; left = key hints, right = stats (align right edges)
 	topHeight := 8
@@ -436,7 +450,7 @@ func (m *Model) View() string {
 	// Footer with filter bar
 	filterBar := ""
 	if m.filterOn { filterBar = "Filter: "+ m.filterInput.View() }
-	footer := m.th.border.Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • t last col URL/DEST/HOST • v compact • i inspector • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
+footer := m.th.border.Width(m.w-2).Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y retry • p cancel • O open • / filter • s/e sort • o clear • g group host • t last col URL/DEST/HOST • v compact • i inspector • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
 
 	parts := []string{titleBar, topRow, bottom}
 	if help != "" { parts = append(parts, help) }
@@ -537,16 +551,16 @@ func (m *Model) renderNewJobModal() string {
 	sb.WriteString(m.th.label.Render(m.renderAuthStatus())+"\n\n")
 	steps := []string{
 		"1) URL/URI",
-		"2) Destination path",
-		"3) Artifact type (optional)",
-		"4) Auto place after download (y/n)",
+		"2) Artifact type (optional)",
+		"3) Auto place after download (y/n)",
+		"4) Destination path",
 	}
 	sb.WriteString(m.th.label.Render(strings.Join(steps, " • "))+"\n\n")
 	cur := ""
 	if m.newStep == 1 { cur = "Enter URL or resolver URI" }
-	if m.newStep == 2 { cur = "Destination path" }
-	if m.newStep == 3 { cur = "Artifact type (optional)" }
-	if m.newStep == 4 { cur = "Auto place? y/n" }
+	if m.newStep == 2 { cur = "Artifact type (optional)" }
+	if m.newStep == 3 { cur = "Auto place? y/n" }
+	if m.newStep == 4 { cur = "Destination path" }
 	sb.WriteString(m.th.label.Render(cur)+"\n")
 	// Show normalization note once URL entered
 	if m.newStep >= 2 && strings.TrimSpace(m.newNormNote) != "" {
@@ -852,6 +866,33 @@ func (m *Model) immediateDestCandidate(urlStr string) string {
 func (m *Model) suggestDestCmd(urlStr string) tea.Cmd {
 	return func() tea.Msg {
 		d := m.computeDefaultDest(urlStr)
+		return destSuggestMsg{url: urlStr, dest: d}
+	}
+}
+
+// Immediate placement suggestion using artifact type and quick filename
+func (m *Model) computePlacementSuggestionImmediate(urlStr, atype string) string {
+	atype = strings.TrimSpace(atype)
+	if atype == "" { return m.immediateDestCandidate(urlStr) }
+	dirs, err := placer.ComputeTargets(m.cfg, atype)
+	if err != nil || len(dirs) == 0 { return m.immediateDestCandidate(urlStr) }
+	base := filepath.Base(m.immediateDestCandidate(urlStr))
+	if strings.TrimSpace(base) == "" { base = "download" }
+	return filepath.Join(dirs[0], utilSafe(base))
+}
+
+// Background placement suggestion: resolve filename then join with placement target
+func (m *Model) suggestPlacementCmd(urlStr, atype string) tea.Cmd {
+	return func() tea.Msg {
+		atype = strings.TrimSpace(atype)
+		if atype == "" { return destSuggestMsg{url: urlStr, dest: m.computeDefaultDest(urlStr)} }
+		dirs, err := placer.ComputeTargets(m.cfg, atype)
+		if err != nil || len(dirs) == 0 { return destSuggestMsg{url: urlStr, dest: m.computeDefaultDest(urlStr)} }
+		// Derive a good filename via resolver-backed default dest
+		cand := m.computeDefaultDest(urlStr)
+		base := filepath.Base(cand)
+		if strings.TrimSpace(base) == "" { base = "download" }
+		d := filepath.Join(dirs[0], utilSafe(base))
 		return destSuggestMsg{url: urlStr, dest: d}
 	}
 }
