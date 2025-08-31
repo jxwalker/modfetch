@@ -107,6 +107,8 @@ type Model struct {
 	newTypeDetected string  // detected artifact type (from civitai or heuristics)
 	newTypeSource   string  // e.g., "civitai", "heuristic"
 	newDetectedName string  // suggested filename/name from resolver (for display)
+	// Extension suggestion when filename lacks suffix (e.g., .safetensors, .gguf)
+	newSuggestExt string
 	// Batch import modal state
 	batchMode bool
 	batchInput textinput.Model
@@ -203,6 +205,16 @@ case tea.KeyMsg:
 					return m, nil
 				}
 				return m, nil
+			case "x", "X":
+				// Accept suggested extension if available on Step 4
+				if m.newStep == 4 && strings.TrimSpace(m.newSuggestExt) != "" {
+					cur := strings.TrimSpace(m.newInput.Value())
+					if filepath.Ext(cur) == "" {
+						m.newInput.SetValue(cur + m.newSuggestExt)
+						m.newSuggestExt = ""
+					}
+				}
+				return m, nil
 			case "enter":
 				val := strings.TrimSpace(m.newInput.Value())
 				if m.newStep == 1 {
@@ -235,6 +247,8 @@ case tea.KeyMsg:
 						m.newInput.SetValue(cand)
 						m.newInput.Placeholder = "Destination path (Enter to accept)"
 						m.newStep = 4
+						// Suggest extension if missing
+						if filepath.Ext(cand) == "" { m.newSuggestExt = m.inferExt() } else { m.newSuggestExt = "" }
 						return m, m.suggestPlacementCmd(m.newURL, m.newType)
 					}
 					// No autoplace: suggest download_root path
@@ -243,6 +257,8 @@ case tea.KeyMsg:
 					m.newInput.SetValue(cand)
 					m.newInput.Placeholder = "Destination path (Enter to accept)"
 					m.newStep = 4
+					// Suggest extension if missing
+					if filepath.Ext(cand) == "" { m.newSuggestExt = m.inferExt() } else { m.newSuggestExt = "" }
 					return m, m.suggestDestCmd(m.newURL)
 				} else if m.newStep == 4 {
 					// Finalize destination and start download
@@ -414,10 +430,12 @@ case "y": // retry (batch-aware)
 		return m, m.refresh()
 case destSuggestMsg:
 		// Update the suggested dest only if the user hasn't edited it since our last suggestion
-		if m.newJob && m.newStep == 2 && strings.TrimSpace(m.newURL) == strings.TrimSpace(msg.url) {
+		if m.newJob && m.newStep == 4 && strings.TrimSpace(m.newURL) == strings.TrimSpace(msg.url) {
 			if strings.TrimSpace(m.newInput.Value()) == strings.TrimSpace(m.newAutoSuggested) || strings.TrimSpace(m.newInput.Value()) == "" {
 				m.newInput.SetValue(msg.dest)
 				m.newAutoSuggested = msg.dest
+				// Recompute extension suggestion if missing extension
+				if filepath.Ext(msg.dest) == "" { m.newSuggestExt = m.inferExt() } else { m.newSuggestExt = "" }
 			}
 		}
 		return m, nil
@@ -640,6 +658,11 @@ sb.WriteString(m.th.label.Render("Edit the destination to override.")+"\n")
 		} else {
 sb.WriteString(m.th.label.Render("Choose where to save the file. You can place later via 'place'.")+"\n")
 		}
+		// If we can infer an extension and current input lacks one, suggest adding via X
+		curVal := strings.TrimSpace(m.newInput.Value())
+		if strings.TrimSpace(m.newSuggestExt) != "" && filepath.Ext(curVal) == "" {
+			sb.WriteString(m.th.label.Render("Suggestion: append "+m.newSuggestExt+" (press X)\n"))
+		}
 	}
 	cur := ""
 	if m.newStep == 1 { cur = "Enter URL or resolver URI" }
@@ -805,6 +828,10 @@ if m.isCompact() {
 			if ratio > 1 { ratio = 1 }
 			pct = fmt.Sprintf("%3.0f%%", ratio*100)
 		}
+		// For completed jobs, force 100%
+		if strings.EqualFold(strings.TrimSpace(r.Status), "complete") {
+			pct = "100%"
+		}
 		eta := m.etaCache[keyFor(r)]
 		thr := m.renderSparkline(keyFor(r))
 		sel := " "; if m.selectedKeys[keyFor(r)] { sel = "*" }
@@ -823,11 +850,25 @@ if m.isCompact() {
 		src = truncateMiddle(src, 12)
 		lw := m.lastColumnWidth(m.isCompact())
 		last = truncateMiddle(last, lw)
+		// Speed column value
+		speedStr := humanize.Bytes(uint64(rate)) + "/s"
+		if strings.EqualFold(strings.TrimSpace(r.Status), "complete") {
+			// Show average speed for completed
+			if r.Size > 0 && r.UpdatedAt > 0 && r.CreatedAt > 0 && r.UpdatedAt >= r.CreatedAt {
+				dur := time.Duration(r.UpdatedAt-r.CreatedAt) * time.Second
+				if dur > 0 {
+					avg := float64(r.Size) / dur.Seconds()
+					speedStr = humanize.Bytes(uint64(avg)) + "/s"
+				}
+			} else {
+				speedStr = "-"
+			}
+		}
 		var line string
 if m.isCompact() {
 			line = fmt.Sprintf("%-1s %-8s %-3d  %-16s  %-4s  %-12s  %-8s  %s", sel, statusLabel, r.Retries, prog, pct, src, eta, last)
 		} else {
-			line = fmt.Sprintf("%-1s %-8s %-3d  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %s", sel, statusLabel, r.Retries, prog, pct, humanize.Bytes(uint64(rate))+"/s", thr, src, eta, last)
+			line = fmt.Sprintf("%-1s %-8s %-3d  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %s", sel, statusLabel, r.Retries, prog, pct, speedStr, thr, src, eta, last)
 		}
 		if i == m.selected { line = m.th.rowSelected.Render(line) }
 		sb.WriteString(line+"\n")
@@ -881,6 +922,10 @@ func (m *Model) renderInspector() string {
 			avg := float64(r.Size) / dur.Seconds()
 			sb.WriteString(fmt.Sprintf("%s %s/s\n", m.th.label.Render("Avg Speed:"), humanize.Bytes(uint64(avg))))
 		}
+	} else if strings.EqualFold(strings.TrimSpace(r.Status), "running") && r.CreatedAt > 0 {
+		// Show start time for running jobs
+		startAt := time.Unix(r.CreatedAt, 0).Local().Format("2006-01-02 15:04:05")
+		sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Started:"), startAt))
 	}
 	// Verification details
 	if strings.TrimSpace(r.ExpectedSHA256) != "" || strings.TrimSpace(r.ActualSHA256) != "" {
@@ -950,6 +995,10 @@ func (m *Model) computeCurAndTotal(r state.DownloadRow) (cur int64, total int64)
 }
 
 func (m *Model) renderProgress(r state.DownloadRow) string {
+	// For completed jobs, render full progress
+	if strings.EqualFold(strings.TrimSpace(r.Status), "complete") {
+		return m.prog.ViewAs(1)
+	}
 	cur, total, _, _ := m.progressFor(r)
 	if total <= 0 { return "--" }
 	ratio := float64(cur) / float64(total)
@@ -1172,6 +1221,22 @@ func (m *Model) computePlacementSuggestionImmediate(urlStr, atype string) string
 	base := filepath.Base(m.immediateDestCandidate(urlStr))
 	if strings.TrimSpace(base) == "" { base = "download" }
 return filepath.Join(dirs[0], utilSafe(base))
+}
+
+func (m *Model) inferExt() string {
+	// Prefer explicit user-provided type
+	t := strings.TrimSpace(m.newType)
+	if t == "" { t = strings.TrimSpace(m.newTypeDetected) }
+	switch strings.ToLower(t) {
+	case "sd.checkpoint", "sd.lora", "sd.vae", "sd.controlnet":
+		return ".safetensors"
+	case "llm.gguf":
+		return ".gguf"
+	case "sd.embedding":
+		// ambiguous, skip to avoid wrong ext
+		return ""
+	}
+	return ""
 }
 
 func mapCivitFileType(civType, fileName string) string {
