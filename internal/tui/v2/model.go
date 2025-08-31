@@ -64,6 +64,8 @@ type dlDoneMsg struct{ url, dest, path string; err error }
 
 type destSuggestMsg struct{ url string; dest string }
 
+type metaMsg struct{ url string; fileName string; suggested string; civType string }
+
 type obs struct{ bytes int64; t time.Time }
 
 type toast struct{ msg string; when time.Time; ttl time.Duration }
@@ -98,6 +100,9 @@ type Model struct {
 	newType string
 	newAutoPlace bool
 	newAutoSuggested string // latest auto-suggested dest (to avoid overriding manual edits)
+	newTypeDetected string  // detected artifact type (from civitai or heuristics)
+	newTypeSource   string  // e.g., "civitai", "heuristic"
+	newDetectedName string  // suggested filename/name from resolver (for display)
 	// Batch import modal state
 	batchMode bool
 	batchInput textinput.Model
@@ -151,7 +156,7 @@ p := progress.New(progress.WithDefaultGradient(), progress.WithWidth(16))
 		if cfg.UI.ShowURL { mode = "url" } else { mode = "dest" }
 	}
 m := &Model{
-		cfg: cfg, st: st, th: defaultTheme(), activeTab: 1, prog: p, prev: map[string]obs{},
+		cfg: cfg, st: st, th: defaultTheme(), activeTab: -1, prog: p, prev: map[string]obs{},
 		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
 		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{}, hostCache: map[string]string{},
 		tickEvery: refresh,
@@ -187,9 +192,10 @@ case tea.KeyMsg:
 					if norm, ok := m.normalizeURLForNote(val); ok { m.newNormNote = norm } else { m.newNormNote = "" }
 					// Next: ask for artifact type
 					m.newInput.SetValue("")
-					m.newInput.Placeholder = "Artifact type (optional, e.g. sd-checkpoint)"
+					m.newInput.Placeholder = "Artifact type (optional, e.g. sd.checkpoint)"
 					m.newStep = 2
-					return m, nil
+					// Resolve metadata in background (detect type, name)
+					return m, m.resolveMetaCmd(m.newURL)
 				} else if m.newStep == 2 {
 					// Got type; ask for autoplace
 					m.newType = val
@@ -302,6 +308,7 @@ case "T": // theme cycle presets
 		case "i": // toggle inspector panel
 			m.showInspector = !m.showInspector
 			return m, nil
+		case "0": m.activeTab = -1; m.selected = 0; return m, nil
 		case "1": m.activeTab = 0; m.selected = 0; return m, nil
 		case "2": m.activeTab = 1; m.selected = 0; return m, nil
 		case "3": m.activeTab = 2; m.selected = 0; return m, nil
@@ -378,6 +385,19 @@ case destSuggestMsg:
 			if strings.TrimSpace(m.newInput.Value()) == strings.TrimSpace(m.newAutoSuggested) || strings.TrimSpace(m.newInput.Value()) == "" {
 				m.newInput.SetValue(msg.dest)
 				m.newAutoSuggested = msg.dest
+			}
+		}
+		return m, nil
+case metaMsg:
+		if m.newJob && strings.TrimSpace(m.newURL) == strings.TrimSpace(msg.url) {
+			m.newDetectedName = msg.suggested
+			// Map civitai type to artifact type; fallback to heuristic from filename
+			t := mapCivitFileType(msg.civType, msg.fileName)
+			m.newTypeDetected = t
+			m.newTypeSource = "civitai"
+			if m.newStep == 2 {
+				cur := strings.TrimSpace(m.newInput.Value())
+				if cur == "" { m.newInput.SetValue(t) }
 			}
 		}
 		return m, nil
@@ -465,7 +485,7 @@ titleBar := m.th.border.Width(m.w-2).Render(lipgloss.JoinHorizontal(lipgloss.Top
 	// Footer with filter bar
 	filterBar := ""
 	if m.filterOn { filterBar = "Filter: "+ m.filterInput.View() }
-footer := m.th.border.Width(m.w-2).Render(m.th.footer.Render("1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y/r start • p cancel • D delete • O open • / filter • s/e sort • o clear • g group host • t last col URL/DEST/HOST • v compact • i inspector • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
+footer := m.th.border.Width(m.w-2).Render(m.th.footer.Render("0 All • 1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y/r start • p cancel • D delete • O open • / filter • s/e sort • o clear • g group host • t last col URL/DEST/HOST • v compact • i inspector • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
 
 	parts := []string{titleBar, topRow, bottom}
 	if help != "" { parts = append(parts, help) }
@@ -547,7 +567,7 @@ func (m *Model) renderStats() string {
 func (m *Model) renderTopLeftHints() string {
 	lines := []string{
 		m.th.head.Render("Hints"),
-		"Tabs: 1 Pending • 2 Active • 3 Completed • 4 Failed",
+		"Tabs: 0 All • 1 Pending • 2 Active • 3 Completed • 4 Failed",
 		"New: n new download • b batch import (txt file)",
 		"Nav: j/k up/down",
 		"Filter: / enter • Enter apply • Esc clear",
@@ -580,6 +600,12 @@ func (m *Model) renderNewJobModal() string {
 	// Show normalization note once URL entered
 	if m.newStep >= 2 && strings.TrimSpace(m.newNormNote) != "" {
 		sb.WriteString(m.th.label.Render(m.newNormNote)+"\n")
+	}
+	// Show detected type/name if available when choosing type
+	if m.newStep == 2 && strings.TrimSpace(m.newTypeDetected) != "" {
+		from := m.newTypeSource
+		if from == "" { from = "heuristic" }
+		sb.WriteString(m.th.label.Render(fmt.Sprintf("Detected: %s (%s)", m.newTypeDetected, from))+"\n")
 	}
 	sb.WriteString(m.newInput.View())
 	return sb.String()
@@ -620,13 +646,20 @@ func (m *Model) renderTopRightStats() string {
 }
 
 func (m *Model) renderTabs() string {
-	labels := []string{"Pending", "Active", "Completed", "Failed"}
+	labels := []struct{ name string; tab int }{
+		{"All", -1},
+		{"Pending", 0},
+		{"Active", 1},
+		{"Completed", 2},
+		{"Failed", 3},
+	}
 	var sb strings.Builder
-	for i, lab := range labels {
+	for _, it := range labels {
 		style := m.th.tabInactive
-		if i == m.activeTab { style = m.th.tabActive }
-		count := len(m.filterRows(i))
-		sb.WriteString(style.Render(fmt.Sprintf("%s (%d)", lab, count)))
+		if it.tab == m.activeTab { style = m.th.tabActive }
+		count := 0
+		if it.tab == -1 { count = len(m.rows) } else { count = len(m.filterRows(it.tab)) }
+		sb.WriteString(style.Render(fmt.Sprintf("%s (%d)", it.name, count)))
 		sb.WriteString("\n")
 	}
 	return sb.String()
@@ -642,6 +675,7 @@ func (m *Model) visibleRows() []state.DownloadRow {
 func (m *Model) filterRows(tab int) []state.DownloadRow {
 	var out []state.DownloadRow
 	for _, r := range m.rows {
+		if tab == -1 { out = append(out, r); continue }
 		ls := strings.ToLower(r.Status)
 		switch tab {
 		case 0: if ls=="pending" || ls=="planning" { out = append(out, r) }
@@ -893,7 +927,28 @@ func (m *Model) computePlacementSuggestionImmediate(urlStr, atype string) string
 	if err != nil || len(dirs) == 0 { return m.immediateDestCandidate(urlStr) }
 	base := filepath.Base(m.immediateDestCandidate(urlStr))
 	if strings.TrimSpace(base) == "" { base = "download" }
-	return filepath.Join(dirs[0], utilSafe(base))
+return filepath.Join(dirs[0], utilSafe(base))
+}
+
+func mapCivitFileType(civType, fileName string) string {
+	ct := strings.ToLower(strings.TrimSpace(civType))
+	name := strings.ToLower(fileName)
+	switch ct {
+	case "vae":
+		return "sd.vae"
+	case "textualinversion":
+		return "sd.embedding"
+	}
+	// Heuristics based on filename
+	if strings.Contains(name, "lora") || strings.Contains(name, "lokr") || strings.Contains(name, "locon") {
+		return "sd.lora"
+	}
+	if strings.Contains(name, "control") || strings.Contains(name, "controlnet") {
+		return "sd.controlnet"
+	}
+	if strings.HasSuffix(name, ".gguf") { return "llm.gguf" }
+	if strings.HasSuffix(name, ".safetensors") { return "sd.checkpoint" }
+	return "generic"
 }
 
 // Background placement suggestion: resolve filename then join with placement target
@@ -909,6 +964,36 @@ func (m *Model) suggestPlacementCmd(urlStr, atype string) tea.Cmd {
 		if strings.TrimSpace(base) == "" { base = "download" }
 		d := filepath.Join(dirs[0], utilSafe(base))
 		return destSuggestMsg{url: urlStr, dest: d}
+	}
+}
+
+// Resolve metadata (suggested filename and civitai file type) in background
+func (m *Model) resolveMetaCmd(raw string) tea.Cmd {
+	return func() tea.Msg {
+		s := strings.TrimSpace(raw)
+		if s == "" { return metaMsg{url: raw} }
+		// Normalize civitai page URLs to civitai://
+		if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
+			if u, err := neturl.Parse(s); err == nil {
+				h := strings.ToLower(u.Hostname())
+				if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
+					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+					if len(parts) >= 2 {
+						modelID := parts[1]
+						q := u.Query(); ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
+						civ := "civitai://model/" + modelID
+						if strings.TrimSpace(ver) != "" { civ += "?version=" + neturl.QueryEscape(ver) }
+						s = civ
+					}
+				}
+			}
+		}
+		if strings.HasPrefix(s, "hf://") || strings.HasPrefix(s, "civitai://") {
+			if res, err := resolver.Resolve(context.Background(), s, m.cfg); err == nil {
+				return metaMsg{url: raw, fileName: res.FileName, suggested: res.SuggestedFilename, civType: res.FileType}
+			}
+		}
+		return metaMsg{url: raw}
 	}
 }
 

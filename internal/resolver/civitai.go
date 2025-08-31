@@ -112,7 +112,7 @@ func (c *CivitAI) Resolve(ctx context.Context, uri string, cfg *config.Config) (
 	}
 	suggested = util.SafeFileName(suggested)
 
-	return &Resolved{URL: download, Headers: headers, ModelName: modelName, VersionName: verName, VersionID: verID, FileName: fileName, SuggestedFilename: suggested}, nil
+return &Resolved{URL: download, Headers: headers, ModelName: modelName, VersionName: verName, VersionID: verID, FileName: fileName, FileType: files[pick].Type, SuggestedFilename: suggested}, nil
 }
 
 type civitModel struct {

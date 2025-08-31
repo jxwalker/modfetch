@@ -16,6 +16,7 @@ type Resolved struct {
 	VersionName       string
 	VersionID         string
 	FileName          string
+	FileType          string // Source-specific type (e.g., CivitAI file.type: Model|VAE|TextualInversion)
 	SuggestedFilename string
 }
 
