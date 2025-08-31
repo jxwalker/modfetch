@@ -258,21 +258,29 @@ func (m *Model) View() string {
 	toastStr := m.renderToasts()
 	titleBar := m.th.border.Render(lipgloss.JoinHorizontal(lipgloss.Top, title, "  ", toastStr))
 
-	// Top panels: fixed height; left = key hints, right = stats
+	// Top panels: fixed height; left = key hints, right = stats (align right edges)
 	topHeight := 8
-	topLeftW := m.w / 2
+	// Each bordered panel contributes 2 columns (left+right border)
+	topBoxes := 2
+	topUsable := m.w - topBoxes*2
+	if topUsable < 20 { topUsable = 20 }
+	topLeftW := topUsable / 2
 	if topLeftW < 40 { topLeftW = 40 }
-	if topLeftW > m.w-40 { topLeftW = m.w - 40 }
+	if topLeftW > topUsable-20 { topLeftW = topUsable - 20 }
+	topRightW := topUsable - topLeftW
 	topLeft := m.th.border.Width(topLeftW).Height(topHeight).Render(m.renderTopLeftHints())
-	topRight := m.th.border.Width(m.w - topLeftW - 4).Height(topHeight).Render(m.renderTopRightStats())
+	topRight := m.th.border.Width(topRightW).Height(topHeight).Render(m.renderTopRightStats())
 	topRow := lipgloss.JoinHorizontal(lipgloss.Top, topLeft, topRight)
 
-	// Bottom panels: queue/table (with tabs), optional inspector
+	// Bottom panels: queue/table (with tabs), optional inspector (align right edges)
 	leftW := 24
 	inspW := 0
-	if m.showInspector { inspW = 42 }
-	mainW := m.w - leftW - inspW - 4
-	if mainW < 30 { mainW = 30 }
+	boxes := 2
+	if m.showInspector { inspW = 42; boxes = 3 }
+	usable := m.w - boxes*2
+	if usable < 40 { usable = 40 }
+	mainW := usable - leftW - inspW
+	if mainW < 10 { mainW = 10 }
 	left := m.th.border.Width(leftW).Render(m.renderTabs())
 	main := m.th.border.Width(mainW).Render(m.renderTable())
 	bottom := lipgloss.JoinHorizontal(lipgloss.Top, left, main)
@@ -634,7 +642,8 @@ func (m *Model) lastColumnWidth(compact bool) int {
 	inspW := 0
 	if m.showInspector { inspW = 42 }
 	// Rough usable width of main table inside borders
-	usable := m.w - leftW - inspW - 6
+	boxes := 2; if m.showInspector { boxes = 3 }
+	usable := m.w - leftW - inspW - boxes*2
 	if usable < 40 { usable = 40 }
 	if compact {
 		consumed := 1 + 1 + 8 + 2 + 16 + 2 + 4 + 2 + 8 + 2 // S, space, STATUS, 2sp, PROG, 2sp, PCT, 2sp, ETA, 2sp
