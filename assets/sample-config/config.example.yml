@@ -15,6 +15,10 @@ network:
   max_redirects: 5
   tls_verify: true
   user_agent: "modfetch/0.1"
+  # Respect HTTP 429 Retry-After for retries (optional)
+  # retry_on_rate_limit: false
+  # Cap waits derived from Retry-After (seconds)
+  # rate_limit_max_delay_seconds: 600
 
 concurrency:
   global_files: 4

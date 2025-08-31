@@ -100,6 +100,15 @@ Default naming
 - If a source requires authentication and tokens are missing, errors will indicate which env var is required (HF_TOKEN or CIVITAI_TOKEN)
 - Consider adding tokens to your environment before launching the TUI if you plan to access gated content
 
+## Rate limiting
+
+- If a source rate-limits your requests (HTTP 429), modfetch will place the job on hold and surface this clearly:
+  - Table shows status as "hold(rl)".
+  - The auth/status ribbon shows "rate-limited" for the affected host (Hugging Face or CivitAI).
+  - A toast appears with the host and may include a Retry-After hint from the server.
+- You can retry with y/r later. Consider reducing concurrency, spacing out retries, or authenticating if the host enforces tighter limits for anonymous requests.
+- Optional: set `network.retry_on_rate_limit: true` in your config to honor server-provided Retry-After between attempts.
+
 ## Troubleshooting
 
 - No UI updates: ensure the terminal supports ANSI; try a different terminal emulator

@@ -48,7 +48,7 @@ modfetch download --config ~/.config/modfetch/config.yml \
   --url 'https://proof.ovh.net/files/1Mb.dat'
 
 - Shows a live progress bar with speed and ETA.
-- Supports resume (Range) and retries.
+- Supports resume (Range) and retries. Optionally, enable honoring server-provided Retry-After for HTTP 429 by setting `network.retry_on_rate_limit: true` in your config.
 - On completion, prints a summary and writes a .sha256 sidecar.
 
 For Hugging Face / CivitAI resolvers:

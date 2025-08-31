@@ -477,7 +477,35 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 			e.metrics.IncRetries(1)
 		}
 		_ = e.st.IncDownloadRetries(url, destPath, 1)
-		// backoff
+		// backoff or honor Retry-After for 429 if enabled
+		if rle, ok := err.(rateLimitedError); ok && e.cfg.Network.RetryOnRateLimit {
+			wait := rle.after
+			capSec := e.cfg.Network.RateLimitMaxDelaySeconds
+			if capSec <= 0 { capSec = 600 }
+			capDur := time.Duration(capSec) * time.Second
+			if wait <= 0 || wait > capDur {
+				// fall back to normal backoff if header missing or too large
+				b := e.cfg.Concurrency.Backoff
+				min := b.MinMS
+				if min <= 0 { min = 200 }
+				maxb := b.MaxMS
+				if maxb <= 0 { maxb = 30000 }
+				wait = time.Duration(min)*time.Millisecond + time.Duration(rand.Intn(maxb-min+1))*time.Millisecond
+			}
+			// Log and set DB status to hold while sleeping due to rate limiting
+			secs := int(wait.Seconds() + 0.5)
+			msg := fmt.Sprintf("rate limited: waiting %ds (Retry-After)", secs)
+			e.log.WarnfThrottled(fmt.Sprintf("rl:%s|%s", url, destPath), 2*time.Second, msg)
+			_ = e.st.UpdateDownloadStatus(url, destPath, "hold", msg)
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(wait):
+			}
+			_ = e.st.UpdateDownloadStatus(url, destPath, "running", "")
+			continue
+		}
+		// default backoff
 		b := e.cfg.Concurrency.Backoff
 		min := b.MinMS
 		if min <= 0 {
@@ -523,7 +551,15 @@ func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *
 			return "", fmt.Errorf("chunk %d: server ignored Range; got 200 for partial request", c.Index)
 		}
 	} else if resp.StatusCode != http.StatusPartialContent {
-		// Friendly error for common auth cases; include chunk index for context
+		// Friendly error for common cases; include chunk index for context
+		if resp.StatusCode == http.StatusTooManyRequests {
+			retry := strings.TrimSpace(resp.Header.Get("Retry-After"))
+			dur := parseRetryAfter(retry)
+			retryMsg := ""
+			if retry != "" { retryMsg = "; retry-after=" + retry }
+			host := hostFromURL(req.URL.String())
+			return "", rateLimitedError{after: dur, msg: fmt.Sprintf("chunk %d: 429 Too Many Requests: rate limited by %s%s", c.Index, host, retryMsg)}
+		}
 		host := hostFromURL(req.URL.String())
 		hadAuth := false
 		if _, ok := headers["Authorization"]; ok && strings.TrimSpace(headers["Authorization"]) != "" {
@@ -608,7 +644,26 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 		}
 		lastErr = err
 		_ = e.st.IncDownloadRetries(url, destPath, 1)
-		// backoff between attempts
+		// backoff between attempts; honor Retry-After if enabled
+		if rle, ok := err.(rateLimitedError); ok && e.cfg.Network.RetryOnRateLimit {
+			wait := rle.after
+			capSec := e.cfg.Network.RateLimitMaxDelaySeconds
+			if capSec <= 0 { capSec = 600 }
+			capDur := time.Duration(capSec) * time.Second
+			if wait > 0 && wait <= capDur {
+				secs := int(wait.Seconds() + 0.5)
+				msg := fmt.Sprintf("rate limited: waiting %ds (Retry-After)", secs)
+				e.log.WarnfThrottled(fmt.Sprintf("rl:%s|%s", url, destPath), 2*time.Second, msg)
+				_ = e.st.UpdateDownloadStatus(url, destPath, "hold", msg)
+				select {
+				case <-ctx.Done():
+					return "", "", ctx.Err()
+				case <-time.After(wait):
+				}
+				_ = e.st.UpdateDownloadStatus(url, destPath, "running", "")
+				continue
+			}
+		}
 		b := e.cfg.Concurrency.Backoff
 		min := b.MinMS
 		if min <= 0 {
