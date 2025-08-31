@@ -19,7 +19,7 @@ BatchJob fields:
 - dest: string (optional)
   - Destination file path. If omitted:
     - For civitai:// URIs: modfetch saves to `<general.download_root>/<ModelName> - <OriginalFileName>` (sanitized), with collision-safe suffixes.
-    - For other URIs: modfetch saves to `<general.download_root>/<basename-of-resolved-URL>`.
+    - For other URIs: modfetch saves to `<general.download_root>/<basename-of-final-URL>` with query/fragment removed and the name sanitized. When possible (e.g., CivitAI direct endpoints), a HEAD request is used to honor server-provided filenames via Content-Disposition.
 - sha256: string (optional)
   - Expected final SHA256 (hex). On mismatch, modfetch will re-hash chunks to identify and re-fetch the corrupted ones. If still mismatched, the job fails.
   - A `.sha256` sidecar file is always written on success.

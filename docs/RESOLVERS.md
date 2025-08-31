@@ -37,6 +37,8 @@ CivitAI (civitai://)
   - Returns the file.downloadUrl from the selected file and also provides metadata: model name, version name/id, original file name.
 - Default filename when --dest is omitted:
   - For civitai:// URIs, modfetch will save to `<general.download_root>/<ModelName> - <OriginalFileName>` (sanitized). If a file with that name already exists, it tries appending `(v<versionId>)` before the extension, then numeric suffixes `(2)`, `(3)`, etc.
+  - For direct HTTP(S) URLs (including resolver outputs), the default name is the basename of the final download URL with any query/fragment removed and sanitized.
+  - For CivitAI direct download endpoints (`https://civitai.com/api/download/...`), the TUI and importer attempt a HEAD request and, if the server provides a Content‑Disposition filename, use that as the default (still sanitized). Otherwise they fall back to the clean basename rule above.
 - Authentication:
   - If sources.civitai.enabled is true and sources.civitai.token_env points to an environment variable (e.g., CIVITAI_TOKEN), an Authorization: Bearer <token> header is attached and used for both HEAD and GET requests.
 

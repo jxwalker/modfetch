@@ -85,7 +85,8 @@ Usage (see docs/USER_GUIDE.md for details)
     - hf://org/repo/path?rev=... is supported
   - Default filename:
     - civitai:// uses `<ModelName> - <OriginalFileName>` if `--dest` is omitted (with collision‑safe suffixes)
-    - others use the basename of the resolved URL
+    - direct URLs use the basename of the final resolved URL; query/fragment is stripped and the name is sanitized
+    - TUI and importer try a HEAD request for CivitAI direct endpoints to use server‑provided filenames when available
   - Quiet mode: add `--quiet`
   - On completion, a summary is printed (dest, size, SHA256, duration, average speed)
   - Cancel with Ctrl+C (SIGINT/SIGTERM); partial files are cleaned up

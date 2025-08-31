@@ -39,6 +39,11 @@ export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 
 ### Download
 
+Default naming
+- civitai:// URIs default to `<ModelName> - <OriginalFileName>` (sanitized) under your download_root.
+- Direct URLs default to the basename of the final URL with query/fragment removed and the name sanitized.
+- The TUI (and importer) try a HEAD request for CivitAI direct endpoints to honor server-provided filenames via Content-Disposition when available.
+
 modfetch download --config ~/.config/modfetch/config.yml \
   --url 'https://proof.ovh.net/files/1Mb.dat'
 

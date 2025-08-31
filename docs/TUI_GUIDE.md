@@ -69,6 +69,12 @@ Common keys include:
 
 ## Starting new downloads
 
+Default naming
+- The TUI derives a safe default destination inside your configured download_root.
+- For civitai:// URIs, it uses the resolver’s SuggestedFilename (`<ModelName> - <OriginalFileName>`) with collision-safe suffixes when needed.
+- For direct URLs, it uses the clean basename of the final URL (query/fragment stripped, sanitized).
+- For CivitAI direct download endpoints (`https://civitai.com/api/download/...`), the TUI tries a HEAD request to use the server-provided filename (Content-Disposition) when available; otherwise it falls back to the clean basename.
+
 - Press n to open the new-download modal
 - Paste a URL (hf://org/repo/path?rev=... or civitai://model/ID[?file=...]) or a public HTTP/HTTPS URL
 - Destination guessing is sanitized and remains under your configured download_root
