@@ -99,13 +99,24 @@ func (db *DB) DeleteDownload(url, dest string) error {
 
 // ListDownloads returns a snapshot of the downloads table
 func (db *DB) ListDownloads() ([]DownloadRow, error) {
-rows, err := db.SQL.Query(`SELECT url,dest,expected_sha256,actual_sha256,etag,last_modified,size,status,retries,updated_at,last_error FROM downloads ORDER BY updated_at DESC`)
+rows, err := db.SQL.Query(`SELECT url, dest,
+    COALESCE(expected_sha256, ''),
+    COALESCE(actual_sha256, ''),
+    COALESCE(etag, ''),
+    COALESCE(last_modified, ''),
+    COALESCE(size, 0),
+    COALESCE(status, ''),
+    COALESCE(retries, 0),
+    updated_at,
+    COALESCE(last_error, '')
+  FROM downloads
+  ORDER BY updated_at DESC`)
 	if err != nil { return nil, err }
 	defer rows.Close()
 	var out []DownloadRow
 	for rows.Next() {
 		var r DownloadRow
-if err := rows.Scan(&r.URL, &r.Dest, &r.ExpectedSHA256, &r.ActualSHA256, &r.ETag, &r.LastModified, &r.Size, &r.Status, &r.Retries, &r.UpdatedAt, &r.LastError); err != nil { return nil, err }
+		if err := rows.Scan(&r.URL, &r.Dest, &r.ExpectedSHA256, &r.ActualSHA256, &r.ETag, &r.LastModified, &r.Size, &r.Status, &r.Retries, &r.UpdatedAt, &r.LastError); err != nil { return nil, err }
 		out = append(out, r)
 	}
 	return out, rows.Err()
