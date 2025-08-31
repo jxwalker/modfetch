@@ -2047,6 +2047,13 @@ func (m *Model) computeDefaultDest(urlStr string) string {
 	if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
 		if pu, err := neturl.Parse(u); err == nil {
 			h := strings.ToLower(pu.Hostname())
+			// For direct CivitAI download endpoints, try HEAD for a better filename first
+			if hostIs(h, "civitai.com") && strings.HasPrefix(pu.Path, "/api/download/") {
+				if name := m.headFilename(u); strings.TrimSpace(name) != "" {
+					name = util.SafeFileName(name)
+					return filepath.Join(m.cfg.General.DownloadRoot, name)
+				}
+			}
 			if hostIs(h, "civitai.com") && strings.HasPrefix(pu.Path, "/models/") {
 				parts := strings.Split(strings.Trim(pu.Path, "/"), "/")
 				if len(parts) >= 2 {
