@@ -470,7 +470,7 @@ func handlePlace(ctx context.Context, args []string) error {
 	if *dryRun {
 		atype := *artType
 		if atype == "" {
-			atype = classifier.Detect(*filePath)
+			atype = classifier.Detect(c, *filePath)
 		}
 		targets, err := placer.ComputeTargets(c, atype)
 		if err != nil {

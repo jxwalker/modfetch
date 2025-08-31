@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v0.9.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/glebarez/sqlite v1.11.0
-	github.com/lithammer/fuzzysearch v1.1.8
+	go.uber.org/atomic v1.11.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
