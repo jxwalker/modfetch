@@ -175,36 +175,36 @@ type uiState struct {
 }
 
 func New(cfg *config.Config, st *state.DB, version string) tea.Model {
-	p := progress.New(progress.WithDefaultGradient(), progress.WithWidth(16))
-	fi := textinput.New()
-	fi.Placeholder = "filter (url or dest contains)"
-	fi.CharLimit = 4096
+p := progress.New(progress.WithDefaultGradient(), progress.WithWidth(16))
+	fi := textinput.New(); fi.Placeholder = "filter (url or dest contains)"; fi.CharLimit = 4096
 	// compute refresh
 	refresh := time.Second
 	if hz := cfg.UI.RefreshHz; hz > 0 {
-		if hz > 10 {
-			hz = 10
-		}
+		if hz > 10 { hz = 10 }
 		refresh = time.Second / time.Duration(hz)
 	}
-	// decide initial column mode
+// decide initial column mode
 	mode := strings.ToLower(strings.TrimSpace(cfg.UI.ColumnMode))
 	if mode != "dest" && mode != "url" && mode != "host" {
-		if cfg.UI.ShowURL {
-			mode = "url"
-		} else {
-			mode = "dest"
-		}
+		if cfg.UI.ShowURL { mode = "url" } else { mode = "dest" }
 	}
-	m := &Model{
+m := &Model{
 		cfg: cfg, st: st, th: defaultTheme(), activeTab: -1, prog: p, prev: map[string]obs{},
-		build:   strings.TrimSpace(version),
+		build: strings.TrimSpace(version),
 		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
 		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{}, hostCache: map[string]string{},
-		retrying:   map[string]time.Time{},
-		tickEvery:  refresh,
+		retrying: map[string]time.Time{},
+		tickEvery: refresh,
 		columnMode: mode,
-		placeType:  map[string]string{}, autoPlace: map[string]bool{},
+		placeType: map[string]string{}, autoPlace: map[string]bool{},
+	}
+	// Apply config.theme if provided (initial preset); UI state may override
+	if name := strings.TrimSpace(cfg.UI.Theme); name != "" {
+		if idx := themeIndexByName(name); idx >= 0 {
+			presets := themePresets()
+			m.themeIndex = idx
+			m.th = presets[idx]
+		}
 	}
 	m.configTypes = computeTypesFromConfig(cfg)
 	// Load UI state overrides if present
@@ -2390,7 +2390,23 @@ func themePresets() []Theme {
 	solar.head = solar.head.Foreground(lipgloss.Color("178"))
 	solar.border = solar.border.BorderForeground(lipgloss.Color("136"))
 	solar.tabActive = solar.tabActive.Foreground(lipgloss.Color("166"))
-	return []Theme{base, neon, drac, solar}
+	return []Theme{ base, neon, drac, solar }
+}
+
+func themeIndexByName(name string) int {
+	s := strings.ToLower(strings.TrimSpace(name))
+	switch s {
+	case "", "default":
+		return 0
+	case "neon":
+		return 1
+	case "drac", "dracula":
+		return 2
+	case "solar", "solarized":
+		return 3
+	default:
+		return -1
+	}
 }
 
 func copyToClipboard(s string) error {

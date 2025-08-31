@@ -11,7 +11,7 @@ import (
 func TestDetectMagicGGUF(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "model.bin")
-	if err := os.WriteFile(p, []byte("gguf"), 0o644); err != nil {
+	if err := os.WriteFile(p, []byte("GGUF"), 0o644); err != nil {
 		t.Fatalf("write temp file: %v", err)
 	}
 	got := Detect(nil, p)
@@ -23,7 +23,7 @@ func TestDetectMagicGGUF(t *testing.T) {
 func TestDetectCustomRuleOverrides(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "special.gguf")
-	if err := os.WriteFile(p, []byte("gguf"), 0o644); err != nil {
+	if err := os.WriteFile(p, []byte("GGUF"), 0o644); err != nil {
 		t.Fatalf("write temp file: %v", err)
 	}
 	cfg := &config.Config{

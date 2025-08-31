@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"modfetch/internal/config"
@@ -26,10 +27,11 @@ func handleHostCaps(ctx context.Context, args []string) error {
 	if *cfgPath == "" {
 		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
 			*cfgPath = env
+		} else {
+			if h, err := os.UserHomeDir(); err == nil && h != "" {
+				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
+			}
 		}
-	}
-	if *cfgPath == "" {
-		return errors.New("--config is required or set MODFETCH_CONFIG")
 	}
 	if _, err := os.Stat(*cfgPath); err != nil {
 		return fmt.Errorf("config file not found: %s", *cfgPath)

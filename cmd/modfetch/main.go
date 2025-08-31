@@ -105,7 +105,7 @@ Commands:
   clean             Prune staged partials and other cached artifacts
 
 Flags:
-  --config PATH     Path to YAML config file (or MODFETCH_CONFIG env var)
+  --config PATH     Path to YAML config file (or MODFETCH_CONFIG env var; default: ~/.config/modfetch/config.yml)
   --log-level L     Log level: debug|info|warn|error (per command)
   --json            JSON log output (per command)
 `))
@@ -122,10 +122,11 @@ func handleStatus(ctx context.Context, args []string) error {
 	if *cfgPath == "" {
 		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
 			*cfgPath = env
+		} else {
+			if h, err := os.UserHomeDir(); err == nil && h != "" {
+				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
+			}
 		}
-	}
-	if *cfgPath == "" {
-		return errors.New("--config is required or set MODFETCH_CONFIG")
 	}
 	if _, err := os.Stat(*cfgPath); err != nil {
 		return fmt.Errorf("config file not found: %s", *cfgPath)
@@ -200,10 +201,11 @@ func handleDownload(ctx context.Context, args []string) error {
 	if *cfgPath == "" {
 		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
 			*cfgPath = env
+		} else {
+			if h, err := os.UserHomeDir(); err == nil && h != "" {
+				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
+			}
 		}
-	}
-	if *cfgPath == "" {
-		return errors.New("--config is required or set MODFETCH_CONFIG")
 	}
 	if _, err := os.Stat(*cfgPath); err != nil {
 		return fmt.Errorf("config file not found: %s", *cfgPath)
@@ -610,10 +612,11 @@ func handleClean(ctx context.Context, args []string) error {
 	if *cfgPath == "" {
 		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
 			*cfgPath = env
+		} else {
+			if h, err := os.UserHomeDir(); err == nil && h != "" {
+				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
+			}
 		}
-	}
-	if *cfgPath == "" {
-		return errors.New("--config is required or set MODFETCH_CONFIG")
 	}
 	if _, err := os.Stat(*cfgPath); err != nil {
 		return fmt.Errorf("config file not found: %s", *cfgPath)
@@ -746,10 +749,11 @@ func configOp(args []string, fn func(*config.Config, *logging.Logger) error) err
 	if *cfgPath == "" {
 		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
 			*cfgPath = env
+		} else {
+			if h, err := os.UserHomeDir(); err == nil && h != "" {
+				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
+			}
 		}
-	}
-	if *cfgPath == "" {
-		return errors.New("--config is required or set MODFETCH_CONFIG")
 	}
 	if _, err := os.Stat(*cfgPath); err != nil {
 		return fmt.Errorf("config file not found: %s", *cfgPath)
