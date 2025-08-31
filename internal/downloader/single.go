@@ -197,6 +197,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		// Rate limited: hold job with retry-after hint if provided
 		if resp.StatusCode == http.StatusTooManyRequests {
 			retry := strings.TrimSpace(resp.Header.Get("Retry-After"))
+			dur := parseRetryAfter(retry)
 			retryMsg := ""
 			if retry != "" {
 				// Retry-After may be seconds or HTTP-date; just include raw for clarity
@@ -206,7 +207,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 			if u, _ := neturl.Parse(url); u != nil { host = strings.ToLower(u.Hostname()) }
 			msg := fmt.Sprintf("429 Too Many Requests: rate limited by %s%s", host, retryMsg)
 			_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "hold", LastError: msg})
-			return "", "", fmt.Errorf(msg)
+			return "", "", rateLimitedError{after: dur, msg: msg}
 		}
 		// Special-case: resuming beyond EOF -> already complete
 		if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable && size > 0 && start >= size {

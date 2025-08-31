@@ -24,6 +24,8 @@ Quick start: interactive wizard
   - `always_no_resume`: true|false (default false). When true, every download starts fresh (ignores any .part and clears chunk state) unless overridden by CLI.
 - `network`
   - `timeout_seconds`, `max_redirects`, `tls_verify`, `user_agent`
+  - `retry_on_rate_limit`: true|false. When true, honor HTTP 429 Retry-After to determine wait between retries.
+  - `rate_limit_max_delay_seconds`: integer (>=0). Caps the wait derived from Retry-After (default cap 600s if unset).
 - `concurrency`
   - `global_files`, `per_file_chunks`, `per_host_requests`, `chunk_size_mb`, `max_retries`, `backoff`
 - `sources`

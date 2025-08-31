@@ -2,14 +2,41 @@ package downloader
 
 import (
     "fmt"
+    stdhttp "net/http"
     neturl "net/url"
     "strings"
+    "time"
 
     "modfetch/internal/config"
 )
 
 // friendlyHTTPStatusMessage creates a host-aware error message for common auth-related statuses.
 // hadAuth indicates whether an Authorization header was sent.
+// rateLimitedError represents a 429 with an optional suggested wait duration.
+type rateLimitedError struct {
+    after time.Duration
+    msg   string
+}
+
+func (e rateLimitedError) Error() string { return e.msg }
+
+func parseRetryAfter(raw string) time.Duration {
+    s := strings.TrimSpace(raw)
+    if s == "" { return 0 }
+    // If integer seconds
+    var secs int
+    if _, err := fmt.Sscanf(s, "%d", &secs); err == nil && secs >= 0 {
+        return time.Duration(secs) * time.Second
+    }
+    // Try HTTP-date
+    if t, err := time.Parse(stdhttp.TimeFormat, s); err == nil {
+        d := time.Until(t)
+        if d < 0 { return 0 }
+        return d
+    }
+    return 0
+}
+
 func friendlyHTTPStatusMessage(cfg *config.Config, host string, statusCode int, status string, hadAuth bool) string {
     h := strings.ToLower(strings.TrimSpace(host))
     hfEnv := strings.TrimSpace(cfg.Sources.HuggingFace.TokenEnv)

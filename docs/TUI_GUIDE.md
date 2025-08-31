@@ -107,6 +107,7 @@ Default naming
   - The auth/status ribbon shows "rate-limited" for the affected host (Hugging Face or CivitAI).
   - A toast appears with the host and may include a Retry-After hint from the server.
 - You can retry with y/r later. Consider reducing concurrency, spacing out retries, or authenticating if the host enforces tighter limits for anonymous requests.
+- Optional: set `network.retry_on_rate_limit: true` in your config to honor server-provided Retry-After between attempts.
 
 ## Troubleshooting
 

@@ -477,7 +477,29 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 			e.metrics.IncRetries(1)
 		}
 		_ = e.st.IncDownloadRetries(url, destPath, 1)
-		// backoff
+		// backoff or honor Retry-After for 429 if enabled
+		if rle, ok := err.(rateLimitedError); ok && e.cfg.Network.RetryOnRateLimit {
+			wait := rle.after
+			capSec := e.cfg.Network.RateLimitMaxDelaySeconds
+			if capSec <= 0 { capSec = 600 }
+			capDur := time.Duration(capSec) * time.Second
+			if wait <= 0 || wait > capDur {
+				// fall back to normal backoff if header missing or too large
+				b := e.cfg.Concurrency.Backoff
+				min := b.MinMS
+				if min <= 0 { min = 200 }
+				maxb := b.MaxMS
+				if maxb <= 0 { maxb = 30000 }
+				wait = time.Duration(min)*time.Millisecond + time.Duration(rand.Intn(maxb-min+1))*time.Millisecond
+			}
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(wait):
+			}
+			continue
+		}
+		// default backoff
 		b := e.cfg.Concurrency.Backoff
 		min := b.MinMS
 		if min <= 0 {
@@ -526,10 +548,11 @@ func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *
 		// Friendly error for common cases; include chunk index for context
 		if resp.StatusCode == http.StatusTooManyRequests {
 			retry := strings.TrimSpace(resp.Header.Get("Retry-After"))
+			dur := parseRetryAfter(retry)
 			retryMsg := ""
 			if retry != "" { retryMsg = "; retry-after=" + retry }
 			host := hostFromURL(req.URL.String())
-			return "", fmt.Errorf("chunk %d: 429 Too Many Requests: rate limited by %s%s", c.Index, host, retryMsg)
+			return "", rateLimitedError{after: dur, msg: fmt.Sprintf("chunk %d: 429 Too Many Requests: rate limited by %s%s", c.Index, host, retryMsg)}
 		}
 		host := hostFromURL(req.URL.String())
 		hadAuth := false
@@ -615,7 +638,21 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 		}
 		lastErr = err
 		_ = e.st.IncDownloadRetries(url, destPath, 1)
-		// backoff between attempts
+		// backoff between attempts; honor Retry-After if enabled
+		if rle, ok := err.(rateLimitedError); ok && e.cfg.Network.RetryOnRateLimit {
+			wait := rle.after
+			capSec := e.cfg.Network.RateLimitMaxDelaySeconds
+			if capSec <= 0 { capSec = 600 }
+			capDur := time.Duration(capSec) * time.Second
+			if wait > 0 && wait <= capDur {
+				select {
+				case <-ctx.Done():
+					return "", "", ctx.Err()
+				case <-time.After(wait):
+				}
+				continue
+			}
+		}
 		b := e.cfg.Concurrency.Backoff
 		min := b.MinMS
 		if min <= 0 {
