@@ -17,11 +17,7 @@ export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 modfetch tui
 ```
 
-- Preview the next‑gen TUI v2 (experimental):
-
-```bash
-modfetch tui --config /path/to/config.yml --v2
-```
+<!-- TUI v2 is the default; no flag required -->
 
 ## Layout overview
 
@@ -41,7 +37,7 @@ Row columns include status, progress, speed, ETA, size, and destination path.
 
 Notes:
 - Ephemeral rows are keyed by URL|Dest to avoid collisions and are cleared precisely when the corresponding DB row completes.
-- CivitAI model page URLs (https://civitai.com/models/ID) are accepted and auto-resolved to a direct file URL.
+- Civitai model page URLs (https://civitai.com/models/ID) are accepted and auto-resolved to a direct file URL.
 
 ## Keybindings
 
@@ -73,7 +69,7 @@ Default naming
 - The TUI derives a safe default destination inside your configured download_root.
 - For civitai:// URIs, it uses the resolver’s SuggestedFilename (`<ModelName> - <OriginalFileName>`) with collision-safe suffixes when needed.
 - For direct URLs, it uses the clean basename of the final URL (query/fragment stripped, sanitized).
-- For CivitAI direct download endpoints (`https://civitai.com/api/download/...`), the TUI tries a HEAD request to use the server-provided filename (Content-Disposition) when available; otherwise it falls back to the clean basename.
+- For Civitai direct download endpoints (`https://civitai.com/api/download/...`), the TUI tries a HEAD request to use the server-provided filename (`Content-Disposition`) when available; otherwise it falls back to the clean basename.
 
 - Press n to open the new-download modal
 - Paste a URL (hf://org/repo/path?rev=... or civitai://model/ID[?file=...]) or a public HTTP/HTTPS URL
@@ -102,12 +98,12 @@ Default naming
 
 ## Rate limiting
 
-- If a source rate-limits your requests (HTTP 429), modfetch will place the job on hold and surface this clearly:
-  - Table shows status as "hold(rl)".
-  - The auth/status ribbon shows "rate-limited" for the affected host (Hugging Face or CivitAI).
-  - A toast appears with the host and may include a Retry-After hint from the server.
-- You can retry with y/r later. Consider reducing concurrency, spacing out retries, or authenticating if the host enforces tighter limits for anonymous requests.
-- Optional: set `network.retry_on_rate_limit: true` in your config to honor server-provided Retry-After between attempts.
+- If a source rate-limits your requests (HTTP 429), modfetch places the job on hold and surfaces this clearly:
+  - Table shows status as `hold(rl)`.
+  - The auth/status ribbon shows `rate-limited` for the affected host (Hugging Face or Civitai).
+  - A toast appears with the host and may include a `Retry-After` hint from the server.
+- You can retry with `y` or `r` later. Consider reducing concurrency, spacing out retries, or authenticating if the host enforces tighter limits for anonymous requests.
+- Optional: set `network.retry_on_rate_limit: true` in your config to honor server-provided `Retry-After` between attempts.
 
 ## Troubleshooting
 

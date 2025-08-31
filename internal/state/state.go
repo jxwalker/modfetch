@@ -73,6 +73,7 @@ func initSchema(db *sql.DB) error {
                 );`,
 		`CREATE INDEX IF NOT EXISTS idx_downloads_status ON downloads(status);`,
 		`CREATE INDEX IF NOT EXISTS idx_downloads_dest   ON downloads(dest);`,
+		`CREATE INDEX IF NOT EXISTS idx_downloads_updated_at ON downloads(updated_at);`,
 	}
 	for _, s := range stmts {
 		if _, err := db.Exec(s); err != nil {
@@ -116,8 +117,12 @@ func (db *DB) prepareStatements() error {
 
 // UpdateDownloadStatus updates only status and last_error, preserving other fields.
 func (db *DB) UpdateDownloadStatus(url, dest, status, lastError string) error {
-	_, err := db.SQL.Exec(`UPDATE downloads SET status=?, last_error=?, updated_at=strftime('%s','now') WHERE url=? AND dest=?`, status, lastError, url, dest)
-	return err
+	res, err := db.SQL.Exec(`UPDATE downloads SET status=?, last_error=?, updated_at=strftime('%s','now') WHERE url=? AND dest=?`, status, lastError, url, dest)
+	if err != nil { return err }
+	if n, _ := res.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 type DownloadRow struct {

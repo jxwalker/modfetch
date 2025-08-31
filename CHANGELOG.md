@@ -5,11 +5,11 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 Improvements
-- Downloader: explicit 429 handling. On rate limiting (HTTP 429), jobs are placed on hold with a clear, host-aware message persisted to last_error, including Retry-After when provided. Optional auto-retry can honor server-provided Retry-After when enabled.
-- TUI v2: clearer surfacing of rate limits. Pending/hold rows due to 429 render as "hold(rl)" in the table, the auth ribbon shows "rate-limited" for the affected host, and a toast indicates the host and suggests trying later.
+- Downloader: explicit 429 handling. On rate limiting (HTTP 429), jobs are placed on hold with a clear, host-aware message persisted to `last_error`, including `Retry-After` when provided. Optional auto-retry honors server-provided `Retry-After` when `network.retry_on_rate_limit` is enabled.
+- TUI v2: clearer surfacing of rate limits. Rows placed on hold due to 429 render as `hold(rl)` in the table; the auth ribbon shows `rate-limited` for the affected host; a toast indicates the host and suggests trying later.
 
 New
-- Config: `network.retry_on_rate_limit` (bool) to respect Retry-After on HTTP 429; `network.rate_limit_max_delay_seconds` to cap the wait (defaults to 600s if unset).
+- Config: `network.retry_on_rate_limit` (bool) to respect `Retry-After` on HTTP 429; `network.rate_limit_max_delay_seconds` to cap the wait (defaults to 600s if unset; 0 uses the default).
 
 ## v0.3.3 — 2025-08-31
 
