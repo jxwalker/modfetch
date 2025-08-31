@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.2 — 2025-08-31
+
+Maintenance
+- CI: Add macOS universal (fat) binary to release artifacts via new macOS job. Checksums included.
+- Docs: README updated to note CI-built universal binary and checksums.
+
 ## v0.3.1 — 2025-08-31
 
 Maintenance
