@@ -478,38 +478,16 @@ func (m *Model) View() string {
 	if ver == "" { ver = "dev" }
 	title := m.th.title.Render(fmt.Sprintf("modfetch • TUI v2 (build %s)", ver))
 	toastStr := m.renderToasts()
-titleBar := m.th.border.Width(m.w-2).Render(lipgloss.JoinHorizontal(lipgloss.Top, title, "  ", toastStr))
+	titleBar := m.th.border.Width(m.w-2).Render(lipgloss.JoinHorizontal(lipgloss.Top, title, "  ", toastStr))
 
-	// Top panels: fixed height; left = key hints, right = stats (align right edges)
-	topHeight := 8
-	// Each bordered panel contributes 2 columns (left+right border)
-	topBoxes := 2
-	topUsable := m.w - topBoxes*2
-	if topUsable < 20 { topUsable = 20 }
-	topLeftW := topUsable / 2
-	if topLeftW < 40 { topLeftW = 40 }
-	if topLeftW > topUsable-20 { topLeftW = topUsable - 20 }
-	topRightW := topUsable - topLeftW
-	topLeft := m.th.border.Width(topLeftW).Height(topHeight).Render(m.renderTopLeftHints())
-	topRight := m.th.border.Width(topRightW).Height(topHeight).Render(m.renderTopRightStats())
-	topRow := lipgloss.JoinHorizontal(lipgloss.Top, topLeft, topRight)
+	// Horizontal tabs across full width
+	tabs := m.th.border.Width(m.w-2).Render(m.renderTabs())
 
-	// Bottom panels: queue/table (with tabs), optional inspector (align right edges)
-	leftW := 24
-	inspW := 0
-	boxes := 2
-	if m.showInspector { inspW = 42; boxes = 3 }
-	usable := m.w - boxes*2
-	if usable < 40 { usable = 40 }
-	mainW := usable - leftW - inspW
-	if mainW < 10 { mainW = 10 }
-	left := m.th.border.Width(leftW).Render(m.renderTabs())
-	main := m.th.border.Width(mainW).Render(m.renderTable())
-	bottom := lipgloss.JoinHorizontal(lipgloss.Top, left, main)
-	if m.showInspector {
-		insp := m.th.border.Width(inspW).Render(m.renderInspector())
-		bottom = lipgloss.JoinHorizontal(lipgloss.Top, left, main, insp)
-	}
+	// Full-width table
+	table := m.th.border.Width(m.w-2).Render(m.renderTable())
+
+	// Always-on inspector below the table showing highlighted job details
+	inspector := m.th.border.Width(m.w-2).Render(m.renderInspector())
 
 	// Optional overlays
 	drawer := ""
@@ -520,16 +498,17 @@ titleBar := m.th.border.Width(m.w-2).Render(lipgloss.JoinHorizontal(lipgloss.Top
 	if m.newJob { modal = m.th.border.Width(m.w-4).Render(m.renderNewJobModal()) }
 	if m.batchMode { modal = m.th.border.Width(m.w-4).Render(m.renderBatchModal()) }
 
-	// Footer with filter bar
+	// Minimal footer: show filter input only when active
 	filterBar := ""
 	if m.filterOn { filterBar = "Filter: "+ m.filterInput.View() }
-footer := m.th.border.Width(m.w-2).Render(m.th.footer.Render("0 All • 1 Pending • 2 Active • 3 Completed • 4 Failed • j/k nav • y/r start • p cancel • D delete • O open • / filter • s/e sort • o clear • g group host • t last col URL/DEST/HOST • v compact • i inspector • T theme • H toasts • ? help • X clear sel • q quit\n"+filterBar))
+	footer := ""
+	if strings.TrimSpace(filterBar) != "" { footer = m.th.border.Width(m.w-2).Render(m.th.footer.Render(filterBar)) }
 
-	parts := []string{titleBar, topRow, bottom}
+	parts := []string{titleBar, tabs, table, inspector}
 	if help != "" { parts = append(parts, help) }
 	if drawer != "" { parts = append(parts, drawer) }
 	if modal != "" { parts = append(parts, modal) }
-	parts = append(parts, footer)
+	if footer != "" { parts = append(parts, footer) }
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
@@ -713,13 +692,13 @@ func (m *Model) renderTabs() string {
 		{"Failed", 3},
 	}
 	var sb strings.Builder
-	for _, it := range labels {
+	for i, it := range labels {
 		style := m.th.tabInactive
 		if it.tab == m.activeTab { style = m.th.tabActive }
 		count := 0
 		if it.tab == -1 { count = len(m.rows) } else { count = len(m.filterRows(it.tab)) }
 		sb.WriteString(style.Render(fmt.Sprintf("%s (%d)", it.name, count)))
-		sb.WriteString("\n")
+		if i < len(labels)-1 { sb.WriteString("  •  ") }
 	}
 	return sb.String()
 }
@@ -787,10 +766,10 @@ func (m *Model) renderTable() string {
 	var sb strings.Builder
 	lastLabel := "DEST"
 	if m.columnMode == "url" { lastLabel = "URL" } else if m.columnMode == "host" { lastLabel = "HOST" }
-	if m.isCompact() {
-		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-12s  %-8s  %-s", "S", "STATUS", "PROG", "PCT", "SRC", "ETA", lastLabel)))
+if m.isCompact() {
+		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-1s %-8s %-3s  %-16s  %-4s  %-12s  %-8s  %-s", "S", "STATUS", "RT", "PROG", "PCT", "SRC", "ETA", lastLabel)))
 	} else {
-		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %-s", "S", "STATUS", "PROG", "PCT", "SPEED", "THR", "SRC", "ETA", lastLabel)))
+		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-1s %-8s %-3s  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %-s", "S", "STATUS", "RT", "PROG", "PCT", "SPEED", "THR", "SRC", "ETA", lastLabel)))
 	}
 	sb.WriteString("\n")
 	maxRows := m.h - 10
@@ -824,10 +803,10 @@ func (m *Model) renderTable() string {
 		lw := m.lastColumnWidth(m.isCompact())
 		last = truncateMiddle(last, lw)
 		var line string
-		if m.isCompact() {
-			line = fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-12s  %-8s  %s", sel, r.Status, prog, pct, src, eta, last)
+if m.isCompact() {
+			line = fmt.Sprintf("%-1s %-8s %-3d  %-16s  %-4s  %-12s  %-8s  %s", sel, r.Status, r.Retries, prog, pct, src, eta, last)
 		} else {
-			line = fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %s", sel, r.Status, prog, pct, humanize.Bytes(uint64(rate))+"/s", thr, src, eta, last)
+			line = fmt.Sprintf("%-1s %-8s %-3d  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %s", sel, r.Status, r.Retries, prog, pct, humanize.Bytes(uint64(rate))+"/s", thr, src, eta, last)
 		}
 		if i == m.selected { line = m.th.rowSelected.Render(line) }
 		sb.WriteString(line+"\n")
@@ -860,7 +839,24 @@ func (m *Model) renderInspector() string {
 	sb.WriteString(fmt.Sprintf("%s %s/%s\n", m.th.label.Render("Progress:"), humanize.Bytes(uint64(cur)), humanize.Bytes(uint64(total))))
 	sb.WriteString(fmt.Sprintf("%s %s/s\n", m.th.label.Render("Speed:"), humanize.Bytes(uint64(rate))))
 	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("ETA:"), eta))
-sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Throughput:"), m.renderSparkline(keyFor(r))))
+	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Throughput:"), m.renderSparkline(keyFor(r))))
+	// Retries and status
+	sb.WriteString(fmt.Sprintf("%s %d\n", m.th.label.Render("Retries:"), r.Retries))
+	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Status:"), r.Status))
+	// Verification details
+	if strings.TrimSpace(r.ExpectedSHA256) != "" || strings.TrimSpace(r.ActualSHA256) != "" {
+		sb.WriteString(m.th.label.Render("SHA256:"))
+		sb.WriteString("\n")
+		if strings.TrimSpace(r.ExpectedSHA256) != "" { sb.WriteString(fmt.Sprintf("expected: %s\n", r.ExpectedSHA256)) }
+		if strings.TrimSpace(r.ActualSHA256) != "" { sb.WriteString(fmt.Sprintf("actual:   %s\n", r.ActualSHA256)) }
+		if r.ExpectedSHA256 != "" && r.ActualSHA256 != "" {
+			if strings.EqualFold(strings.TrimSpace(r.ExpectedSHA256), strings.TrimSpace(r.ActualSHA256)) {
+				sb.WriteString(m.th.ok.Render("verified: OK")+"\n")
+			} else {
+				sb.WriteString(m.th.bad.Render("verified: MISMATCH")+"\n")
+			}
+		}
+	}
 	// Show reason for hold/error if available
 	if strings.TrimSpace(r.LastError) != "" {
 		sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Reason:"), r.LastError))
@@ -920,7 +916,9 @@ func (m *Model) renderSparklineKey(key string) string {
 	if max <= 0 { return "──────────" }
 	levels := []rune{'▁','▂','▃','▄','▅','▆','▇','█'}
 	var sb strings.Builder
-	for _, v := range h {
+	// Newest on the left (reverse chronological) to match user expectation
+	for i := len(h)-1; i >= 0; i-- {
+		v := h[i]
 		r := int((v/max)*float64(len(levels)-1) + 0.5)
 		if r < 0 { r = 0 }; if r >= len(levels) { r = len(levels)-1 }
 		sb.WriteRune(levels[r])
@@ -1161,22 +1159,18 @@ func truncateMiddle(s string, max int) string {
 }
 
 func (m *Model) lastColumnWidth(compact bool) int {
-	leftW := 24
-	inspW := 0
-	if m.showInspector { inspW = 42 }
-	// Rough usable width of main table inside borders
-	boxes := 2; if m.showInspector { boxes = 3 }
-	usable := m.w - leftW - inspW - boxes*2
+	// Without side panels, use nearly full width minus borders
+	usable := m.w - 2*2 // borders on left/right wrappers
 	if usable < 40 { usable = 40 }
 	if compact {
-		// S, space, STATUS, 2sp, PROG, 2sp, PCT, 2sp, SRC, 2sp, ETA, 2sp
-		consumed := 1 + 1 + 8 + 2 + 16 + 2 + 4 + 2 + 12 + 2 + 8 + 2
+		// S(1), space(1), STATUS(8), space(1), RT(3), 2sp, PROG(16), 2sp, PCT(4), 2sp, SRC(12), 2sp, ETA(8), 2sp
+		consumed := 1 + 1 + 8 + 1 + 3 + 2 + 16 + 2 + 4 + 2 + 12 + 2 + 8 + 2
 		lw := usable - consumed
 		if lw < 10 { lw = 10 }
 		return lw
 	}
-	// non-compact consumed widths: add SRC(12) before ETA
-	consumed := 1 + 1 + 8 + 2 + 16 + 2 + 4 + 2 + 10 + 2 + 10 + 2 + 12 + 2 + 8 + 2
+	// non-compact consumed widths: + SPEED(10) + THR(10) before SRC
+	consumed := 1 + 1 + 8 + 1 + 3 + 2 + 16 + 2 + 4 + 2 + 10 + 2 + 10 + 2 + 12 + 2 + 8 + 2
 	lw := usable - consumed
 	if lw < 10 { lw = 10 }
 	return lw
