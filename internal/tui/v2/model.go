@@ -62,6 +62,8 @@ type tickMsg time.Time
 
 type dlDoneMsg struct{ url, dest, path string; err error }
 
+type destSuggestMsg struct{ url string; dest string }
+
 type obs struct{ bytes int64; t time.Time }
 
 type toast struct{ msg string; when time.Time; ttl time.Duration }
@@ -95,6 +97,7 @@ type Model struct {
 	newDest string
 	newType string
 	newAutoPlace bool
+	newAutoSuggested string // latest auto-suggested dest (to avoid overriding manual edits)
 	// Batch import modal state
 	batchMode bool
 	batchInput textinput.Model
@@ -182,11 +185,13 @@ case tea.KeyMsg:
 					m.newURL = val
 					// Show normalization note if applicable
 					if norm, ok := m.normalizeURLForNote(val); ok { m.newNormNote = norm } else { m.newNormNote = "" }
-					cand := m.computeDefaultDest(val)
+					// Set an immediate, non-blocking suggestion, then resolve better suggestion asynchronously
+					cand := m.immediateDestCandidate(val)
+					m.newAutoSuggested = cand
 					m.newInput.SetValue(cand)
 					m.newInput.Placeholder = "Destination path (Enter to accept)"
 					m.newStep = 2
-					return m, nil
+					return m, m.suggestDestCmd(val)
 				} else if m.newStep == 2 {
 					m.newDest = val
 					m.newInput.SetValue("")
@@ -338,6 +343,15 @@ case "y": // retry (batch-aware)
 		}
 	case tickMsg:
 		return m, m.refresh()
+case destSuggestMsg:
+		// Update the suggested dest only if the user hasn't edited it since our last suggestion
+		if m.newJob && m.newStep == 2 && strings.TrimSpace(m.newURL) == strings.TrimSpace(msg.url) {
+			if strings.TrimSpace(m.newInput.Value()) == strings.TrimSpace(m.newAutoSuggested) || strings.TrimSpace(m.newInput.Value()) == "" {
+				m.newInput.SetValue(msg.dest)
+				m.newAutoSuggested = msg.dest
+			}
+		}
+		return m, nil
 case dlDoneMsg:
 		if msg.err != nil {
 			m.err = msg.err
@@ -545,7 +559,7 @@ func (m *Model) renderNewJobModal() string {
 func (m *Model) renderBatchModal() string {
 	var sb strings.Builder
 	sb.WriteString(m.th.head.Render("Batch Import")+"\n")
-	sb.WriteString(m.th.label.Render("Enter path to text file with one URL per line (optional tokens: dest=..., type=..., place=true)" )+"\n\n")
+	sb.WriteString(m.th.label.Render("Enter path to text file with one URL per line (tokens: dest=..., type=..., place=true, mode=copy|symlink|hardlink)" )+"\n\n")
 	sb.WriteString(m.batchInput.View())
 	return sb.String()
 }
@@ -789,6 +803,58 @@ func (m *Model) renderSparklineKey(key string) string {
 }
 
 func (m *Model) renderSparkline(key string) string { return m.renderSparklineKey(key) }
+
+// Immediate (non-blocking) dest candidate based on URL only
+func (m *Model) immediateDestCandidate(urlStr string) string {
+	s := strings.TrimSpace(urlStr)
+	if s == "" { return filepath.Join(m.cfg.General.DownloadRoot, "download") }
+	// If it's a resolver URI, guess based on path base
+	if strings.HasPrefix(s, "hf://") || strings.HasPrefix(s, "civitai://") {
+		if u, err := neturl.Parse(s); err == nil {
+			base := filepath.Base(strings.Trim(u.Path, "/"))
+			if base == "" { base = "download" }
+			return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(base))
+		}
+	}
+	// HTTP(S)
+	if u, err := neturl.Parse(s); err == nil {
+		h := strings.ToLower(u.Hostname())
+		if hostIs(h, "huggingface.co") {
+			parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+			if len(parts) >= 1 {
+				if len(parts) >= 5 && parts[2] == "blob" {
+					base := filepath.Base(strings.Join(parts[4:], "/"))
+					if base != "" { return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(base)) }
+				}
+				return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(filepath.Base(u.Path)))
+			}
+		}
+		if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
+			// Use model ID as placeholder
+			parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+			if len(parts) >= 2 {
+				id := parts[1]
+				if id != "" { return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(id)) }
+			}
+		}
+		// Fallback to path base
+		base := filepath.Base(s)
+		if base == "" || base == "/" || base == "." { base = "download" }
+		return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(base))
+	}
+	// raw fallback
+	base := filepath.Base(s)
+	if base == "" || base == "/" || base == "." { base = "download" }
+	return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(base))
+}
+
+// Background suggestion using resolver (may perform network I/O)
+func (m *Model) suggestDestCmd(urlStr string) tea.Cmd {
+	return func() tea.Msg {
+		d := m.computeDefaultDest(urlStr)
+		return destSuggestMsg{url: urlStr, dest: d}
+	}
+}
 
 func truncateMiddle(s string, max int) string {
 	if max <= 0 { return "" }
