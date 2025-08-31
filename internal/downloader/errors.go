@@ -2,6 +2,7 @@ package downloader
 
 import (
     "fmt"
+    "strconv"
     stdhttp "net/http"
     neturl "net/url"
     "strings"
@@ -23,9 +24,8 @@ func (e rateLimitedError) Error() string { return e.msg }
 func parseRetryAfter(raw string) time.Duration {
     s := strings.TrimSpace(raw)
     if s == "" { return 0 }
-    // If integer seconds
-    var secs int
-    if _, err := fmt.Sscanf(s, "%d", &secs); err == nil && secs >= 0 {
+    // If integer delta-seconds
+    if secs, err := strconv.Atoi(s); err == nil && secs >= 0 {
         return time.Duration(secs) * time.Second
     }
     // Try HTTP-date
@@ -53,16 +53,17 @@ func friendlyHTTPStatusMessage(cfg *config.Config, host string, statusCode int, 
         }
         if hostIs(h, "civitai.com") {
             if hadAuth {
-                return fmt.Sprintf("%s (CivitAI: token present but not authorized; ensure your account has access and age-gating or permissions allow download)", base)
+                return fmt.Sprintf("%s (Civitai: token present but not authorized; ensure your account has access and age-gating or permissions allow download)", base)
             }
-            return fmt.Sprintf("%s (CivitAI: token may be required; export %s)", base, civEnv)
+            return fmt.Sprintf("%s (Civitai: token may be required; export %s)", base, civEnv)
         }
         return base
     }
 
     switch statusCode {
     case 429:
-        return mk("429 Too Many Requests: rate limited")
+        // Keep neutral guidance for rate limits; do not imply tokens are required
+        return "429 Too Many Requests: rate limited"
     case 401:
         if hadAuth {
             return mk("401 Unauthorized: token present but not authorized")
@@ -79,8 +80,8 @@ func friendlyHTTPStatusMessage(cfg *config.Config, host string, statusCode int, 
         }
         return mk("404 Not Found: check path/revision; if private, provide token")
     default:
-        // Preserve original status text
-        return fmt.Sprintf("unexpected status: %s", status)
+        // Preserve original status text verbatim
+        return status
     }
 }
 

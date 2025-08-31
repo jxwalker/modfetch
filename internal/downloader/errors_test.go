@@ -9,17 +9,23 @@ import (
 
 func TestFriendlyStatus_429_RateLimited(t *testing.T) {
     cfg := &config.Config{}
-
-    // Hugging Face host context
-    hf := friendlyHTTPStatusMessage(cfg, "huggingface.co", 429, "429 Too Many Requests", false)
-    if !strings.Contains(strings.ToLower(hf), "429") || !strings.Contains(strings.ToLower(hf), "rate limited") {
-        t.Fatalf("expected 429 rate limited message for HF, got: %q", hf)
+    cases := []struct{
+        name string
+        host string
+        hadAuth bool
+    }{
+        {"HF anon", "huggingface.co", false},
+        {"Civitai authed", "civitai.com", true},
+        {"Generic host", "example.com", false},
     }
-
-    // CivitAI host context
-    civ := friendlyHTTPStatusMessage(cfg, "civitai.com", 429, "429 Too Many Requests", true)
-    if !strings.Contains(strings.ToLower(civ), "429") || !strings.Contains(strings.ToLower(civ), "rate limited") {
-        t.Fatalf("expected 429 rate limited message for CivitAI, got: %q", civ)
+    for _, tc := range cases {
+        t.Run(tc.name, func(t *testing.T) {
+            out := friendlyHTTPStatusMessage(cfg, tc.host, 429, "429 Too Many Requests", tc.hadAuth)
+            lo := strings.ToLower(out)
+            if !strings.Contains(lo, "429") || !strings.Contains(lo, "rate limited") {
+                t.Fatalf("expected 429 rate limited message for %s, got: %q", tc.host, out)
+            }
+        })
     }
 }
 
