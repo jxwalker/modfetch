@@ -9,8 +9,8 @@ import (
 )
 
 type Resolved struct {
-	URL               string
-	Headers           map[string]string
+	URL     string
+	Headers map[string]string
 	// Optional metadata (primarily for CivitAI) — may be empty for other resolvers
 	ModelName         string
 	VersionName       string
@@ -27,13 +27,34 @@ type Resolver interface {
 
 func Resolve(ctx context.Context, uri string, cfg *config.Config) (*Resolved, error) {
 	uri = strings.TrimSpace(uri)
+	if cfg != nil {
+		if res, ok, err := cacheGet(cfg, uri); err == nil && ok {
+			return res, nil
+		}
+	}
+	var (
+		res *Resolved
+		err error
+	)
 	switch {
 	case strings.HasPrefix(uri, "hf://"):
-		return (&HuggingFace{}).Resolve(ctx, uri, cfg)
+		res, err = (&HuggingFace{}).Resolve(ctx, uri, cfg)
 	case strings.HasPrefix(uri, "civitai://"):
-		return (&CivitAI{}).Resolve(ctx, uri, cfg)
+		res, err = (&CivitAI{}).Resolve(ctx, uri, cfg)
 	default:
-		return nil, errors.New("no resolver for uri scheme")
+		err = errors.New("no resolver for uri scheme")
 	}
+	if err == nil && cfg != nil {
+		_ = cacheSet(cfg, uri, res)
+	} else if err != nil && cfg != nil && isNotFound(err) {
+		_ = cacheDelete(cfg, uri)
+	}
+	return res, err
 }
 
+func isNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "404")
+}
