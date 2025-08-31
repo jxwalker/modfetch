@@ -8,34 +8,38 @@ import (
 	"fmt"
 	neturl "net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/dustin/go-humanize"
 
+	"modfetch/internal/batch"
+	"modfetch/internal/classifier"
 	"modfetch/internal/config"
 	"modfetch/internal/downloader"
 	"modfetch/internal/logging"
+	"modfetch/internal/metrics"
+	"modfetch/internal/placer"
 	"modfetch/internal/resolver"
 	"modfetch/internal/state"
-	"modfetch/internal/placer"
-	"modfetch/internal/classifier"
-	"modfetch/internal/batch"
-	"modfetch/internal/metrics"
 	"modfetch/internal/util"
 )
 
 var version = "dev"
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	if err := run(ctx, os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
 }
 
-func run(args []string) error {
+func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		usage()
 		return errors.New("no command provided")
@@ -45,28 +49,28 @@ func run(args []string) error {
 	cmd := args[0]
 	switch cmd {
 	case "config":
-		return handleConfig(args[1:])
+		return handleConfig(ctx, args[1:])
 	case "status":
-		return handleStatus(args[1:])
+		return handleStatus(ctx, args[1:])
 	case "download":
-		return handleDownload(args[1:])
+		return handleDownload(ctx, args[1:])
 	case "place":
-		return handlePlace(args[1:])
+		return handlePlace(ctx, args[1:])
 	case "verify":
-		return handleVerify(args[1:])
+		return handleVerify(ctx, args[1:])
 	case "tui":
-		return handleTUI(args[1:])
+		return handleTUI(ctx, args[1:])
 	case "version":
 		fmt.Println(version)
 		return nil
-case "completion":
-		return handleCompletion(args[1:])
-case "hostcaps":
-		return handleHostCaps(args[1:])
-case "clean":
-		return handleClean(args[1:])
-case "batch":
-		return handleBatch(args[1:])
+	case "completion":
+		return handleCompletion(ctx, args[1:])
+	case "hostcaps":
+		return handleHostCaps(ctx, args[1:])
+	case "clean":
+		return handleClean(ctx, args[1:])
+	case "batch":
+		return handleBatch(ctx, args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -105,24 +109,40 @@ Flags:
 `))
 }
 
-func handleStatus(args []string) error {
+func handleStatus(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
 	jsonOut := fs.Bool("json", false, "json logs")
-	if err := fs.Parse(args); err != nil { return err }
-	if *cfgPath == "" { if env := os.Getenv("MODFETCH_CONFIG"); env != "" { *cfgPath = env } }
-	if *cfgPath == "" { return errors.New("--config is required or set MODFETCH_CONFIG") }
-	if _, err := os.Stat(*cfgPath); err != nil { return fmt.Errorf("config file not found: %s", *cfgPath) }
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *cfgPath == "" {
+		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
+			*cfgPath = env
+		}
+	}
+	if *cfgPath == "" {
+		return errors.New("--config is required or set MODFETCH_CONFIG")
+	}
+	if _, err := os.Stat(*cfgPath); err != nil {
+		return fmt.Errorf("config file not found: %s", *cfgPath)
+	}
 	c, err := config.Load(*cfgPath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	_ = c // currently unused; reserved for future filters
 	log := logging.New(*logLevel, *jsonOut)
 	st, err := state.Open(c)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer st.SQL.Close()
 	rows, err := st.ListDownloads()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if *jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
@@ -134,7 +154,7 @@ func handleStatus(args []string) error {
 	return nil
 }
 
-func handleConfig(args []string) error {
+func handleConfig(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New("config subcommand required: validate | print")
 	}
@@ -152,13 +172,13 @@ func handleConfig(args []string) error {
 			return enc.Encode(c)
 		})
 	case "wizard":
-		return handleConfigWizard(args[1:])
+		return handleConfigWizard(ctx, args[1:])
 	default:
 		return fmt.Errorf("unknown config subcommand: %s", sub)
 	}
 }
 
-func handleDownload(args []string) error {
+func handleDownload(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("download", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
@@ -171,28 +191,43 @@ func handleDownload(args []string) error {
 	batchPath := fs.String("batch", "", "YAML batch file with download jobs")
 	placeFlag := fs.Bool("place", false, "place files after successful download")
 	summaryJSON := fs.Bool("summary-json", false, "print a JSON summary when a download completes")
-	if err := fs.Parse(args); err != nil { return err }
-	if *cfgPath == "" {
-		if env := os.Getenv("MODFETCH_CONFIG"); env != "" { *cfgPath = env }
+	if err := fs.Parse(args); err != nil {
+		return err
 	}
-	if *cfgPath == "" { return errors.New("--config is required or set MODFETCH_CONFIG") }
-	if _, err := os.Stat(*cfgPath); err != nil { return fmt.Errorf("config file not found: %s", *cfgPath) }
+	if *cfgPath == "" {
+		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
+			*cfgPath = env
+		}
+	}
+	if *cfgPath == "" {
+		return errors.New("--config is required or set MODFETCH_CONFIG")
+	}
+	if _, err := os.Stat(*cfgPath); err != nil {
+		return fmt.Errorf("config file not found: %s", *cfgPath)
+	}
 	c, err := config.Load(*cfgPath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	// quiet forces log level to error unless JSON is requested
-	if *quiet && !*jsonOut { *logLevel = "error" }
+	if *quiet && !*jsonOut {
+		*logLevel = "error"
+	}
 	log := logging.New(*logLevel, *jsonOut)
 	st, err := state.Open(c)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer st.SQL.Close()
-	ctx := context.Background()
 	startWall := time.Now()
 	// Metrics manager (Prometheus textfile), if enabled
 	m := metrics.New(c)
 	// Batch mode
 	if *batchPath != "" {
 		bf, err := batch.Load(*batchPath)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		dl := downloader.NewAuto(c, log, st, m)
 		for i, job := range bf.Jobs {
 			resolvedURL := job.URI
@@ -200,32 +235,42 @@ func handleDownload(args []string) error {
 			destCandidate := strings.TrimSpace(job.Dest)
 			if strings.HasPrefix(resolvedURL, "hf://") || strings.HasPrefix(resolvedURL, "civitai://") {
 				res, err := resolver.Resolve(ctx, resolvedURL, c)
-				if err != nil { return fmt.Errorf("job %d resolve: %w", i, err) }
+				if err != nil {
+					return fmt.Errorf("job %d resolve: %w", i, err)
+				}
 				resolvedURL = res.URL
 				headers = res.Headers
 				if destCandidate == "" && strings.HasPrefix(job.URI, "civitai://") && strings.TrimSpace(res.SuggestedFilename) != "" {
-					if p, err := util.UniquePath(c.General.DownloadRoot, res.SuggestedFilename, res.VersionID); err == nil { destCandidate = p }
+					if p, err := util.UniquePath(c.General.DownloadRoot, res.SuggestedFilename, res.VersionID); err == nil {
+						destCandidate = p
+					}
 				}
 			}
 			final, sum, err := dl.Download(ctx, resolvedURL, destCandidate, job.SHA256, headers, false)
-			if err != nil { return fmt.Errorf("job %d download: %w", i, err) }
+			if err != nil {
+				return fmt.Errorf("job %d download: %w", i, err)
+			}
 			log.Infof("downloaded: %s (sha256=%s)", final, sum)
 			var placed []string
 			if job.Place || *placeFlag {
 				var err2 error
 				placed, err2 = placer.Place(c, final, job.Type, job.Mode)
-				if err2 != nil { return fmt.Errorf("job %d place: %w", i, err2) }
-				for _, p := range placed { log.Infof("placed: %s", p) }
+				if err2 != nil {
+					return fmt.Errorf("job %d place: %w", i, err2)
+				}
+				for _, p := range placed {
+					log.Infof("placed: %s", p)
+				}
 			}
 			if *summaryJSON {
 				enc := json.NewEncoder(os.Stdout)
 				enc.SetIndent("", "  ")
 				_ = enc.Encode(map[string]any{
-					"url":      logging.SanitizeURL(resolvedURL),
-					"dest":     final,
-					"sha256":   sum,
-					"placed":   placed,
-					"status":   "ok",
+					"url":    logging.SanitizeURL(resolvedURL),
+					"dest":   final,
+					"sha256": sum,
+					"placed": placed,
+					"status": "ok",
 				})
 			}
 		}
@@ -245,9 +290,13 @@ func handleDownload(args []string) error {
 					modelID := parts[1]
 					q := u.Query()
 					ver := q.Get("modelVersionId")
-					if ver == "" { ver = q.Get("version") }
+					if ver == "" {
+						ver = q.Get("version")
+					}
 					civ := "civitai://model/" + modelID
-					if strings.TrimSpace(ver) != "" { civ += "?version=" + ver }
+					if strings.TrimSpace(ver) != "" {
+						civ += "?version=" + ver
+					}
 					log.Infof("normalized CivitAI page -> %s", civ)
 					// Defer resolution; set resolver URI and let generic path handle it
 					resolvedURL = civ
@@ -271,22 +320,34 @@ func handleDownload(args []string) error {
 	}
 	if strings.HasPrefix(resolvedURL, "hf://") || strings.HasPrefix(resolvedURL, "civitai://") {
 		res, err := resolver.Resolve(ctx, resolvedURL, c)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		resolvedURL = res.URL
 		headers = res.Headers
 	} else {
 		// Attach auth headers for direct URLs when possible
 		if u, err := neturl.Parse(resolvedURL); err == nil {
 			h := strings.ToLower(u.Hostname())
-			if headers == nil { headers = map[string]string{} }
+			if headers == nil {
+				headers = map[string]string{}
+			}
 			if hostIs(h, "civitai.com") && c.Sources.CivitAI.Enabled {
 				if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
-					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer " + tok } else { log.Warnf("CivitAI token env %s is not set; gated content will return 401. Export %s.", env, env) }
+					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+						headers["Authorization"] = "Bearer " + tok
+					} else {
+						log.Warnf("CivitAI token env %s is not set; gated content will return 401. Export %s.", env, env)
+					}
 				}
 			}
 			if hostIs(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
 				if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
-					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer " + tok } else { log.Warnf("Hugging Face token env %s is not set; gated repos will return 401. Export %s and accept the repo license.", env, env) }
+					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+						headers["Authorization"] = "Bearer " + tok
+					} else {
+						log.Warnf("Hugging Face token env %s is not set; gated repos will return 401. Export %s and accept the repo license.", env, env)
+					}
 				}
 			}
 		}
@@ -304,7 +365,9 @@ func handleDownload(args []string) error {
 		if candDest == "" && strings.HasPrefix(resolverURI, "civitai://") {
 			// If we resolved civitai:// earlier, try SuggestedFilename by resolving again cheaply
 			if res2, err := resolver.Resolve(ctx, resolverURI, c); err == nil && strings.TrimSpace(res2.SuggestedFilename) != "" {
-				if p, err := util.UniquePath(c.General.DownloadRoot, res2.SuggestedFilename, res2.VersionID); err == nil { candDest = p }
+				if p, err := util.UniquePath(c.General.DownloadRoot, res2.SuggestedFilename, res2.VersionID); err == nil {
+					candDest = p
+				}
 			}
 		}
 		if candDest == "" {
@@ -323,15 +386,24 @@ func handleDownload(args []string) error {
 	}
 	if destArg == "" && strings.HasPrefix(resolverURI2, "civitai://") {
 		if res2, err := resolver.Resolve(ctx, resolverURI2, c); err == nil && strings.TrimSpace(res2.SuggestedFilename) != "" {
-			if p, err := util.UniquePath(c.General.DownloadRoot, res2.SuggestedFilename, res2.VersionID); err == nil { destArg = p }
+			if p, err := util.UniquePath(c.General.DownloadRoot, res2.SuggestedFilename, res2.VersionID); err == nil {
+				destArg = p
+			}
 		}
 	}
 	final, sum, err := dl.Download(ctx, resolvedURL, destArg, *sha, headers, (*noResume) || c.General.AlwaysNoResume)
-	if stopProg != nil { stopProg() }
-	if err != nil { return err }
+	if stopProg != nil {
+		stopProg()
+	}
+	if err != nil {
+		return err
+	}
 	// Final summary
 	fi, _ := os.Stat(final)
-	size := int64(0); if fi != nil { size = fi.Size() }
+	size := int64(0)
+	if fi != nil {
+		size = fi.Size()
+	}
 	dur := time.Since(startWall).Seconds()
 	if *summaryJSON {
 		enc := json.NewEncoder(os.Stdout)
@@ -341,25 +413,33 @@ func handleDownload(args []string) error {
 			"dest":     final,
 			"size":     size,
 			"duration": dur,
-			"avg_bps":  float64(size)/dur,
+			"avg_bps":  float64(size) / dur,
 			"sha256":   sum,
 			"status":   "ok",
 		})
 	} else if !*jsonOut {
 		var rate string
-		if dur > 0 && size > 0 { rate = humanize.Bytes(uint64(float64(size)/dur)) + "/s" } else { rate = "-" }
-	fmt.Printf("\nDownloaded: %s\nDest: %s\nSHA256: %s\nSize: %s\nDuration: %.1fs  Avg: %s\n", logging.SanitizeURL(resolvedURL), final, sum, humanize.Bytes(uint64(size)), dur, rate)
+		if dur > 0 && size > 0 {
+			rate = humanize.Bytes(uint64(float64(size)/dur)) + "/s"
+		} else {
+			rate = "-"
+		}
+		fmt.Printf("\nDownloaded: %s\nDest: %s\nSHA256: %s\nSize: %s\nDuration: %.1fs  Avg: %s\n", logging.SanitizeURL(resolvedURL), final, sum, humanize.Bytes(uint64(size)), dur, rate)
 	}
 	log.Infof("downloaded: %s (sha256=%s)", final, sum)
 	if *placeFlag {
 		placed, err := placer.Place(c, final, "", "")
-		if err != nil { return err }
-		for _, p := range placed { log.Infof("placed: %s", p) }
+		if err != nil {
+			return err
+		}
+		for _, p := range placed {
+			log.Infof("placed: %s", p)
+		}
 	}
 	return nil
 }
 
-func handlePlace(args []string) error {
+func handlePlace(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("place", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
@@ -368,29 +448,51 @@ func handlePlace(args []string) error {
 	artType := fs.String("type", "", "artifact type override (optional)")
 	mode := fs.String("mode", "", "placement mode override: symlink|hardlink|copy (optional)")
 	dryRun := fs.Bool("dry-run", false, "print planned destinations only; do not modify files")
-	if err := fs.Parse(args); err != nil { return err }
-	if *cfgPath == "" { if env := os.Getenv("MODFETCH_CONFIG"); env != "" { *cfgPath = env } }
-	if *cfgPath == "" { return errors.New("--config is required or set MODFETCH_CONFIG") }
-	if *filePath == "" { return errors.New("--path is required") }
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *cfgPath == "" {
+		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
+			*cfgPath = env
+		}
+	}
+	if *cfgPath == "" {
+		return errors.New("--config is required or set MODFETCH_CONFIG")
+	}
+	if *filePath == "" {
+		return errors.New("--path is required")
+	}
 	c, err := config.Load(*cfgPath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	log := logging.New(*logLevel, *jsonOut)
 	if *dryRun {
 		atype := *artType
-		if atype == "" { atype = classifier.Detect(*filePath) }
+		if atype == "" {
+			atype = classifier.Detect(*filePath)
+		}
 		targets, err := placer.ComputeTargets(c, atype)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		fmt.Printf("Would place %s (type=%s) to:\n", *filePath, atype)
-		for _, t := range targets { fmt.Printf("  %s\n", t) }
+		for _, t := range targets {
+			fmt.Printf("  %s\n", t)
+		}
 		return nil
 	}
 	placed, err := placer.Place(c, *filePath, *artType, *mode)
-	if err != nil { return err }
-	for _, p := range placed { log.Infof("placed: %s", p) }
+	if err != nil {
+		return err
+	}
+	for _, p := range placed {
+		log.Infof("placed: %s", p)
+	}
 	return nil
 }
 
-func handleClean(args []string) error {
+func handleClean(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("clean", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
@@ -399,12 +501,24 @@ func handleClean(args []string) error {
 	dryRun := fs.Bool("dry-run", false, "show what would be removed, but do not delete")
 	destPath := fs.String("dest", "", "remove staged .part for this destination path (overrides days)")
 	includeNext := fs.Bool("include-next-to-dest", true, "also scan download_root for *.part when stage_partials=false")
-	if err := fs.Parse(args); err != nil { return err }
-	if *cfgPath == "" { if env := os.Getenv("MODFETCH_CONFIG"); env != "" { *cfgPath = env } }
-	if *cfgPath == "" { return errors.New("--config is required or set MODFETCH_CONFIG") }
-	if _, err := os.Stat(*cfgPath); err != nil { return fmt.Errorf("config file not found: %s", *cfgPath) }
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *cfgPath == "" {
+		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
+			*cfgPath = env
+		}
+	}
+	if *cfgPath == "" {
+		return errors.New("--config is required or set MODFETCH_CONFIG")
+	}
+	if _, err := os.Stat(*cfgPath); err != nil {
+		return fmt.Errorf("config file not found: %s", *cfgPath)
+	}
 	c, err := config.Load(*cfgPath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	log := logging.New(*logLevel, *jsonOut)
 
 	removed := 0
@@ -414,18 +528,27 @@ func handleClean(args []string) error {
 	// Helper to maybe remove a file
 	removeFile := func(p string) {
 		fi, err := os.Stat(p)
-		if err != nil { errs = append(errs, fmt.Sprintf("%s: %v", p, err)); return }
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", p, err))
+			return
+		}
 		if *destPath == "" {
 			// age-gated mode
-			cutoff := time.Now().Add(-time.Duration(*days)*24*time.Hour)
-			if *days > 0 && fi.ModTime().After(cutoff) { skipped++; return }
+			cutoff := time.Now().Add(-time.Duration(*days) * 24 * time.Hour)
+			if *days > 0 && fi.ModTime().After(cutoff) {
+				skipped++
+				return
+			}
 		}
 		if *dryRun {
 			log.Infof("would remove: %s (age=%s)", p, time.Since(fi.ModTime()).Round(time.Second))
 			removed++
 			return
 		}
-		if err := os.Remove(p); err != nil { errs = append(errs, fmt.Sprintf("%s: %v", p, err)); return }
+		if err := os.Remove(p); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", p, err))
+			return
+		}
 		removed++
 	}
 
@@ -433,8 +556,12 @@ func handleClean(args []string) error {
 	if strings.TrimSpace(*destPath) != "" {
 		// next-to-dest .part
 		cand := *destPath
-		if !strings.HasSuffix(cand, ".part") { cand = cand + ".part" }
-		if fi, err := os.Stat(cand); err == nil && !fi.IsDir() { removeFile(cand) }
+		if !strings.HasSuffix(cand, ".part") {
+			cand = cand + ".part"
+		}
+		if fi, err := os.Stat(cand); err == nil && !fi.IsDir() {
+			removeFile(cand)
+		}
 		// hashed in partials_root: find by base name prefix
 		partsDir := c.General.PartialsRoot
 		if strings.TrimSpace(partsDir) == "" {
@@ -444,7 +571,9 @@ func handleClean(args []string) error {
 			entries, _ := os.ReadDir(partsDir)
 			base := filepath.Base(*destPath)
 			for _, e := range entries {
-				if e.IsDir() { continue }
+				if e.IsDir() {
+					continue
+				}
 				name := e.Name()
 				if strings.HasPrefix(name, base+".") && strings.HasSuffix(name, ".part") {
 					removeFile(filepath.Join(partsDir, name))
@@ -462,9 +591,13 @@ func handleClean(args []string) error {
 			entries, err := os.ReadDir(partsDir)
 			if err == nil {
 				for _, e := range entries {
-					if e.IsDir() { continue }
+					if e.IsDir() {
+						continue
+					}
 					name := e.Name()
-					if !strings.HasSuffix(name, ".part") { continue }
+					if !strings.HasSuffix(name, ".part") {
+						continue
+					}
 					removeFile(filepath.Join(partsDir, name))
 				}
 			}
@@ -473,9 +606,15 @@ func handleClean(args []string) error {
 		if *includeNext {
 			root := c.General.DownloadRoot
 			_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
-				if err != nil { return nil }
-				if d.IsDir() { return nil }
-				if strings.HasSuffix(d.Name(), ".part") { removeFile(p) }
+				if err != nil {
+					return nil
+				}
+				if d.IsDir() {
+					return nil
+				}
+				if strings.HasSuffix(d.Name(), ".part") {
+					removeFile(p)
+				}
 				return nil
 			})
 		}
@@ -487,7 +626,9 @@ func handleClean(args []string) error {
 		return enc.Encode(map[string]any{"removed": removed, "skipped": skipped, "errors": errs})
 	}
 	log.Infof("removed: %d skipped: %d", removed, skipped)
-	if len(errs) > 0 { log.Warnf("errors: %v", errs) }
+	if len(errs) > 0 {
+		log.Warnf("errors: %v", errs)
+	}
 	return nil
 }
 
@@ -507,7 +648,9 @@ func configOp(args []string, fn func(*config.Config, *logging.Logger) error) err
 	if *cfgPath == "" {
 		return errors.New("--config is required or set MODFETCH_CONFIG")
 	}
-	if _, err := os.Stat(*cfgPath); err != nil { return fmt.Errorf("config file not found: %s", *cfgPath) }
+	if _, err := os.Stat(*cfgPath); err != nil {
+		return fmt.Errorf("config file not found: %s", *cfgPath)
+	}
 	c, err := config.Load(*cfgPath)
 	if err != nil {
 		return err
@@ -515,4 +658,3 @@ func configOp(args []string, fn func(*config.Config, *logging.Logger) error) err
 	log := logging.New(*logLevel, *jsonOut)
 	return fn(c, log)
 }
-
