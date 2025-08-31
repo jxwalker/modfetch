@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## v0.3.3 — 2025-08-31
+
+Fixes
+- Naming: strip URL query/fragment from default filenames and sanitize more aggressively; applies to CLI, TUI, and batch importer fallbacks (e.g., CivitAI direct links no longer include ?type=… in filenames).
+- TUI v2: computeDefaultDest now tries a HEAD request for CivitAI direct download URLs (/api/download/…) to use Content-Disposition filename when available; falls back to safe base.
+
 ## v0.3.2 — 2025-08-31
 
 Maintenance
