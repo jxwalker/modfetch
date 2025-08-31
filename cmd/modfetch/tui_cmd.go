@@ -50,7 +50,7 @@ func handleTUI(ctx context.Context, args []string) error {
 			_ = os.MkdirAll(filepath.Dir(*cfgPath), 0o755)
 			defaults := &config.Config{Version: 1, General: config.General{DataRoot: "~/modfetch/data", DownloadRoot: "~/modfetch/downloads", PlacementMode: "symlink"}, Concurrency: config.Concurrency{ChunkSizeMB: 8, PerFileChunks: 4}}
 			wiz := cw.New(defaults)
-			p := tea.NewProgram(wiz)
+			p := tea.NewProgram(wiz, tea.WithMouseCellMotion())
 			m, werr := p.Run()
 			if werr != nil {
 				return werr
@@ -93,7 +93,7 @@ func handleTUI(ctx context.Context, args []string) error {
 	} else {
 		m = uiv2.New(c, st, version)
 	}
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithMouseCellMotion())
 	_, err = p.Run()
 	return err
 }
