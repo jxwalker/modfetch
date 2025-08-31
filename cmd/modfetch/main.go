@@ -249,10 +249,8 @@ func handleDownload(args []string) error {
 					civ := "civitai://model/" + modelID
 					if strings.TrimSpace(ver) != "" { civ += "?version=" + ver }
 					log.Infof("normalized CivitAI page -> %s", civ)
-					if res, err := resolver.Resolve(ctx, civ, c); err == nil {
-						resolvedURL = res.URL
-						headers = res.Headers
-					}
+					// Defer resolution; set resolver URI and let generic path handle it
+					resolvedURL = civ
 				}
 			}
 			// Hugging Face blob page -> hf://owner/repo/path?rev=...
@@ -298,9 +296,14 @@ func handleDownload(args []string) error {
 	var stopProg func()
 	if !*jsonOut && !*quiet {
 		candDest := strings.TrimSpace(*dest)
-		if candDest == "" && strings.HasPrefix(*url, "civitai://") {
+		// Determine the resolver URI (could have been normalized above)
+		resolverURI := resolvedURL
+		if !(strings.HasPrefix(resolverURI, "hf://") || strings.HasPrefix(resolverURI, "civitai://")) {
+			resolverURI = *url
+		}
+		if candDest == "" && strings.HasPrefix(resolverURI, "civitai://") {
 			// If we resolved civitai:// earlier, try SuggestedFilename by resolving again cheaply
-			if res2, err := resolver.Resolve(ctx, *url, c); err == nil && strings.TrimSpace(res2.SuggestedFilename) != "" {
+			if res2, err := resolver.Resolve(ctx, resolverURI, c); err == nil && strings.TrimSpace(res2.SuggestedFilename) != "" {
 				if p, err := util.UniquePath(c.General.DownloadRoot, res2.SuggestedFilename, res2.VersionID); err == nil { candDest = p }
 			}
 		}
@@ -313,8 +316,13 @@ func handleDownload(args []string) error {
 	dl := downloader.NewAuto(c, log, st, m)
 	// If civitai:// and no explicit dest, use SuggestedFilename
 	destArg := strings.TrimSpace(*dest)
-	if destArg == "" && strings.HasPrefix(*url, "civitai://") {
-		if res2, err := resolver.Resolve(ctx, *url, c); err == nil && strings.TrimSpace(res2.SuggestedFilename) != "" {
+	// Determine the resolver URI to use for civitai SuggestedFilename
+	resolverURI2 := resolvedURL
+	if !(strings.HasPrefix(resolverURI2, "hf://") || strings.HasPrefix(resolverURI2, "civitai://")) {
+		resolverURI2 = *url
+	}
+	if destArg == "" && strings.HasPrefix(resolverURI2, "civitai://") {
+		if res2, err := resolver.Resolve(ctx, resolverURI2, c); err == nil && strings.TrimSpace(res2.SuggestedFilename) != "" {
 			if p, err := util.UniquePath(c.General.DownloadRoot, res2.SuggestedFilename, res2.VersionID); err == nil { destArg = p }
 		}
 	}

@@ -107,8 +107,8 @@ func handleBatchImport(args []string) error {
 						modelID := parts[1]
 						q := u.Query()
 						ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
-						civ := "civitai://model/" + modelID
-						if strings.TrimSpace(ver) != "" { civ += "?version=" + ver }
+					civ := "civitai://model/" + modelID
+						if strings.TrimSpace(ver) != "" { civ += "?version=" + neturl.QueryEscape(ver) }
 						resolvedURI = civ
 					}
 				}
