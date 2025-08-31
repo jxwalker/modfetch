@@ -7,7 +7,7 @@ require (
 	github.com/charmbracelet/bubbletea v0.25.0
 	github.com/charmbracelet/lipgloss v0.9.1
 	github.com/dustin/go-humanize v1.0.1
-github.com/glebarez/sqlite v1.11.0
+	github.com/glebarez/sqlite v1.11.0
 	go.uber.org/atomic v1.11.0
 	golang.org/x/sync v0.1.0
 	gopkg.in/yaml.v3 v3.0.1

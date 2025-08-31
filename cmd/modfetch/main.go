@@ -231,6 +231,39 @@ func handleDownload(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
+		// Destination reservation to avoid two workers writing the same path concurrently
+		var destMu sync.Mutex
+		reserved := map[string]struct{}{}
+		reserveSpecific := func(p string) bool {
+			destMu.Lock(); defer destMu.Unlock()
+			if _, ok := reserved[p]; ok { return false }
+			reserved[p] = struct{}{}
+			return true
+		}
+		reserveUnique := func(dir, base, versionHint string) (string, error) {
+			destMu.Lock(); defer destMu.Unlock()
+			base = util.SafeFileName(base)
+			ext := filepath.Ext(base)
+			name := strings.TrimSuffix(base, ext)
+			// try plain
+			p := filepath.Join(dir, base)
+			if _, err := os.Stat(p); os.IsNotExist(err) {
+				if _, ok := reserved[p]; !ok { reserved[p] = struct{}{}; return p, nil }
+			}
+			// try version
+			if strings.TrimSpace(versionHint) != "" {
+				cand := filepath.Join(dir, fmt.Sprintf("%s (v%s)%s", name, versionHint, ext))
+				if _, err := os.Stat(cand); os.IsNotExist(err) {
+					if _, ok := reserved[cand]; !ok { reserved[cand] = struct{}{}; return cand, nil }
+				}
+			}
+			for i := 2; ; i++ {
+				cand := filepath.Join(dir, fmt.Sprintf("%s (%d)%s", name, i, ext))
+				if _, err := os.Stat(cand); os.IsNotExist(err) {
+					if _, ok := reserved[cand]; !ok { reserved[cand] = struct{}{}; return cand, nil }
+				}
+			}
+		}
 		parallel := c.Concurrency.PerHostRequests
 		if *batchParallel > 0 {
 			parallel = *batchParallel
@@ -271,9 +304,29 @@ func handleDownload(ctx context.Context, args []string) error {
 							resolvedURL = res.URL
 							headers = res.Headers
 							if destCandidate == "" && strings.HasPrefix(job.URI, "civitai://") && strings.TrimSpace(res.SuggestedFilename) != "" {
-								if p, err := util.UniquePath(c.General.DownloadRoot, res.SuggestedFilename, res.VersionID); err == nil {
+								if p, err := reserveUnique(c.General.DownloadRoot, res.SuggestedFilename, res.VersionID); err == nil {
 									destCandidate = p
+								} else {
+									return fmt.Errorf("job %d dest reserve: %v", it.idx, err)
 								}
+							}
+						}
+						// If still no destCandidate, try probing to compute a safe filename and reserve it
+						if destCandidate == "" {
+							meta, _ := downloader.ProbeURL(gctx, c, resolvedURL, headers)
+							base := meta.Filename
+							if strings.TrimSpace(base) == "" {
+								if meta.FinalURL != "" { base = filepath.Base(meta.FinalURL) } else { base = filepath.Base(resolvedURL) }
+							}
+							p, err := reserveUnique(c.General.DownloadRoot, base, "")
+							if err != nil { return fmt.Errorf("job %d dest reserve: %v", it.idx, err) }
+							destCandidate = p
+						}
+						// If user provided explicit dest, ensure single writer
+						if job.Dest != "" {
+							if ok := reserveSpecific(destCandidate); !ok {
+								logMu.Lock(); log.Warnf("skipping job %d: destination already reserved: %s", it.idx, destCandidate); logMu.Unlock()
+								continue
 							}
 						}
 						final, sum, err := dl.Download(gctx, resolvedURL, destCandidate, job.SHA256, headers, false)
