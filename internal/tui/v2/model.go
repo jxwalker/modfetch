@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -488,6 +489,9 @@ func (m *Model) View() string {
 	// Horizontal tabs across full width
 	tabs := m.th.border.Width(m.w-2).Render(m.renderTabs())
 
+	// Commands bar for quick reference
+	commands := m.th.border.Width(m.w-2).Render(m.renderCommandsBar())
+
 	// Full-width table
 	table := m.th.border.Width(m.w-2).Render(m.renderTable())
 
@@ -509,7 +513,7 @@ func (m *Model) View() string {
 	footer := ""
 	if strings.TrimSpace(filterBar) != "" { footer = m.th.border.Width(m.w-2).Render(m.th.footer.Render(filterBar)) }
 
-	parts := []string{titleBar, tabs, table, inspector}
+	parts := []string{titleBar, tabs, commands, table, inspector}
 	if help != "" { parts = append(parts, help) }
 	if drawer != "" { parts = append(parts, drawer) }
 	if modal != "" { parts = append(parts, modal) }
@@ -1104,8 +1108,59 @@ func (m *Model) immediateDestCandidate(urlStr string) string {
 func (m *Model) suggestDestCmd(urlStr string) tea.Cmd {
 	return func() tea.Msg {
 		d := m.computeDefaultDest(urlStr)
+		// Improve default name for CivitAI direct download endpoints by probing filename via HEAD
+		if strings.HasPrefix(urlStr, "http://") || strings.HasPrefix(urlStr, "https://") {
+			if u, err := neturl.Parse(urlStr); err == nil {
+				h := strings.ToLower(u.Hostname())
+				if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/api/download/") {
+					if name := m.headFilename(urlStr); strings.TrimSpace(name) != "" {
+						name = utilSafe(name)
+						d = filepath.Join(m.cfg.General.DownloadRoot, name)
+					}
+				}
+			}
+		}
 		return destSuggestMsg{url: urlStr, dest: d}
 	}
+}
+
+// headFilename performs a HEAD request to retrieve a filename from Content-Disposition.
+func (m *Model) headFilename(u string) string {
+	ctx := context.Background()
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, u, nil)
+	if err != nil { return "" }
+	// Add CivitAI token if configured
+	if m.cfg != nil && m.cfg.Sources.CivitAI.Enabled {
+		env := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv)
+		if env == "" { env = "CIVITAI_TOKEN" }
+		if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+			req.Header.Set("Authorization", "Bearer "+tok)
+		}
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil { return "" }
+	defer resp.Body.Close()
+	cd := resp.Header.Get("Content-Disposition")
+	if cd == "" { return "" }
+	lcd := strings.ToLower(cd)
+	// RFC 5987 filename*
+	if idx := strings.Index(lcd, "filename*="); idx >= 0 {
+		v := cd[idx+len("filename*="):]
+		// expect UTF-8''... optionally
+		if strings.HasPrefix(strings.ToLower(v), "utf-8''") { v = v[len("utf-8''"):] }
+		if semi := strings.IndexByte(v, ';'); semi >= 0 { v = v[:semi] }
+		name, _ := neturl.QueryUnescape(strings.Trim(v, "\"' "))
+		return name
+	}
+	// Simple filename=
+	if idx := strings.Index(lcd, "filename="); idx >= 0 {
+		v := cd[idx+len("filename="):]
+		if semi := strings.IndexByte(v, ';'); semi >= 0 { v = v[:semi] }
+		name := strings.Trim(v, "\"' ")
+		return name
+	}
+	return ""
 }
 
 // Immediate placement suggestion using artifact type and quick filename
@@ -1312,6 +1367,11 @@ func (m *Model) saveUIState() {
 st := uiState{ThemeIndex: m.themeIndex, ShowURL: m.columnMode == "url", ColumnMode: m.columnMode, Compact: m.cfg.UI.Compact, GroupBy: m.groupBy, SortMode: m.sortMode}
 	b, _ := json.MarshalIndent(st, "", "  ")
 	_ = os.WriteFile(p, b, 0o644)
+}
+
+func (m *Model) renderCommandsBar() string {
+	// concise single-line commands reference
+	return m.th.footer.Render("n new • b batch • y/r start • p cancel • D delete • O open • / filter • s/e sort • o clear • g group host • t col • v compact • i inspector • H toasts • ? help • q quit")
 }
 
 func (m *Model) renderHelp() string {
