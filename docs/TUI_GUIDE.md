@@ -45,26 +45,27 @@ Notes:
 
 ## Keybindings
 
-Global
-- Navigation: j/k (select), / (filter), m (menu), h or ? (help)
-- Sorting: s (by speed), e (by ETA), o (clear sort)
-- View/Columns/Theme: v (compact view), t (cycle last column URL/DEST/HOST), T (cycle theme)
-- Actions: n (new), r (refresh), d (details), g (group by status)
+The TUI now exposes key mappings via a discoverable help system. A concise
+commands bar is always visible at the bottom, and pressing `?` toggles the full
+help overlay.
 
-Per-row
-- p (pause/cancel)
-- y (retry)
-- C (copy path to clipboard)
-- U (copy source URL to clipboard)
-- O (open file or reveal in file manager)
-- D (delete staged data for the row)
-- Space (toggle selection), A (select all), X (clear selection)
+Common keys include:
 
-## Mouse support
-
-- Click a row to select it
-- Scroll the mouse wheel to move through the list
-- In modal dialogs, click the buttons to confirm or cancel
+- `j`/`k` or arrow keys to navigate
+- `n` to start a new download
+- `b` to import a batch file
+- `y` or `r` to start or retry
+- `p` to cancel
+- `D` to delete
+- `O` to open the destination
+- `/` to filter
+- `s`/`e`/`o` to sort by speed, sort by ETA, or clear sorting
+- `g` to group by host
+- `t` to cycle the URL/DEST/HOST column
+- `v` to toggle compact view
+- `i` to toggle the inspector
+- `H` to toggle the toast drawer
+- `q` to quit
 
 ## Starting new downloads
 
@@ -79,8 +80,7 @@ Per-row
 
 ## Filtering and grouping
 
- - Press / to filter using fuzzy search across URL and destination
-   - Results are ranked by best match and highlighted in the table
+- Press / to filter by substring (e.g., part of the filename or URL)
 - Press g to toggle grouping by status
 - Sorting works with or without grouping
 
@@ -109,7 +109,6 @@ Add these under the ui section of your config YAML:
 - ui.show_url: boolean. If true, the table shows URL instead of DEST by default. Deprecated by ui.column_mode when set.
 - ui.column_mode: string: dest | url | host. Controls the last column.
 - ui.compact: boolean. If true, uses compact table (STATUS, PROGRESS, ETA, URL/DEST/HOST).
-- ui.theme: mapping of color overrides using 8-bit codes (e.g., border: "63").
 
 ## Recording sessions (asciinema)
 
