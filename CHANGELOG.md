@@ -19,6 +19,8 @@ Highlights
   - Sample config includes sane defaults; CivitAI model page URLs auto-resolve
 - Misc
   - Metrics writes guarded when disabled
+- State
+  - downloads table indexed on status and dest columns
 
 Assets
 - Linux: modfetch_linux_amd64, modfetch_linux_arm64
