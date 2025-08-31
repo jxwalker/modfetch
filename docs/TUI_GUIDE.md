@@ -17,6 +17,12 @@ export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 modfetch tui
 ```
 
+- Preview the next‑gen TUI v2 (experimental):
+
+```bash
+modfetch tui --config /path/to/config.yml --v2
+```
+
 ## Layout overview
 
 - Header: summary, filters, and sort indicators
@@ -39,19 +45,27 @@ Notes:
 
 ## Keybindings
 
-Global
-- Navigation: j/k (select), / (filter), m (menu), h or ? (help)
-- Sorting: s (by speed), e (by ETA), o (clear sort)
-- Actions: n (new), r (refresh), d (details), g (group by status), t (toggle columns)
+The TUI now exposes key mappings via a discoverable help system. A concise
+commands bar is always visible at the bottom, and pressing `?` toggles the full
+help overlay.
 
-Per-row
-- p (pause/cancel)
-- y (retry)
-- C (copy path to clipboard)
-- U (copy source URL to clipboard)
-- O (open file or reveal in file manager)
-- D (delete staged data for the row)
-- X (clear a stuck ephemeral row)
+Common keys include:
+
+- `j`/`k` or arrow keys to navigate
+- `n` to start a new download
+- `b` to import a batch file
+- `y` or `r` to start or retry
+- `p` to cancel
+- `D` to delete
+- `O` to open the destination
+- `/` to filter
+- `s`/`e`/`o` to sort by speed, sort by ETA, or clear sorting
+- `g` to group by host
+- `t` to cycle the URL/DEST/HOST column
+- `v` to toggle compact view
+- `i` to toggle the inspector
+- `H` to toggle the toast drawer
+- `q` to quit
 
 ## Starting new downloads
 
@@ -86,6 +100,43 @@ Per-row
 - Open/Reveal fails: verify that `open` (macOS) or `xdg-open` (Linux) is installed and that the path exists
 - Stuck resolving row: press X to clear the ephemeral; then retry with y
 - Range/HEAD unsupported: downloader may fall back to single-stream; progress still updates with speed/ETA
+
+## Configuration options (v2)
+
+Add these under the ui section of your config YAML:
+
+- ui.refresh_hz: integer (0-10). Controls refresh rate (ticks/sec). Default 1.
+- ui.show_url: boolean. If true, the table shows URL instead of DEST by default. Deprecated by ui.column_mode when set.
+- ui.column_mode: string: dest | url | host. Controls the last column.
+- ui.compact: boolean. If true, uses compact table (STATUS, PROGRESS, ETA, URL/DEST/HOST).
+
+## Recording sessions (asciinema)
+
+- Install asciinema (macOS):
+
+```bash
+brew install asciinema
+```
+
+- Record a session (CTRL-D to stop):
+
+```bash
+asciinema rec -c "modfetch tui --config /path/to/config.yml --v2" out.cast
+```
+
+- Play locally:
+
+```bash
+asciinema play out.cast
+```
+
+- Upload/share:
+
+```bash
+asciinema upload out.cast
+```
+
+For animated SVGs/GIFs, consider tools like svg-term or agg (requires additional setup).
 
 ## Tips
 

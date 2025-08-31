@@ -31,3 +31,12 @@ func Load(path string) (*File, error) {
 	return &f, nil
 }
 
+// Save writes a batch File to path in YAML format.
+func Save(path string, f *File) error {
+	if f == nil { return fmt.Errorf("nil batch file") }
+	if f.Version == 0 { f.Version = 1 }
+	b, err := yaml.Marshal(f)
+	if err != nil { return err }
+	return os.WriteFile(path, b, 0o644)
+}
+
