@@ -95,11 +95,12 @@ func handleBatchImport(args []string) error {
 			}
 		}
 
-		// Normalize civitai model page URLs -> civitai:// uri (optional)
+		// Normalize page URLs -> resolver URIs (optional)
 		resolvedURI := uri
 		if !*noResolvePages && (strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://")) {
 			if u, err := neturl.Parse(uri); err == nil {
 				h := strings.ToLower(u.Hostname())
+				// CivitAI model page -> civitai://
 				if strings.HasSuffix(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
 					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 					if len(parts) >= 2 {
@@ -109,6 +110,17 @@ func handleBatchImport(args []string) error {
 						civ := "civitai://model/" + modelID
 						if strings.TrimSpace(ver) != "" { civ += "?version=" + ver }
 						resolvedURI = civ
+					}
+				}
+				// Hugging Face blob page -> hf://owner/repo/path?rev=...
+				if strings.HasSuffix(h, "huggingface.co") {
+					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+					if len(parts) >= 5 && parts[2] == "blob" {
+						owner := parts[0]
+						repo := parts[1]
+						rev := parts[3]
+						filePath := strings.Join(parts[4:], "/")
+						resolvedURI = "hf://" + owner + "/" + repo + "/" + filePath + "?rev=" + rev
 					}
 				}
 			}

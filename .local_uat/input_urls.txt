@@ -1,0 +1,4 @@
+# Mixed inputs for TUI UAT seeding
+https://github.com/favicon.ico
+https://civitai.com/api/download/models/1943855?type=Model&format=SafeTensor
+https://example.com/does-not-exist.bin

@@ -1,6 +1,7 @@
 package tui2
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -21,20 +22,23 @@ import (
 	"modfetch/internal/config"
 	"modfetch/internal/downloader"
 	"modfetch/internal/logging"
+	"modfetch/internal/placer"
 	"modfetch/internal/resolver"
 	"modfetch/internal/state"
 )
 
 type Theme struct {
-	border     lipgloss.Style
-	title      lipgloss.Style
-	label      lipgloss.Style
-	tabActive  lipgloss.Style
+	border      lipgloss.Style
+	title       lipgloss.Style
+	label       lipgloss.Style
+	tabActive   lipgloss.Style
 	tabInactive lipgloss.Style
-	row        lipgloss.Style
+	row         lipgloss.Style
 	rowSelected lipgloss.Style
-	head       lipgloss.Style
-	footer     lipgloss.Style
+	head        lipgloss.Style
+	footer      lipgloss.Style
+	ok          lipgloss.Style
+	bad         lipgloss.Style
 }
 
 func defaultTheme() Theme {
@@ -49,6 +53,8 @@ func defaultTheme() Theme {
 		rowSelected: lipgloss.NewStyle().Bold(true),
 		head:        lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true),
 		footer:      lipgloss.NewStyle().Faint(true),
+		ok:          lipgloss.NewStyle().Foreground(lipgloss.Color("42")),
+		bad:         lipgloss.NewStyle().Foreground(lipgloss.Color("196")),
 	}
 }
 
@@ -81,6 +87,23 @@ type Model struct {
 	showToastDrawer bool
 	showHelp bool
 	showInspector bool
+	// New download modal state
+	newJob bool
+	newStep int
+	newInput textinput.Model
+	newURL string
+	newDest string
+	newType string
+	newAutoPlace bool
+	// Batch import modal state
+	batchMode bool
+	batchInput textinput.Model
+	// Overrides for auto-place by key url|dest
+	placeType map[string]string
+	autoPlace map[string]bool
+	// Normalization note (shown after URL entry)
+	newNormNote string
+
 	themeIndex int
 	columnMode string // dest|url|host
 	tickEvery time.Duration
@@ -94,6 +117,11 @@ type Model struct {
 	// cache for hostnames
 	hostCache map[string]string
 	err   error
+	// token/env status
+	hfTokenSet bool
+	civTokenSet bool
+	hfRejected bool
+	civRejected bool
 }
 
 type uiState struct {
@@ -119,12 +147,13 @@ p := progress.New(progress.WithDefaultGradient(), progress.WithWidth(16))
 	if mode != "dest" && mode != "url" && mode != "host" {
 		if cfg.UI.ShowURL { mode = "url" } else { mode = "dest" }
 	}
-	m := &Model{
+m := &Model{
 		cfg: cfg, st: st, th: defaultTheme(), activeTab: 1, prog: p, prev: map[string]obs{},
 		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
 		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{}, hostCache: map[string]string{},
 		tickEvery: refresh,
 		columnMode: mode,
+		placeType: map[string]string{}, autoPlace: map[string]bool{},
 	}
 	// Load UI state overrides if present
 	m.loadUIState()
@@ -142,6 +171,67 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 case tea.KeyMsg:
 		s := msg.String()
+		// New job modal handling
+		if m.newJob {
+			switch s {
+			case "esc": m.newJob = false; return m, nil
+			case "enter":
+				val := strings.TrimSpace(m.newInput.Value())
+				if m.newStep == 1 {
+					if val == "" { return m, nil }
+					m.newURL = val
+					// Show normalization note if applicable
+					if norm, ok := m.normalizeURLForNote(val); ok { m.newNormNote = norm } else { m.newNormNote = "" }
+					cand := m.computeDefaultDest(val)
+					m.newInput.SetValue(cand)
+					m.newInput.Placeholder = "Destination path (Enter to accept)"
+					m.newStep = 2
+					return m, nil
+				} else if m.newStep == 2 {
+					m.newDest = val
+					m.newInput.SetValue("")
+					m.newInput.Placeholder = "Artifact type (optional, e.g. sd-checkpoint)"
+					m.newStep = 3
+					return m, nil
+				} else if m.newStep == 3 {
+					m.newType = val
+					m.newInput.SetValue("")
+					m.newInput.Placeholder = "Auto place after download? y/n (default n)"
+					m.newStep = 4
+					return m, nil
+				} else if m.newStep == 4 {
+					v := strings.ToLower(strings.TrimSpace(val))
+					m.newAutoPlace = v == "y" || v == "yes" || v == "true" || v == "1"
+					// Start download
+					urlStr := m.newURL
+					dest := strings.TrimSpace(m.newDest)
+					if dest == "" { dest = m.computeDefaultDest(urlStr) }
+					m.startDownloadCmd(urlStr, dest)()
+					key := urlStr+"|"+dest
+					if strings.TrimSpace(m.newType) != "" { m.placeType[key] = m.newType }
+					if m.newAutoPlace { m.autoPlace[key] = true }
+					m.addToast("started: "+truncateMiddle(dest, 40))
+					m.newJob = false
+					return m, nil
+				}
+			}
+			var cmd tea.Cmd
+			m.newInput, cmd = m.newInput.Update(msg)
+			return m, cmd
+		}
+		// Batch modal handling
+		if m.batchMode {
+			switch s { case "esc": m.batchMode = false; return m, nil }
+			if s == "enter" {
+				path := strings.TrimSpace(m.batchInput.Value())
+				if path != "" { m.importBatchFile(path) }
+				m.batchMode = false
+				return m, nil
+			}
+			var cmd tea.Cmd
+			m.batchInput, cmd = m.batchInput.Update(msg)
+			return m, cmd
+		}
 		// If filter mode is on, handle input first (swallow other keys into the input)
 		if m.filterOn {
 			switch s {
@@ -159,6 +249,10 @@ case tea.KeyMsg:
 			return m, tea.Quit
 		case "/":
 			m.filterOn = true; m.filterInput.Focus(); return m, nil
+		case "n": // new download wizard
+			m.newJob = true; m.newStep = 1; m.newInput = textinput.New(); m.newInput.Placeholder = "Enter URL or resolver URI"; m.newInput.Focus(); return m, nil
+		case "b": // batch import from text file
+			m.batchMode = true; m.batchInput = textinput.New(); m.batchInput.Placeholder = "Path to text file with URLs"; m.batchInput.Focus(); return m, nil
 		case "s": m.sortMode = "speed"; return m, nil
 		case "e": m.sortMode = "eta"; return m, nil
 		case "o": m.sortMode = ""; return m, nil
@@ -243,8 +337,34 @@ case "y": // retry (batch-aware)
 		}
 	case tickMsg:
 		return m, m.refresh()
-	case dlDoneMsg:
-		if msg.err != nil { m.err = msg.err }
+case dlDoneMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			// Mark token rejection hints on known hosts based on error text
+			errTxt := strings.ToLower(m.err.Error())
+			if strings.Contains(errTxt, "unauthorized") || strings.Contains(errTxt, "401") {
+				if strings.Contains(errTxt, "hugging face") || strings.Contains(errTxt, "huggingface") {
+					m.hfRejected = true
+				}
+				if strings.Contains(errTxt, "civitai") {
+					m.civRejected = true
+				}
+			}
+			return m, m.refresh()
+		}
+		// On success, clear any prior rejection for the host
+		u := strings.ToLower(msg.url)
+		if strings.HasPrefix(u, "hf://") || strings.Contains(u, "huggingface") { m.hfRejected = false }
+		if strings.HasPrefix(u, "civitai://") || strings.Contains(u, "civitai") { m.civRejected = false }
+		// Auto place if configured
+		key := msg.url+"|"+msg.dest
+		if m.autoPlace[key] {
+			atype := m.placeType[key]
+			if atype == "" { atype = "" }
+			placed, err := placer.Place(m.cfg, msg.path, atype, "")
+			if err != nil { m.addToast("place failed: "+err.Error()) } else if len(placed) > 0 { m.addToast("placed: "+truncateMiddle(placed[0], 40)) }
+			delete(m.autoPlace, key); delete(m.placeType, key)
+		}
 		return m, m.refresh()
 	}
 	return m, nil
@@ -294,6 +414,9 @@ func (m *Model) View() string {
 	if m.showToastDrawer { drawer = m.th.border.Width(m.w-2).Render(m.renderToastDrawer()) }
 	help := ""
 	if m.showHelp { help = m.th.border.Width(m.w-2).Render(m.renderHelp()) }
+	modal := ""
+	if m.newJob { modal = m.th.border.Width(m.w-4).Render(m.renderNewJobModal()) }
+	if m.batchMode { modal = m.th.border.Width(m.w-4).Render(m.renderBatchModal()) }
 
 	// Footer with filter bar
 	filterBar := ""
@@ -303,11 +426,14 @@ func (m *Model) View() string {
 	parts := []string{titleBar, topRow, bottom}
 	if help != "" { parts = append(parts, help) }
 	if drawer != "" { parts = append(parts, drawer) }
+	if modal != "" { parts = append(parts, modal) }
 	parts = append(parts, footer)
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 func (m *Model) refresh() tea.Cmd {
+	// Update token env presence status on each refresh tick
+	m.updateTokenEnvStatus()
 	rows, err := m.st.ListDownloads()
 	if err != nil { _ = logging.New("error", false) }
 	m.rows = rows
@@ -378,6 +504,7 @@ func (m *Model) renderTopLeftHints() string {
 	lines := []string{
 		m.th.head.Render("Hints"),
 		"Tabs: 1 Pending • 2 Active • 3 Completed • 4 Failed",
+		"New: n new download • b batch import (txt file)",
 		"Nav: j/k up/down",
 		"Filter: / enter • Enter apply • Esc clear",
 		"Sort: s speed • e ETA • o clear | Group: g host",
@@ -386,6 +513,40 @@ func (m *Model) renderTopLeftHints() string {
 		"View: t column • v compact • i inspector • T theme • H toasts • ? help • q quit",
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (m *Model) renderNewJobModal() string {
+	var sb strings.Builder
+	sb.WriteString(m.th.head.Render("New Download")+"\n")
+	// Token status inline
+	sb.WriteString(m.th.label.Render(m.renderAuthStatus())+"\n\n")
+	steps := []string{
+		"1) URL/URI",
+		"2) Destination path",
+		"3) Artifact type (optional)",
+		"4) Auto place after download (y/n)",
+	}
+	sb.WriteString(m.th.label.Render(strings.Join(steps, " • "))+"\n\n")
+	cur := ""
+	if m.newStep == 1 { cur = "Enter URL or resolver URI" }
+	if m.newStep == 2 { cur = "Destination path" }
+	if m.newStep == 3 { cur = "Artifact type (optional)" }
+	if m.newStep == 4 { cur = "Auto place? y/n" }
+	sb.WriteString(m.th.label.Render(cur)+"\n")
+	// Show normalization note once URL entered
+	if m.newStep >= 2 && strings.TrimSpace(m.newNormNote) != "" {
+		sb.WriteString(m.th.label.Render(m.newNormNote)+"\n")
+	}
+	sb.WriteString(m.newInput.View())
+	return sb.String()
+}
+
+func (m *Model) renderBatchModal() string {
+	var sb strings.Builder
+	sb.WriteString(m.th.head.Render("Batch Import")+"\n")
+	sb.WriteString(m.th.label.Render("Enter path to text file with one URL per line (optional tokens: dest=..., type=..., place=true)" )+"\n\n")
+	sb.WriteString(m.batchInput.View())
+	return sb.String()
 }
 
 // renderTopRightStats shows aggregate metrics and recent toasts summary
@@ -409,6 +570,7 @@ func (m *Model) renderTopRightStats() string {
 		fmt.Sprintf("Completed: %d", done),
 		fmt.Sprintf("Failed:    %d", failed),
 		fmt.Sprintf("Global Rate: %s/s", humanize.Bytes(uint64(gRate))),
+		m.renderAuthStatus(),
 	}
 	return strings.Join(lines, "\n")
 }
@@ -772,6 +934,177 @@ func (m *Model) renderToastDrawer() string {
 	return sb.String()
 }
 
+// URL normalization helper (for modal note only)
+func (m *Model) normalizeURLForNote(raw string) (string, bool) {
+	s := strings.TrimSpace(raw)
+	if !(strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")) { return "", false }
+	u, err := neturl.Parse(s)
+	if err != nil { return "", false }
+	h := strings.ToLower(u.Hostname())
+	if strings.HasSuffix(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
+		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+		if len(parts) >= 2 {
+			modelID := parts[1]
+			q := u.Query(); ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
+			civ := "civitai://model/" + modelID
+			if strings.TrimSpace(ver) != "" { civ += "?version=" + ver }
+			return "Normalized to " + civ, true
+		}
+	}
+	if strings.HasSuffix(h, "huggingface.co") {
+		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+		if len(parts) >= 5 && parts[2] == "blob" {
+			owner := parts[0]; repo := parts[1]; rev := parts[3]; filePath := strings.Join(parts[4:], "/")
+			hf := "hf://" + owner + "/" + repo + "/" + filePath + "?rev=" + rev
+			return "Normalized to " + hf, true
+		}
+	}
+	return "", false
+}
+
+// Token/env helpers
+func (m *Model) updateTokenEnvStatus() {
+	// Presence only (set/unset); rejection is updated upon errors in dlDoneMsg
+	if m.cfg.Sources.HuggingFace.Enabled {
+		env := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv)
+		if env == "" { env = "HF_TOKEN" }
+		m.hfTokenSet = strings.TrimSpace(os.Getenv(env)) != ""
+	} else {
+		m.hfTokenSet = false
+	}
+	if m.cfg.Sources.CivitAI.Enabled {
+		env := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv)
+		if env == "" { env = "CIVITAI_TOKEN" }
+		m.civTokenSet = strings.TrimSpace(os.Getenv(env)) != ""
+	} else {
+		m.civTokenSet = false
+	}
+}
+
+func (m *Model) renderAuthStatus() string {
+	// derive statuses with precedence: rejected > set > unset
+	envHF := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv)
+	if envHF == "" { envHF = "HF_TOKEN" }
+	envCIV := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv)
+	if envCIV == "" { envCIV = "CIVITAI_TOKEN" }
+	var hf string
+	var civ string
+	if m.hfRejected {
+		hf = m.th.bad.Render(fmt.Sprintf("HF (%s): rejected", envHF))
+	} else if m.hfTokenSet {
+		hf = m.th.ok.Render(fmt.Sprintf("HF (%s): set", envHF))
+	} else {
+		hf = m.th.bad.Render(fmt.Sprintf("HF (%s): unset", envHF))
+	}
+	if m.civRejected {
+		civ = m.th.bad.Render(fmt.Sprintf("CivitAI (%s): rejected", envCIV))
+	} else if m.civTokenSet {
+		civ = m.th.ok.Render(fmt.Sprintf("CivitAI (%s): set", envCIV))
+	} else {
+		civ = m.th.bad.Render(fmt.Sprintf("CivitAI (%s): unset", envCIV))
+	}
+	return "Auth: " + hf + "  " + civ
+}
+
+// Helpers for new download/batch
+func (m *Model) computeDefaultDest(urlStr string) string {
+	ctx := context.Background()
+	u := strings.TrimSpace(urlStr)
+	if strings.HasPrefix(u, "hf://") || strings.HasPrefix(u, "civitai://") {
+		if res, err := resolver.Resolve(ctx, u, m.cfg); err == nil {
+			name := res.SuggestedFilename
+			if strings.TrimSpace(name) == "" {
+				name = filepath.Base(res.URL)
+			}
+			name = utilSafe(name)
+			return filepath.Join(m.cfg.General.DownloadRoot, name)
+		}
+	}
+	// translate civitai model page URLs and Hugging Face blob pages
+	if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
+		if pu, err := neturl.Parse(u); err == nil {
+			h := strings.ToLower(pu.Hostname())
+			if strings.HasSuffix(h, "civitai.com") && strings.HasPrefix(pu.Path, "/models/") {
+				parts := strings.Split(strings.Trim(pu.Path, "/"), "/")
+				if len(parts) >= 2 {
+					modelID := parts[1]
+					q := pu.Query(); ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
+					civ := "civitai://model/" + modelID; if strings.TrimSpace(ver) != "" { civ += "?version=" + ver }
+					if res, err := resolver.Resolve(ctx, civ, m.cfg); err == nil {
+						name := res.SuggestedFilename
+						if strings.TrimSpace(name) == "" { name = filepath.Base(res.URL) }
+						name = utilSafe(name)
+						return filepath.Join(m.cfg.General.DownloadRoot, name)
+					}
+				}
+			}
+			if strings.HasSuffix(h, "huggingface.co") {
+				parts := strings.Split(strings.Trim(pu.Path, "/"), "/")
+				if len(parts) >= 5 && parts[2] == "blob" {
+					owner := parts[0]
+					repo := parts[1]
+					rev := parts[3]
+					filePath := strings.Join(parts[4:], "/")
+					hf := "hf://" + owner + "/" + repo + "/" + filePath + "?rev=" + rev
+					if res, err := resolver.Resolve(ctx, hf, m.cfg); err == nil {
+						name := filepath.Base(res.URL)
+						name = utilSafe(name)
+						return filepath.Join(m.cfg.General.DownloadRoot, name)
+					}
+				}
+			}
+		}
+	}
+	base := filepath.Base(u)
+	if base == "" || base == "/" || base == "." { base = "download" }
+	return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(base))
+}
+
+func (m *Model) importBatchFile(path string) {
+	f, err := os.Open(path)
+	if err != nil { m.addToast("batch open failed: "+err.Error()); return }
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	count := 0
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") { continue }
+		parts := strings.Fields(line)
+		u := parts[0]
+		dest := ""
+		typeOv := ""
+		place := false
+		for _, tok := range parts[1:] {
+			if i := strings.IndexByte(tok, '='); i > 0 {
+				k := strings.ToLower(strings.TrimSpace(tok[:i]))
+				v := strings.TrimSpace(tok[i+1:])
+				switch k {
+				case "dest": dest = v
+				case "type": typeOv = v
+				case "place": v2 := strings.ToLower(v); place = v2=="y"||v2=="yes"||v2=="true"||v2=="1"
+				}
+			}
+		}
+		if dest == "" { dest = m.computeDefaultDest(u) }
+		m.startDownloadCmd(u, dest)()
+		key := u+"|"+dest
+		if strings.TrimSpace(typeOv) != "" { m.placeType[key] = typeOv }
+		if place { m.autoPlace[key] = true }
+		count++
+	}
+	if err := sc.Err(); err != nil { m.addToast("batch read error: "+err.Error()) }
+	m.addToast(fmt.Sprintf("batch: started %d", count))
+}
+
+// utilSafe mirrors util.SafeFileName without import cycle here
+func utilSafe(name string) string {
+	name = strings.TrimSpace(name)
+	name = strings.ReplaceAll(name, "\\", "_")
+	name = strings.ReplaceAll(name, "/", "_")
+	if name == "" { return "download" }
+	return name
+}
+
 func (m *Model) startDownloadCmd(urlStr, dest string) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.running[urlStr+"|"+dest] = cancel
@@ -782,10 +1115,12 @@ func (m *Model) startDownloadCmdCtx(ctx context.Context, urlStr, dest string) te
 	return func() tea.Msg {
 		resolved := urlStr
 		headers := map[string]string{}
-		// Translate civitai model page URLs into civitai:// URIs for proper resolution
+		normToast := ""
+		// Translate civitai model pages and Hugging Face blob pages into resolver URIs for proper resolution
 		if strings.HasPrefix(resolved, "http://") || strings.HasPrefix(resolved, "https://") {
 			if u, err := neturl.Parse(resolved); err == nil {
 				h := strings.ToLower(u.Hostname())
+				// CivitAI model page -> civitai://
 				if strings.HasSuffix(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
 					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 					if len(parts) >= 2 {
@@ -793,7 +1128,21 @@ func (m *Model) startDownloadCmdCtx(ctx context.Context, urlStr, dest string) te
 						q := u.Query()
 						ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
 						civ := "civitai://model/" + modelID; if strings.TrimSpace(ver) != "" { civ += "?version=" + ver }
-						if res, err := resolver.Resolve(ctx, civ, m.cfg); err == nil { resolved = res.URL; headers = res.Headers }
+						normToast = "normalized CivitAI page → " + civ
+						if res, err := resolver.Resolve(ctx, civ, m.cfg); err == nil { resolved = res.URL; headers = res.Headers; m.addToast(normToast) }
+					}
+				}
+				// Hugging Face blob page -> hf://owner/repo/path?rev=...
+				if strings.HasSuffix(h, "huggingface.co") {
+					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+					if len(parts) >= 5 && parts[2] == "blob" {
+						owner := parts[0]
+						repo := parts[1]
+						rev := parts[3]
+						filePath := strings.Join(parts[4:], "/")
+						hf := "hf://" + owner + "/" + repo + "/" + filePath + "?rev=" + rev
+						normToast = "normalized HF blob → " + hf
+						if res, err := resolver.Resolve(ctx, hf, m.cfg); err == nil { resolved = res.URL; headers = res.Headers; m.addToast(normToast) }
 					}
 				}
 			}

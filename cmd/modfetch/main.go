@@ -238,6 +238,7 @@ func handleDownload(args []string) error {
 	if strings.HasPrefix(resolvedURL, "http://") || strings.HasPrefix(resolvedURL, "https://") {
 		if u, err := neturl.Parse(resolvedURL); err == nil {
 			h := strings.ToLower(u.Hostname())
+			// CivitAI model page -> civitai://
 			if strings.HasSuffix(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
 				parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 				if len(parts) >= 2 {
@@ -247,7 +248,25 @@ func handleDownload(args []string) error {
 					if ver == "" { ver = q.Get("version") }
 					civ := "civitai://model/" + modelID
 					if strings.TrimSpace(ver) != "" { civ += "?version=" + ver }
+					log.Infof("normalized CivitAI page -> %s", civ)
 					if res, err := resolver.Resolve(ctx, civ, c); err == nil {
+						resolvedURL = res.URL
+						headers = res.Headers
+					}
+				}
+			}
+			// Hugging Face blob page -> hf://owner/repo/path?rev=...
+			if strings.HasSuffix(h, "huggingface.co") {
+				parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+				// Expect /{owner}/{repo}/blob/{rev}/path...
+				if len(parts) >= 5 && parts[2] == "blob" {
+					owner := parts[0]
+					repo := parts[1]
+					rev := parts[3]
+					filePath := strings.Join(parts[4:], "/")
+					hf := "hf://" + owner + "/" + repo + "/" + filePath + "?rev=" + rev
+					log.Infof("normalized HF blob -> %s", hf)
+					if res, err := resolver.Resolve(ctx, hf, c); err == nil {
 						resolvedURL = res.URL
 						headers = res.Headers
 					}
