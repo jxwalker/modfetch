@@ -101,7 +101,7 @@ func handleBatchImport(args []string) error {
 			if u, err := neturl.Parse(uri); err == nil {
 				h := strings.ToLower(u.Hostname())
 				// CivitAI model page -> civitai://
-				if strings.HasSuffix(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
+				if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
 					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 					if len(parts) >= 2 {
 						modelID := parts[1]
@@ -113,7 +113,7 @@ func handleBatchImport(args []string) error {
 					}
 				}
 				// Hugging Face blob page -> hf://owner/repo/path?rev=...
-				if strings.HasSuffix(h, "huggingface.co") {
+				if hostIs(h, "huggingface.co") {
 					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 					if len(parts) >= 5 && parts[2] == "blob" {
 						owner := parts[0]
@@ -158,7 +158,7 @@ func handleBatchImport(args []string) error {
 			// Attach auth headers for known hosts (direct URLs)
 			if u, err := neturl.Parse(probeURL); err == nil {
 				h := strings.ToLower(u.Hostname())
-				if strings.HasSuffix(h, "civitai.com") && c.Sources.CivitAI.Enabled {
+				if hostIs(h, "civitai.com") && c.Sources.CivitAI.Enabled {
 					if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
 						if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
 							headers["Authorization"] = "Bearer " + tok
@@ -167,7 +167,7 @@ func handleBatchImport(args []string) error {
 						}
 					}
 				}
-				if strings.HasSuffix(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
+				if hostIs(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
 					if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
 						if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
 							headers["Authorization"] = "Bearer " + tok

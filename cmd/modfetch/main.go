@@ -239,7 +239,7 @@ func handleDownload(args []string) error {
 		if u, err := neturl.Parse(resolvedURL); err == nil {
 			h := strings.ToLower(u.Hostname())
 			// CivitAI model page -> civitai://
-			if strings.HasSuffix(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
+			if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
 				parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 				if len(parts) >= 2 {
 					modelID := parts[1]
@@ -256,7 +256,7 @@ func handleDownload(args []string) error {
 				}
 			}
 			// Hugging Face blob page -> hf://owner/repo/path?rev=...
-			if strings.HasSuffix(h, "huggingface.co") {
+			if hostIs(h, "huggingface.co") {
 				parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 				// Expect /{owner}/{repo}/blob/{rev}/path...
 				if len(parts) >= 5 && parts[2] == "blob" {
@@ -266,10 +266,7 @@ func handleDownload(args []string) error {
 					filePath := strings.Join(parts[4:], "/")
 					hf := "hf://" + owner + "/" + repo + "/" + filePath + "?rev=" + rev
 					log.Infof("normalized HF blob -> %s", hf)
-					if res, err := resolver.Resolve(ctx, hf, c); err == nil {
-						resolvedURL = res.URL
-						headers = res.Headers
-					}
+					resolvedURL = hf
 				}
 			}
 		}
@@ -284,12 +281,12 @@ func handleDownload(args []string) error {
 		if u, err := neturl.Parse(resolvedURL); err == nil {
 			h := strings.ToLower(u.Hostname())
 			if headers == nil { headers = map[string]string{} }
-			if strings.HasSuffix(h, "civitai.com") && c.Sources.CivitAI.Enabled {
+			if hostIs(h, "civitai.com") && c.Sources.CivitAI.Enabled {
 				if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
 					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer " + tok } else { log.Warnf("CivitAI token env %s is not set; gated content will return 401. Export %s.", env, env) }
 				}
 			}
-			if strings.HasSuffix(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
+			if hostIs(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
 				if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
 					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer " + tok } else { log.Warnf("Hugging Face token env %s is not set; gated repos will return 401. Export %s and accept the repo license.", env, env) }
 				}

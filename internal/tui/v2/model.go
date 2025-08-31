@@ -206,13 +206,13 @@ case tea.KeyMsg:
 					urlStr := m.newURL
 					dest := strings.TrimSpace(m.newDest)
 					if dest == "" { dest = m.computeDefaultDest(urlStr) }
-					m.startDownloadCmd(urlStr, dest)()
+					cmd := m.startDownloadCmd(urlStr, dest)
 					key := urlStr+"|"+dest
 					if strings.TrimSpace(m.newType) != "" { m.placeType[key] = m.newType }
 					if m.newAutoPlace { m.autoPlace[key] = true }
 					m.addToast("started: "+truncateMiddle(dest, 40))
 					m.newJob = false
-					return m, nil
+					return m, cmd
 				}
 			}
 			var cmd tea.Cmd
@@ -224,9 +224,10 @@ case tea.KeyMsg:
 			switch s { case "esc": m.batchMode = false; return m, nil }
 			if s == "enter" {
 				path := strings.TrimSpace(m.batchInput.Value())
-				if path != "" { m.importBatchFile(path) }
+				var cmd tea.Cmd
+				if path != "" { cmd = m.importBatchFile(path) }
 				m.batchMode = false
-				return m, nil
+				return m, cmd
 			}
 			var cmd tea.Cmd
 			m.batchInput, cmd = m.batchInput.Update(msg)
@@ -941,7 +942,7 @@ func (m *Model) normalizeURLForNote(raw string) (string, bool) {
 	u, err := neturl.Parse(s)
 	if err != nil { return "", false }
 	h := strings.ToLower(u.Hostname())
-	if strings.HasSuffix(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
+	if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
 		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 		if len(parts) >= 2 {
 			modelID := parts[1]
@@ -951,7 +952,7 @@ func (m *Model) normalizeURLForNote(raw string) (string, bool) {
 			return "Normalized to " + civ, true
 		}
 	}
-	if strings.HasSuffix(h, "huggingface.co") {
+	if hostIs(h, "huggingface.co") {
 		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 		if len(parts) >= 5 && parts[2] == "blob" {
 			owner := parts[0]; repo := parts[1]; rev := parts[3]; filePath := strings.Join(parts[4:], "/")
@@ -979,6 +980,13 @@ func (m *Model) updateTokenEnvStatus() {
 	} else {
 		m.civTokenSet = false
 	}
+}
+
+// hostIs returns true if h equals root or is a subdomain of root.
+func hostIs(h, root string) bool {
+	h = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(h)), ".")
+	root = strings.ToLower(strings.TrimSpace(root))
+	return h == root || strings.HasSuffix(h, "."+root)
 }
 
 func (m *Model) renderAuthStatus() string {
@@ -1024,12 +1032,14 @@ func (m *Model) computeDefaultDest(urlStr string) string {
 	if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
 		if pu, err := neturl.Parse(u); err == nil {
 			h := strings.ToLower(pu.Hostname())
-			if strings.HasSuffix(h, "civitai.com") && strings.HasPrefix(pu.Path, "/models/") {
+			if hostIs(h, "civitai.com") && strings.HasPrefix(pu.Path, "/models/") {
 				parts := strings.Split(strings.Trim(pu.Path, "/"), "/")
 				if len(parts) >= 2 {
 					modelID := parts[1]
-					q := pu.Query(); ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
-					civ := "civitai://model/" + modelID; if strings.TrimSpace(ver) != "" { civ += "?version=" + ver }
+					q := pu.Query()
+					ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
+					civ := "civitai://model/" + modelID
+					if strings.TrimSpace(ver) != "" { civ += "?version=" + neturl.QueryEscape(ver) }
 					if res, err := resolver.Resolve(ctx, civ, m.cfg); err == nil {
 						name := res.SuggestedFilename
 						if strings.TrimSpace(name) == "" { name = filepath.Base(res.URL) }
@@ -1038,7 +1048,7 @@ func (m *Model) computeDefaultDest(urlStr string) string {
 					}
 				}
 			}
-			if strings.HasSuffix(h, "huggingface.co") {
+			if hostIs(h, "huggingface.co") {
 				parts := strings.Split(strings.Trim(pu.Path, "/"), "/")
 				if len(parts) >= 5 && parts[2] == "blob" {
 					owner := parts[0]
@@ -1060,12 +1070,13 @@ func (m *Model) computeDefaultDest(urlStr string) string {
 	return filepath.Join(m.cfg.General.DownloadRoot, utilSafe(base))
 }
 
-func (m *Model) importBatchFile(path string) {
+func (m *Model) importBatchFile(path string) tea.Cmd {
 	f, err := os.Open(path)
-	if err != nil { m.addToast("batch open failed: "+err.Error()); return }
+	if err != nil { m.addToast("batch open failed: "+err.Error()); return nil }
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	count := 0
+	cmds := make([]tea.Cmd, 0, 64)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
 		if line == "" || strings.HasPrefix(line, "#") { continue }
@@ -1086,7 +1097,7 @@ func (m *Model) importBatchFile(path string) {
 			}
 		}
 		if dest == "" { dest = m.computeDefaultDest(u) }
-		m.startDownloadCmd(u, dest)()
+		cmds = append(cmds, m.startDownloadCmd(u, dest))
 		key := u+"|"+dest
 		if strings.TrimSpace(typeOv) != "" { m.placeType[key] = typeOv }
 		if place { m.autoPlace[key] = true }
@@ -1094,6 +1105,7 @@ func (m *Model) importBatchFile(path string) {
 	}
 	if err := sc.Err(); err != nil { m.addToast("batch read error: "+err.Error()) }
 	m.addToast(fmt.Sprintf("batch: started %d", count))
+	return tea.Batch(cmds...)
 }
 
 // utilSafe mirrors util.SafeFileName without import cycle here
@@ -1121,19 +1133,19 @@ func (m *Model) startDownloadCmdCtx(ctx context.Context, urlStr, dest string) te
 			if u, err := neturl.Parse(resolved); err == nil {
 				h := strings.ToLower(u.Hostname())
 				// CivitAI model page -> civitai://
-				if strings.HasSuffix(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
+				if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
 					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 					if len(parts) >= 2 {
 						modelID := parts[1]
 						q := u.Query()
-						ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
-						civ := "civitai://model/" + modelID; if strings.TrimSpace(ver) != "" { civ += "?version=" + ver }
+					ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
+					civ := "civitai://model/" + modelID; if strings.TrimSpace(ver) != "" { civ += "?version=" + neturl.QueryEscape(ver) }
 						normToast = "normalized CivitAI page → " + civ
 						if res, err := resolver.Resolve(ctx, civ, m.cfg); err == nil { resolved = res.URL; headers = res.Headers; m.addToast(normToast) }
 					}
 				}
 				// Hugging Face blob page -> hf://owner/repo/path?rev=...
-				if strings.HasSuffix(h, "huggingface.co") {
+				if hostIs(h, "huggingface.co") {
 					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 					if len(parts) >= 5 && parts[2] == "blob" {
 						owner := parts[0]
@@ -1155,11 +1167,11 @@ func (m *Model) startDownloadCmdCtx(ctx context.Context, urlStr, dest string) te
 		} else {
 			if u, err := neturl.Parse(resolved); err == nil {
 				h := strings.ToLower(u.Hostname())
-				if strings.HasSuffix(h, "huggingface.co") && m.cfg.Sources.HuggingFace.Enabled {
+				if hostIs(h, "huggingface.co") && m.cfg.Sources.HuggingFace.Enabled {
 					env := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv); if env == "" { env = "HF_TOKEN" }
 					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer "+tok }
 				}
-				if strings.HasSuffix(h, "civitai.com") && m.cfg.Sources.CivitAI.Enabled {
+				if hostIs(h, "civitai.com") && m.cfg.Sources.CivitAI.Enabled {
 					env := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv); if env == "" { env = "CIVITAI_TOKEN" }
 					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer "+tok }
 				}

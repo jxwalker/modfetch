@@ -145,6 +145,8 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Expand ${ENV} placeholders before unmarshalling
+	b = []byte(os.ExpandEnv(string(b)))
 	var c Config
 	if err := yaml.Unmarshal(b, &c); err != nil {
 		return nil, err
