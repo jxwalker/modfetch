@@ -275,6 +275,7 @@ func handleBatchImport(ctx context.Context, args []string) error {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "wrote batch: %s (%d jobs)\n", *outPath, len(out.Jobs))
+	fmt.Fprintf(os.Stderr, "run with: modfetch download --batch %s [--batch-parallel N]\n", *outPath)
 	return nil
 }
 

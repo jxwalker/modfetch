@@ -12,9 +12,11 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"sync"
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"golang.org/x/sync/errgroup"
 
 	"modfetch/internal/batch"
 	"modfetch/internal/classifier"
@@ -191,6 +193,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	batchPath := fs.String("batch", "", "YAML batch file with download jobs")
 	placeFlag := fs.Bool("place", false, "place files after successful download")
 	summaryJSON := fs.Bool("summary-json", false, "print a JSON summary when a download completes")
+	batchParallel := fs.Int("batch-parallel", 0, "max parallel downloads when using --batch (default: config concurrency per_host_requests)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -228,51 +231,98 @@ func handleDownload(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		dl := downloader.NewAuto(c, log, st, m)
-		for i, job := range bf.Jobs {
-			resolvedURL := job.URI
-			headers := map[string]string{}
-			destCandidate := strings.TrimSpace(job.Dest)
-			if strings.HasPrefix(resolvedURL, "hf://") || strings.HasPrefix(resolvedURL, "civitai://") {
-				res, err := resolver.Resolve(ctx, resolvedURL, c)
-				if err != nil {
-					return fmt.Errorf("job %d resolve: %w", i, err)
-				}
-				resolvedURL = res.URL
-				headers = res.Headers
-				if destCandidate == "" && strings.HasPrefix(job.URI, "civitai://") && strings.TrimSpace(res.SuggestedFilename) != "" {
-					if p, err := util.UniquePath(c.General.DownloadRoot, res.SuggestedFilename, res.VersionID); err == nil {
-						destCandidate = p
+		parallel := c.Concurrency.PerHostRequests
+		if *batchParallel > 0 {
+			parallel = *batchParallel
+		}
+		if parallel < 1 {
+			parallel = 1
+		}
+
+		type jobItem struct {
+			idx int
+			job batch.BatchJob
+		}
+
+		jobs := make(chan jobItem)
+		g, gctx := errgroup.WithContext(ctx)
+		var logMu sync.Mutex
+
+		for i := 0; i < parallel; i++ {
+			g.Go(func() error {
+				dl := downloader.NewAuto(c, log, st, m)
+				for {
+					select {
+					case <-gctx.Done():
+						return gctx.Err()
+					case it, ok := <-jobs:
+						if !ok {
+							return nil
+						}
+						job := it.job
+						resolvedURL := job.URI
+						headers := map[string]string{}
+						destCandidate := strings.TrimSpace(job.Dest)
+						if strings.HasPrefix(resolvedURL, "hf://") || strings.HasPrefix(resolvedURL, "civitai://") {
+							res, err := resolver.Resolve(gctx, resolvedURL, c)
+							if err != nil {
+								return fmt.Errorf("job %d resolve: %w", it.idx, err)
+							}
+							resolvedURL = res.URL
+							headers = res.Headers
+							if destCandidate == "" && strings.HasPrefix(job.URI, "civitai://") && strings.TrimSpace(res.SuggestedFilename) != "" {
+								if p, err := util.UniquePath(c.General.DownloadRoot, res.SuggestedFilename, res.VersionID); err == nil {
+									destCandidate = p
+								}
+							}
+						}
+						final, sum, err := dl.Download(gctx, resolvedURL, destCandidate, job.SHA256, headers, false)
+						if err != nil {
+							return fmt.Errorf("job %d download: %w", it.idx, err)
+						}
+						var placed []string
+						if job.Place || *placeFlag {
+							var err2 error
+							placed, err2 = placer.Place(c, final, job.Type, job.Mode)
+							if err2 != nil {
+								return fmt.Errorf("job %d place: %w", it.idx, err2)
+							}
+						}
+						logMu.Lock()
+						log.Infof("downloaded: %s (sha256=%s)", final, sum)
+						for _, p := range placed {
+							log.Infof("placed: %s", p)
+						}
+						if *summaryJSON {
+							enc := json.NewEncoder(os.Stdout)
+							enc.SetIndent("", "  ")
+							_ = enc.Encode(map[string]any{
+								"url":    logging.SanitizeURL(resolvedURL),
+								"dest":   final,
+								"sha256": sum,
+								"placed": placed,
+								"status": "ok",
+							})
+						}
+						logMu.Unlock()
 					}
 				}
-			}
-			final, sum, err := dl.Download(ctx, resolvedURL, destCandidate, job.SHA256, headers, false)
-			if err != nil {
-				return fmt.Errorf("job %d download: %w", i, err)
-			}
-			log.Infof("downloaded: %s (sha256=%s)", final, sum)
-			var placed []string
-			if job.Place || *placeFlag {
-				var err2 error
-				placed, err2 = placer.Place(c, final, job.Type, job.Mode)
-				if err2 != nil {
-					return fmt.Errorf("job %d place: %w", i, err2)
-				}
-				for _, p := range placed {
-					log.Infof("placed: %s", p)
+			})
+		}
+
+		go func() {
+			defer close(jobs)
+			for i, job := range bf.Jobs {
+				select {
+				case <-gctx.Done():
+					return
+				case jobs <- jobItem{idx: i, job: job}:
 				}
 			}
-			if *summaryJSON {
-				enc := json.NewEncoder(os.Stdout)
-				enc.SetIndent("", "  ")
-				_ = enc.Encode(map[string]any{
-					"url":    logging.SanitizeURL(resolvedURL),
-					"dest":   final,
-					"sha256": sum,
-					"placed": placed,
-					"status": "ok",
-				})
-			}
+		}()
+
+		if err := g.Wait(); err != nil {
+			return err
 		}
 		return nil
 	}
@@ -470,7 +520,11 @@ func handlePlace(ctx context.Context, args []string) error {
 	if *dryRun {
 		atype := *artType
 		if atype == "" {
+<<<<<<< HEAD
 			atype = classifier.Detect(c, *filePath)
+=======
+			atype = classifier.Detect(*filePath)
+>>>>>>> origin/codex/implement-concurrent-job-downloads
 		}
 		targets, err := placer.ComputeTargets(c, atype)
 		if err != nil {
