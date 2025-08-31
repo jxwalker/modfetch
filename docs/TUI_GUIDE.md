@@ -45,20 +45,27 @@ Notes:
 
 ## Keybindings
 
-Global
-- Navigation: j/k (select), / (filter), m (menu), h or ? (help)
-- Sorting: s (by speed), e (by ETA), o (clear sort)
-- View/Columns: v (compact view), t (cycle last column URL/DEST/HOST)
-- Actions: n (new), r (refresh), d (details), g (group by status)
+The TUI now exposes key mappings via a discoverable help system. A concise
+commands bar is always visible at the bottom, and pressing `?` toggles the full
+help overlay.
 
-Per-row
-- p (pause/cancel)
-- y (retry)
-- C (copy path to clipboard)
-- U (copy source URL to clipboard)
-- O (open file or reveal in file manager)
-- D (delete staged data for the row)
-- Space (toggle selection), A (select all), X (clear selection)
+Common keys include:
+
+- `j`/`k` or arrow keys to navigate
+- `n` to start a new download
+- `b` to import a batch file
+- `y` or `r` to start or retry
+- `p` to cancel
+- `D` to delete
+- `O` to open the destination
+- `/` to filter
+- `s`/`e`/`o` to sort by speed, sort by ETA, or clear sorting
+- `g` to group by host
+- `t` to cycle the URL/DEST/HOST column
+- `v` to toggle compact view
+- `i` to toggle the inspector
+- `H` to toggle the toast drawer
+- `q` to quit
 
 ## Starting new downloads
 
