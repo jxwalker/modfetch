@@ -146,6 +146,8 @@ type UIOptions struct {
 	ColumnMode string `yaml:"column_mode"`
 	// Compact reduces columns in the v2 table (hides SPEED/THR) for a denser view.
 	Compact bool `yaml:"compact"`
+	// Theme allows selecting a theme by name from a predefined set (optional).
+	Theme string `yaml:"theme"`
 }
 
 // Load reads, parses, expands, and validates a YAML config file.
