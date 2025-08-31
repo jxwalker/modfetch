@@ -106,7 +106,7 @@ type uiState struct {
 }
 
 func New(cfg *config.Config, st *state.DB) tea.Model {
-	p := progress.New(progress.WithDefaultGradient())
+p := progress.New(progress.WithDefaultGradient(), progress.WithWidth(16))
 	fi := textinput.New(); fi.Placeholder = "filter (url or dest contains)"; fi.CharLimit = 4096
 	// compute refresh
 	refresh := time.Second
@@ -478,12 +478,12 @@ func etaSeconds(cur, total int64, rate float64) float64 {
 func (m *Model) renderTable() string {
 	rows := m.visibleRows()
 	var sb strings.Builder
-lastLabel := "DEST"
+	lastLabel := "DEST"
 	if m.columnMode == "url" { lastLabel = "URL" } else if m.columnMode == "host" { lastLabel = "HOST" }
 	if m.isCompact() {
-		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-2s %-8s  %-10s  %-8s  %-s", "S", "STATUS", "PROGRESS", "ETA", lastLabel)))
+		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-8s  %-s", "S", "STATUS", "PROG", "PCT", "ETA", lastLabel)))
 	} else {
-		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-10s  %-8s  %-s", "S", "STATUS", "PROGRESS", "SPEED", "THR", "ETA", lastLabel)))
+		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-10s  %-10s  %-8s  %-s", "S", "STATUS", "PROG", "PCT", "SPEED", "THR", "ETA", lastLabel)))
 	}
 	sb.WriteString("\n")
 	maxRows := m.h - 10
@@ -497,18 +497,28 @@ lastLabel := "DEST"
 				prevGroup = host
 			}
 		}
+		// Progress and pct
 		prog := m.renderProgress(r)
-		rate := m.rateCache[keyFor(r)]
+		cur, total, rate, _ := m.progressFor(r)
+		pct := "--%"
+		if total > 0 {
+			ratio := float64(cur) / float64(total)
+			if ratio < 0 { ratio = 0 }
+			if ratio > 1 { ratio = 1 }
+			pct = fmt.Sprintf("%3.0f%%", ratio*100)
+		}
 		eta := m.etaCache[keyFor(r)]
 		thr := m.renderSparkline(keyFor(r))
 		sel := " "; if m.selectedKeys[keyFor(r)] { sel = "*" }
-last := r.Dest
+		last := r.Dest
 		if m.columnMode == "url" { last = logging.SanitizeURL(r.URL) } else if m.columnMode == "host" { last = hostOf(r.URL) }
+		lw := m.lastColumnWidth(m.isCompact())
+		last = truncateMiddle(last, lw)
 		var line string
 		if m.isCompact() {
-			line = fmt.Sprintf("%-2s %-8s  %-10s  %-8s  %s", sel, r.Status, prog, eta, last)
+			line = fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-8s  %s", sel, r.Status, prog, pct, eta, last)
 		} else {
-			line = fmt.Sprintf("%-2s %-8s  %-10s  %-10s  %-10s  %-8s  %s", sel, r.Status, prog, humanize.Bytes(uint64(rate))+"/s", thr, eta, last)
+			line = fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-10s  %-10s  %-8s  %s", sel, r.Status, prog, pct, humanize.Bytes(uint64(rate))+"/s", thr, eta, last)
 		}
 		if i == m.selected { line = m.th.rowSelected.Render(line) }
 		sb.WriteString(line+"\n")
@@ -608,6 +618,36 @@ func (m *Model) renderSparklineKey(key string) string {
 }
 
 func (m *Model) renderSparkline(key string) string { return m.renderSparklineKey(key) }
+
+func truncateMiddle(s string, max int) string {
+	if max <= 0 { return "" }
+	runes := []rune(s)
+	if len(runes) <= max { return s }
+	if max <= 1 { return string(runes[:max]) }
+	left := max / 2
+	right := max - left - 1
+	return string(runes[:left]) + "…" + string(runes[len(runes)-right:])
+}
+
+func (m *Model) lastColumnWidth(compact bool) int {
+	leftW := 24
+	inspW := 0
+	if m.showInspector { inspW = 42 }
+	// Rough usable width of main table inside borders
+	usable := m.w - leftW - inspW - 6
+	if usable < 40 { usable = 40 }
+	if compact {
+		consumed := 1 + 1 + 8 + 2 + 16 + 2 + 4 + 2 + 8 + 2 // S, space, STATUS, 2sp, PROG, 2sp, PCT, 2sp, ETA, 2sp
+		lw := usable - consumed
+		if lw < 10 { lw = 10 }
+		return lw
+	}
+	// non-compact consumed widths
+	consumed := 1 + 1 + 8 + 2 + 16 + 2 + 4 + 2 + 10 + 2 + 10 + 2 + 8 + 2
+	lw := usable - consumed
+	if lw < 10 { lw = 10 }
+	return lw
+}
 
 func (m *Model) maxRowsOnScreen() int {
 	max := m.h - 10
