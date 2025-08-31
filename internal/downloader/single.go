@@ -162,8 +162,8 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		if u, _ := neturl.Parse(url); u != nil { host = strings.ToLower(u.Hostname()) }
 		hadAuth := false
 		if _, ok := headers["Authorization"]; ok && strings.TrimSpace(headers["Authorization"]) != "" { hadAuth = true }
-		msg := friendlyHTTPStatusMessage(s.cfg, host, resp.StatusCode, resp.Status, hadAuth)
-		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error"})
+msg := friendlyHTTPStatusMessage(s.cfg, host, resp.StatusCode, resp.Status, hadAuth)
+		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error", LastError: msg})
 		return "", "", fmt.Errorf(msg)
 	}
 
@@ -172,8 +172,9 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	nWritten, err := io.Copy(mw, resp.Body)
 	if s.metrics != nil && nWritten > 0 { s.metrics.AddBytes(nWritten) }
 	if err != nil {
-		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error"})
-		return "", "", friendlyIOError(err)
+ioMsg := friendlyIOError(err).Error()
+		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error", LastError: ioMsg})
+		return "", "", fmt.Errorf(ioMsg)
 	}
 	// Ensure file data is durable before rename
 	_ = f.Sync()

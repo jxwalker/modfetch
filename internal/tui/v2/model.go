@@ -834,7 +834,11 @@ func (m *Model) renderInspector() string {
 	sb.WriteString(fmt.Sprintf("%s %s/%s\n", m.th.label.Render("Progress:"), humanize.Bytes(uint64(cur)), humanize.Bytes(uint64(total))))
 	sb.WriteString(fmt.Sprintf("%s %s/s\n", m.th.label.Render("Speed:"), humanize.Bytes(uint64(rate))))
 	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("ETA:"), eta))
-	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Throughput:"), m.renderSparkline(keyFor(r))))
+sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Throughput:"), m.renderSparkline(keyFor(r))))
+	// Show reason for hold/error if available
+	if strings.TrimSpace(r.LastError) != "" {
+		sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Reason:"), r.LastError))
+	}
 	return sb.String()
 }
 
@@ -1466,7 +1470,7 @@ func (m *Model) probeSelectedCmd(rows []state.DownloadRow) tea.Cmd {
 				}
 			}
 			reach, info := downloader.CheckReachable(ctx, m.cfg, row.URL, headers)
-			if !reach { _ = m.st.UpsertDownload(state.DownloadRow{URL: row.URL, Dest: row.Dest, Status: "hold"}) }
+if !reach { _ = m.st.UpsertDownload(state.DownloadRow{URL: row.URL, Dest: row.Dest, Status: "hold", LastError: info}) }
 			return probeMsg{url: row.URL, dest: row.Dest, reachable: reach, info: info}
 		})
 	}
@@ -1535,8 +1539,8 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 		if start {
 			// Quick reachability probe; if network-unreachable, put job on hold and do not start download
 			reach, info := downloader.CheckReachable(ctx, m.cfg, resolved, headers)
-			if !reach {
-				_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold"})
+if !reach {
+				_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold", LastError: info})
 				// mirror autoplace/type mappings to resolved key so future retries work
 				origKey := urlStr+"|"+dest
 				resKey := resolved+"|"+dest
@@ -1552,7 +1556,7 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 		}
 		// Probe-only path
 		reach, info := downloader.CheckReachable(ctx, m.cfg, resolved, headers)
-		if !reach { _ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold"}) }
+if !reach { _ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold", LastError: info}) }
 		return probeMsg{url: resolved, dest: dest, reachable: reach, info: info}
 	}
 }

@@ -47,6 +47,7 @@ func initSchema(db *sql.DB) error {
 			retries INTEGER DEFAULT 0,
 			created_at INTEGER NOT NULL,
 			updated_at INTEGER NOT NULL,
+			last_error TEXT,
 			UNIQUE(url, dest)
 		);`,
 	}
@@ -56,6 +57,7 @@ func initSchema(db *sql.DB) error {
 	// Try to add new columns in case of existing DB without them
 	_, _ = db.Exec(`ALTER TABLE downloads ADD COLUMN actual_sha256 TEXT`)
 	_, _ = db.Exec(`ALTER TABLE downloads ADD COLUMN retries INTEGER DEFAULT 0`)
+	_, _ = db.Exec(`ALTER TABLE downloads ADD COLUMN last_error TEXT`)
 	return nil
 }
 
@@ -70,14 +72,15 @@ type DownloadRow struct {
 	Status         string
 	Retries        int64
 	UpdatedAt      int64
+	LastError      string
 }
 
 func (db *DB) UpsertDownload(row DownloadRow) error {
 	now := time.Now().Unix()
-	_, err := db.SQL.Exec(`INSERT INTO downloads(url, dest, expected_sha256, actual_sha256, etag, last_modified, size, status, created_at, updated_at)
-		VALUES(?,?,?,?,?,?,?,?,?,?)
-		ON CONFLICT(url, dest) DO UPDATE SET expected_sha256=excluded.expected_sha256, actual_sha256=excluded.actual_sha256, etag=excluded.etag, last_modified=excluded.last_modified, size=excluded.size, status=excluded.status, updated_at=?`,
-		row.URL, row.Dest, row.ExpectedSHA256, row.ActualSHA256, row.ETag, row.LastModified, row.Size, row.Status, now, now, now)
+	_, err := db.SQL.Exec(`INSERT INTO downloads(url, dest, expected_sha256, actual_sha256, etag, last_modified, size, status, last_error, created_at, updated_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(url, dest) DO UPDATE SET expected_sha256=excluded.expected_sha256, actual_sha256=excluded.actual_sha256, etag=excluded.etag, last_modified=excluded.last_modified, size=excluded.size, status=excluded.status, last_error=excluded.last_error, updated_at=?`,
+		row.URL, row.Dest, row.ExpectedSHA256, row.ActualSHA256, row.ETag, row.LastModified, row.Size, row.Status, row.LastError, now, now, now)
 	return err
 }
 
@@ -96,13 +99,13 @@ func (db *DB) DeleteDownload(url, dest string) error {
 
 // ListDownloads returns a snapshot of the downloads table
 func (db *DB) ListDownloads() ([]DownloadRow, error) {
-	rows, err := db.SQL.Query(`SELECT url,dest,expected_sha256,actual_sha256,etag,last_modified,size,status,retries,updated_at FROM downloads ORDER BY updated_at DESC`)
+rows, err := db.SQL.Query(`SELECT url,dest,expected_sha256,actual_sha256,etag,last_modified,size,status,retries,updated_at,last_error FROM downloads ORDER BY updated_at DESC`)
 	if err != nil { return nil, err }
 	defer rows.Close()
 	var out []DownloadRow
 	for rows.Next() {
 		var r DownloadRow
-		if err := rows.Scan(&r.URL, &r.Dest, &r.ExpectedSHA256, &r.ActualSHA256, &r.ETag, &r.LastModified, &r.Size, &r.Status, &r.Retries, &r.UpdatedAt); err != nil { return nil, err }
+if err := rows.Scan(&r.URL, &r.Dest, &r.ExpectedSHA256, &r.ActualSHA256, &r.ETag, &r.LastModified, &r.Size, &r.Status, &r.Retries, &r.UpdatedAt, &r.LastError); err != nil { return nil, err }
 		out = append(out, r)
 	}
 	return out, rows.Err()
