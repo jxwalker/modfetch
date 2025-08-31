@@ -561,7 +561,10 @@ func (m *Model) refresh() tea.Cmd {
 			if rate > 0 && total > 0 && cur < total {
 				rem := float64(total-cur) / rate
 				m.etaCache[key] = fmt.Sprintf("%ds", int(rem+0.5))
-			} else { m.etaCache[key] = "-" }
+			} else {
+				// Keep last ETA instead of blanking; initialize to '-' if missing
+				if strings.TrimSpace(m.etaCache[key]) == "" { m.etaCache[key] = "-" }
+			}
 			m.addRateSample(key, rate)
 		}
 	}
@@ -900,11 +903,30 @@ func (m *Model) progressFor(r state.DownloadRow) (cur int64, total int64, rate f
 	key := keyFor(r)
 	cur = m.curBytesCache[key]
 	total = m.totalCache[key]
-	rate = m.rateCache[key]
+	// Smooth rate using recent positive samples; fallback to last instantaneous
+	rate = m.smoothedRate(key)
 	eta = m.etaCache[key]
 	// Fallback if cache not populated yet
 	if total == 0 && r.Size > 0 { total = r.Size }
 	return
+}
+
+// smoothedRate returns a moving average of recent positive samples (up to 5),
+// falling back to the last instantaneous rate if no positive samples exist.
+func (m *Model) smoothedRate(key string) float64 {
+	h := m.rateHist[key]
+	if len(h) == 0 { return m.rateCache[key] }
+	sum := 0.0
+	count := 0
+	for i := len(h)-1; i >= 0 && count < 5; i-- {
+		v := h[i]
+		if v > 0 {
+			sum += v
+			count++
+		}
+	}
+	if count > 0 { return sum / float64(count) }
+	return m.rateCache[key]
 }
 
 func (m *Model) computeCurAndTotal(r state.DownloadRow) (cur int64, total int64) {
@@ -948,9 +970,8 @@ func (m *Model) renderSparklineKey(key string) string {
 	if max <= 0 { return "──────────" }
 	levels := []rune{'▁','▂','▃','▄','▅','▆','▇','█'}
 	var sb strings.Builder
-	// Newest on the left (reverse chronological) to match user expectation
-	for i := len(h)-1; i >= 0; i-- {
-		v := h[i]
+	// Oldest on the left, newest on the right (rightward growth)
+	for _, v := range h {
 		r := int((v/max)*float64(len(levels)-1) + 0.5)
 		if r < 0 { r = 0 }; if r >= len(levels) { r = len(levels)-1 }
 		sb.WriteRune(levels[r])
