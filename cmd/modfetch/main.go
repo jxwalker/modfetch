@@ -520,11 +520,7 @@ func handlePlace(ctx context.Context, args []string) error {
 	if *dryRun {
 		atype := *artType
 		if atype == "" {
-<<<<<<< HEAD
 			atype = classifier.Detect(c, *filePath)
-=======
-			atype = classifier.Detect(*filePath)
->>>>>>> origin/codex/implement-concurrent-job-downloads
 		}
 		targets, err := placer.ComputeTargets(c, atype)
 		if err != nil {
