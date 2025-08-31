@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -105,10 +106,15 @@ func (c *CivitAI) Resolve(ctx context.Context, uri string, cfg *config.Config) (
 	download := files[pick].DownloadURL
 	if download == "" { return nil, errors.New("selected civitai file has empty downloadUrl") }
 	fileName := files[pick].Name
-	// Suggested filename: "<ModelName> - <OriginalFileName>"
+	// Suggested filename:
+	// Use "ModelName - FileName" only when FileName does not already start with ModelName
+	// (case-insensitive and ignoring separators). Otherwise, keep FileName as-is to avoid duplication.
 	suggested := fileName
 	if strings.TrimSpace(modelName) != "" {
-		suggested = modelName + " - " + fileName
+		base := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+		if !hasPrefixName(base, modelName) {
+			suggested = modelName + " - " + fileName
+		}
 	}
 	suggested = util.SafeFileName(suggested)
 
@@ -167,5 +173,27 @@ func civitaiFetchVersion(ctx context.Context, client *http.Client, headers map[s
 	var v civitVersion
 	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil { return civitVersion{}, err }
 	return v, nil
+}
+
+// hasPrefixName returns true if a (filename base) begins with b (model name), ignoring case and
+// non-alphanumeric separators (spaces, dashes, underscores, etc.).
+func hasPrefixName(a, b string) bool {
+	return strings.HasPrefix(normalizeAlphaNum(a), normalizeAlphaNum(b))
+}
+
+func normalizeAlphaNum(s string) string {
+	if s == "" { return "" }
+	var bld strings.Builder
+	bld.Grow(len(s))
+	for _, r := range s {
+		if r >= 'A' && r <= 'Z' {
+			bld.WriteRune(r + ('a' - 'A'))
+			continue
+		}
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			bld.WriteRune(r)
+		}
+	}
+	return bld.String()
 }
 
