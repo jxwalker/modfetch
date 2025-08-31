@@ -523,7 +523,14 @@ func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *
 			return "", fmt.Errorf("chunk %d: server ignored Range; got 200 for partial request", c.Index)
 		}
 	} else if resp.StatusCode != http.StatusPartialContent {
-		// Friendly error for common auth cases; include chunk index for context
+		// Friendly error for common cases; include chunk index for context
+		if resp.StatusCode == http.StatusTooManyRequests {
+			retry := strings.TrimSpace(resp.Header.Get("Retry-After"))
+			retryMsg := ""
+			if retry != "" { retryMsg = "; retry-after=" + retry }
+			host := hostFromURL(req.URL.String())
+			return "", fmt.Errorf("chunk %d: 429 Too Many Requests: rate limited by %s%s", c.Index, host, retryMsg)
+		}
 		host := hostFromURL(req.URL.String())
 		hadAuth := false
 		if _, ok := headers["Authorization"]; ok && strings.TrimSpace(headers["Authorization"]) != "" {

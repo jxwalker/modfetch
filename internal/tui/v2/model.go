@@ -164,6 +164,9 @@ type Model struct {
 	civTokenSet bool
 	hfRejected  bool
 	civRejected bool
+	// rate limit flags
+	hfRateLimited  bool
+	civRateLimited bool
 }
 
 type uiState struct {
@@ -277,7 +280,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dlDoneMsg:
 		if msg.err != nil {
 			m.err = msg.err
-			// Mark token rejection hints on known hosts based on error text
+			// Mark token rejection/rate limit hints on known hosts based on error text
 			errTxt := strings.ToLower(m.err.Error())
 			if strings.Contains(errTxt, "unauthorized") || strings.Contains(errTxt, "401") || strings.Contains(errTxt, "forbidden") || strings.Contains(errTxt, "403") || strings.Contains(errTxt, "not authorized") {
 				if strings.Contains(errTxt, "hugging face") || strings.Contains(errTxt, "huggingface") {
@@ -287,15 +290,29 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.civRejected = true
 				}
 			}
+			// Rate limited detection
+			if strings.Contains(errTxt, "429") || strings.Contains(errTxt, "rate limited") || strings.Contains(errTxt, "too many requests") {
+				u := strings.ToLower(msg.url)
+				if strings.Contains(u, "huggingface") {
+					m.hfRateLimited = true
+					m.addToast("rate limited by huggingface.co; jobs on hold if retried")
+				}
+				if strings.Contains(u, "civitai") {
+					m.civRateLimited = true
+					m.addToast("rate limited by civitai.com; jobs may be on hold; try later")
+				}
+			}
 			return m, m.refresh()
 		}
 		// On success, clear any prior rejection for the host
 		u := strings.ToLower(msg.url)
-		if strings.HasPrefix(u, "hf://") || strings.Contains(u, "huggingface") {
+	if strings.HasPrefix(u, "hf://") || strings.Contains(u, "huggingface") {
 			m.hfRejected = false
+			m.hfRateLimited = false
 		}
 		if strings.HasPrefix(u, "civitai://") || strings.Contains(u, "civitai") {
 			m.civRejected = false
+			m.civRateLimited = false
 		}
 		// Auto place if configured
 		key := msg.url + "|" + msg.dest
@@ -1116,6 +1133,9 @@ func (m *Model) renderTable() string {
 		}
 		// status label with transient retrying overlay
 		statusLabel := r.Status
+		if strings.EqualFold(statusLabel, "hold") && strings.Contains(strings.ToLower(strings.TrimSpace(r.LastError)), "rate limited") {
+			statusLabel = "hold(rl)"
+		}
 		if ts, ok := m.retrying[keyFor(r)]; ok {
 			if time.Since(ts) < 4*time.Second {
 				statusLabel = "retrying"
@@ -2010,6 +2030,8 @@ func (m *Model) renderAuthStatus() string {
 	var civ string
 	if !hfEnabled {
 		hf = m.th.label.Render(fmt.Sprintf("HF (%s): disabled", envHF))
+	} else if m.hfRateLimited {
+		hf = m.th.bad.Render(fmt.Sprintf("HF (%s): rate-limited", envHF))
 	} else if m.hfRejected {
 		hf = m.th.bad.Render(fmt.Sprintf("HF (%s): rejected", envHF))
 	} else if m.hfTokenSet {
@@ -2019,6 +2041,8 @@ func (m *Model) renderAuthStatus() string {
 	}
 	if !civEnabled {
 		civ = m.th.label.Render(fmt.Sprintf("CivitAI (%s): disabled", envCIV))
+	} else if m.civRateLimited {
+		civ = m.th.bad.Render(fmt.Sprintf("CivitAI (%s): rate-limited", envCIV))
 	} else if m.civRejected {
 		civ = m.th.bad.Render(fmt.Sprintf("CivitAI (%s): rejected", envCIV))
 	} else if m.civTokenSet {

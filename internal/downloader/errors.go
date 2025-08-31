@@ -34,6 +34,8 @@ func friendlyHTTPStatusMessage(cfg *config.Config, host string, statusCode int, 
     }
 
     switch statusCode {
+    case 429:
+        return mk("429 Too Many Requests: rate limited")
     case 401:
         if hadAuth {
             return mk("401 Unauthorized: token present but not authorized")
