@@ -371,7 +371,12 @@ req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 			return "", fmt.Errorf("chunk %d: server ignored Range; got 200 for partial request", c.Index)
 		}
 	} else if resp.StatusCode != http.StatusPartialContent {
-		return "", fmt.Errorf("chunk %d: bad status %s", c.Index, resp.Status)
+		// Friendly error for common auth cases; include chunk index for context
+		host := hostFromURL(req.URL.String())
+		hadAuth := false
+		if _, ok := headers["Authorization"]; ok && strings.TrimSpace(headers["Authorization"]) != "" { hadAuth = true }
+		msg := friendlyHTTPStatusMessage(e.cfg, host, resp.StatusCode, resp.Status, hadAuth)
+		return "", fmt.Errorf("chunk %d: %s", c.Index, msg)
 	}
 	// Write this chunk using a WriteAt-backed offset writer to avoid concurrent Seek/Write races
 	hasher := sha256.New()

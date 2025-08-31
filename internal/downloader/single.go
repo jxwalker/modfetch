@@ -157,23 +157,12 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 			}
 			return destPath, actualSHA, nil
 		}
-		// Provide a friendlier hint for 401 on known hosts and persist error status
-		msg := fmt.Sprintf("unexpected status: %s", resp.Status)
-		if resp.StatusCode == http.StatusUnauthorized {
-			if u, _ := neturl.Parse(url); u != nil {
-				h := strings.ToLower(u.Hostname())
-				if strings.HasSuffix(h, "huggingface.co") {
-					env := strings.TrimSpace(s.cfg.Sources.HuggingFace.TokenEnv)
-					if env == "" { env = "HF_TOKEN" }
-					msg = fmt.Sprintf("unexpected status: 401 Unauthorized (Hugging Face: token required; export %s and ensure access/license accepted)", env)
-				}
-				if strings.HasSuffix(h, "civitai.com") {
-					env := strings.TrimSpace(s.cfg.Sources.CivitAI.TokenEnv)
-					if env == "" { env = "CIVITAI_TOKEN" }
-					msg = fmt.Sprintf("unexpected status: 401 Unauthorized (CivitAI: token required; export %s and ensure access)", env)
-				}
-			}
-		}
+		// Provide friendlier hints for auth/permission statuses and persist error status
+		host := ""
+		if u, _ := neturl.Parse(url); u != nil { host = strings.ToLower(u.Hostname()) }
+		hadAuth := false
+		if _, ok := headers["Authorization"]; ok && strings.TrimSpace(headers["Authorization"]) != "" { hadAuth = true }
+		msg := friendlyHTTPStatusMessage(s.cfg, host, resp.StatusCode, resp.Status, hadAuth)
 		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error"})
 		return "", "", fmt.Errorf(msg)
 	}

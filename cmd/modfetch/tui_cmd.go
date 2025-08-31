@@ -66,7 +66,7 @@ func handleTUI(args []string) error {
 	if *useV1 {
 		m = ui.New(c, st)
 	} else {
-		m = uiv2.New(c, st)
+		m = uiv2.New(c, st, version)
 	}
 	p := tea.NewProgram(m)
 	_, err = p.Run()

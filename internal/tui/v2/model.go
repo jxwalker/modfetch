@@ -66,6 +66,8 @@ type destSuggestMsg struct{ url string; dest string }
 
 type metaMsg struct{ url string; fileName string; suggested string; civType string }
 
+type probeMsg struct{ url string; dest string; reachable bool; info string }
+
 type obs struct{ bytes int64; t time.Time }
 
 type toast struct{ msg string; when time.Time; ttl time.Duration }
@@ -75,6 +77,7 @@ type Model struct {
 	st    *state.DB
 	th    Theme
 	w,h   int
+	build string
 	activeTab int // 0: Pending, 1: Active, 2: Completed, 3: Failed
 	rows  []state.DownloadRow
 	selected int
@@ -141,7 +144,7 @@ type uiState struct {
 	SortMode   string `json:"sort_mode"`
 }
 
-func New(cfg *config.Config, st *state.DB) tea.Model {
+func New(cfg *config.Config, st *state.DB, version string) tea.Model {
 p := progress.New(progress.WithDefaultGradient(), progress.WithWidth(16))
 	fi := textinput.New(); fi.Placeholder = "filter (url or dest contains)"; fi.CharLimit = 4096
 	// compute refresh
@@ -157,6 +160,7 @@ p := progress.New(progress.WithDefaultGradient(), progress.WithWidth(16))
 	}
 m := &Model{
 		cfg: cfg, st: st, th: defaultTheme(), activeTab: -1, prog: p, prev: map[string]obs{},
+		build: strings.TrimSpace(version),
 		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
 		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{}, hostCache: map[string]string{},
 		tickEvery: refresh,
@@ -183,6 +187,15 @@ case tea.KeyMsg:
 		if m.newJob {
 			switch s {
 			case "esc": m.newJob = false; return m, nil
+			case "tab":
+				// Path completion on Destination step
+				if m.newStep == 4 {
+					cur := strings.TrimSpace(m.newInput.Value())
+					comp := m.completePath(cur)
+					if strings.TrimSpace(comp) != "" { m.newInput.SetValue(comp); m.newAutoSuggested = comp }
+					return m, nil
+				}
+				return m, nil
 			case "enter":
 				val := strings.TrimSpace(m.newInput.Value())
 				if m.newStep == 1 {
@@ -230,6 +243,11 @@ case tea.KeyMsg:
 					dest := strings.TrimSpace(val)
 					if dest == "" {
 						if m.newAutoPlace { dest = m.computePlacementSuggestionImmediate(urlStr, m.newType) } else { dest = m.computeDefaultDest(urlStr) }
+					}
+					// Preflight: ensure destination directory is writable
+					if err := m.preflightDest(dest); err != nil {
+						m.addToast("dest not writable: "+err.Error())
+						return m, nil
 					}
 					cmd := m.startDownloadCmd(urlStr, dest)
 					key := urlStr+"|"+dest
@@ -302,6 +320,10 @@ case "T": // theme cycle presets
 		case "H": // toggle toast drawer
 			m.showToastDrawer = !m.showToastDrawer
 			return m, nil
+		case "P": // re-probe reachability for selected/current without starting
+			rows := m.selectionOrCurrent()
+			if len(rows) == 0 { return m, nil }
+			return m, m.probeSelectedCmd(rows)
 		case "?":
 			m.showHelp = !m.showHelp
 			return m, nil
@@ -401,12 +423,21 @@ case metaMsg:
 			}
 		}
 		return m, nil
+case probeMsg:
+		// Show toast for probe result; refresh table to reflect any hold updates
+		host := hostOf(msg.url)
+		if msg.reachable {
+			m.addToast("probe ok: "+host+" ("+msg.info+")")
+		} else {
+			m.addToast("probe failed: unreachable; on hold ("+msg.info+")")
+		}
+		return m, m.refresh()
 case dlDoneMsg:
 		if msg.err != nil {
 			m.err = msg.err
 			// Mark token rejection hints on known hosts based on error text
 			errTxt := strings.ToLower(m.err.Error())
-			if strings.Contains(errTxt, "unauthorized") || strings.Contains(errTxt, "401") {
+			if strings.Contains(errTxt, "unauthorized") || strings.Contains(errTxt, "401") || strings.Contains(errTxt, "forbidden") || strings.Contains(errTxt, "403") || strings.Contains(errTxt, "not authorized") {
 				if strings.Contains(errTxt, "hugging face") || strings.Contains(errTxt, "huggingface") {
 					m.hfRejected = true
 				}
@@ -438,7 +469,9 @@ func (m *Model) View() string {
 	if m.w == 0 { m.w = 120 }
 	if m.h == 0 { m.h = 30 }
 	// Title bar + inline toasts
-	title := m.th.title.Render("modfetch • TUI v2 (preview)")
+	ver := m.build
+	if ver == "" { ver = "dev" }
+	title := m.th.title.Render(fmt.Sprintf("modfetch • TUI v2 (build %s)", ver))
 	toastStr := m.renderToasts()
 titleBar := m.th.border.Width(m.w-2).Render(lipgloss.JoinHorizontal(lipgloss.Top, title, "  ", toastStr))
 
@@ -573,7 +606,7 @@ func (m *Model) renderTopLeftHints() string {
 		"Filter: / enter • Enter apply • Esc clear",
 		"Sort: s speed • e ETA • o clear | Group: g host",
 		"Select: Space toggle • A all • X clear",
-		"Actions: y/r start • p cancel • D delete | Open: O • Copy: C/U",
+		"Actions: y/r start • p cancel • D delete | Open: O • Copy: C/U | Probe: P",
 		"View: t column • v compact • i inspector • T theme • H toasts • ? help • q quit",
 	}
 	return strings.Join(lines, "\n")
@@ -595,7 +628,7 @@ func (m *Model) renderNewJobModal() string {
 	if m.newStep == 1 { cur = "Enter URL or resolver URI" }
 	if m.newStep == 2 { cur = "Artifact type (optional)" }
 	if m.newStep == 3 { cur = "Auto place? y/n" }
-	if m.newStep == 4 { cur = "Destination path" }
+	if m.newStep == 4 { cur = "Destination path (Tab to complete)" }
 	sb.WriteString(m.th.label.Render(cur)+"\n")
 	// Show normalization note once URL entered
 	if m.newStep >= 2 && strings.TrimSpace(m.newNormNote) != "" {
@@ -678,7 +711,7 @@ func (m *Model) filterRows(tab int) []state.DownloadRow {
 		if tab == -1 { out = append(out, r); continue }
 		ls := strings.ToLower(r.Status)
 		switch tab {
-		case 0: if ls=="pending" || ls=="planning" { out = append(out, r) }
+		case 0: if ls=="pending" || ls=="planning" || ls=="hold" { out = append(out, r) }
 		case 1: if ls=="running" { out = append(out, r) }
 		case 2: if ls=="complete" { out = append(out, r) }
 		case 3: if ls=="error" || ls=="checksum_mismatch" || ls=="verify_failed" { out = append(out, r) }
@@ -729,9 +762,9 @@ func (m *Model) renderTable() string {
 	lastLabel := "DEST"
 	if m.columnMode == "url" { lastLabel = "URL" } else if m.columnMode == "host" { lastLabel = "HOST" }
 	if m.isCompact() {
-		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-8s  %-s", "S", "STATUS", "PROG", "PCT", "ETA", lastLabel)))
+		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-12s  %-8s  %-s", "S", "STATUS", "PROG", "PCT", "SRC", "ETA", lastLabel)))
 	} else {
-		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-10s  %-10s  %-8s  %-s", "S", "STATUS", "PROG", "PCT", "SPEED", "THR", "ETA", lastLabel)))
+		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %-s", "S", "STATUS", "PROG", "PCT", "SPEED", "THR", "SRC", "ETA", lastLabel)))
 	}
 	sb.WriteString("\n")
 	maxRows := m.h - 10
@@ -760,13 +793,15 @@ func (m *Model) renderTable() string {
 		sel := " "; if m.selectedKeys[keyFor(r)] { sel = "*" }
 		last := r.Dest
 		if m.columnMode == "url" { last = logging.SanitizeURL(r.URL) } else if m.columnMode == "host" { last = hostOf(r.URL) }
+		src := hostOf(r.URL)
+		src = truncateMiddle(src, 12)
 		lw := m.lastColumnWidth(m.isCompact())
 		last = truncateMiddle(last, lw)
 		var line string
 		if m.isCompact() {
-			line = fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-8s  %s", sel, r.Status, prog, pct, eta, last)
+			line = fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-12s  %-8s  %s", sel, r.Status, prog, pct, src, eta, last)
 		} else {
-			line = fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-10s  %-10s  %-8s  %s", sel, r.Status, prog, pct, humanize.Bytes(uint64(rate))+"/s", thr, eta, last)
+			line = fmt.Sprintf("%-1s %-8s  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %s", sel, r.Status, prog, pct, humanize.Bytes(uint64(rate))+"/s", thr, src, eta, last)
 		}
 		if i == m.selected { line = m.th.rowSelected.Render(line) }
 		sb.WriteString(line+"\n")
@@ -866,6 +901,79 @@ func (m *Model) renderSparklineKey(key string) string {
 }
 
 func (m *Model) renderSparkline(key string) string { return m.renderSparklineKey(key) }
+
+// Preflight: ensure destination's parent is writable
+func (m *Model) preflightDest(dest string) error {
+	d := strings.TrimSpace(dest)
+	if d == "" { return fmt.Errorf("empty dest") }
+	dir := filepath.Dir(d)
+	if err := os.MkdirAll(dir, 0o755); err != nil { return err }
+	return tryWrite(dir)
+}
+
+// Path completion for destination
+func (m *Model) completePath(input string) string {
+	s := strings.TrimSpace(input)
+	if s == "" { return s }
+	// Expand ~ and env for lookup
+	h, _ := os.UserHomeDir()
+	exp := os.ExpandEnv(s)
+	if strings.HasPrefix(exp, "~") {
+		exp = strings.Replace(exp, "~", h, 1)
+	}
+	dir := exp
+	prefix := ""
+	if fi, err := os.Stat(exp); err == nil && fi.IsDir() {
+		// complete inside dir
+	} else {
+		dir = filepath.Dir(exp)
+		prefix = filepath.Base(exp)
+	}
+	ents, err := os.ReadDir(dir)
+	if err != nil { return s }
+	matches := make([]string, 0, len(ents))
+	for _, e := range ents {
+		name := e.Name()
+		if strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix)) {
+			if e.IsDir() { name += "/" }
+			matches = append(matches, name)
+		}
+	}
+	if len(matches) == 0 { return s }
+	// If single match, replace basename
+	base := prefix
+	if len(matches) == 1 {
+		base = matches[0]
+	} else {
+		// longest common prefix
+		base = longestCommonPrefix(matches)
+	}
+	out := filepath.Join(dir, base)
+	// compress home to ~ for display
+	if h != "" && strings.HasPrefix(out, h+string(os.PathSeparator)) {
+		out = "~" + strings.TrimPrefix(out, h)
+	}
+	return out
+}
+
+func longestCommonPrefix(ss []string) string {
+	if len(ss) == 0 { return "" }
+	p := ss[0]
+	for _, s := range ss[1:] {
+		for !strings.HasPrefix(strings.ToLower(s), strings.ToLower(p)) {
+			if len(p) == 0 { return "" }
+			p = p[:len(p)-1]
+		}
+	}
+	return p
+}
+
+func tryWrite(dir string) error {
+	f, err := os.CreateTemp(dir, ".mf-wr-*")
+	if err != nil { return err }
+	name := f.Name(); _ = f.Close(); _ = os.Remove(name)
+	return nil
+}
 
 // Immediate (non-blocking) dest candidate based on URL only
 func (m *Model) immediateDestCandidate(urlStr string) string {
@@ -1016,13 +1124,14 @@ func (m *Model) lastColumnWidth(compact bool) int {
 	usable := m.w - leftW - inspW - boxes*2
 	if usable < 40 { usable = 40 }
 	if compact {
-		consumed := 1 + 1 + 8 + 2 + 16 + 2 + 4 + 2 + 8 + 2 // S, space, STATUS, 2sp, PROG, 2sp, PCT, 2sp, ETA, 2sp
+		// S, space, STATUS, 2sp, PROG, 2sp, PCT, 2sp, SRC, 2sp, ETA, 2sp
+		consumed := 1 + 1 + 8 + 2 + 16 + 2 + 4 + 2 + 12 + 2 + 8 + 2
 		lw := usable - consumed
 		if lw < 10 { lw = 10 }
 		return lw
 	}
-	// non-compact consumed widths
-	consumed := 1 + 1 + 8 + 2 + 16 + 2 + 4 + 2 + 10 + 2 + 10 + 2 + 8 + 2
+	// non-compact consumed widths: add SRC(12) before ETA
+	consumed := 1 + 1 + 8 + 2 + 16 + 2 + 4 + 2 + 10 + 2 + 10 + 2 + 12 + 2 + 8 + 2
 	lw := usable - consumed
 	if lw < 10 { lw = 10 }
 	return lw
@@ -1124,6 +1233,7 @@ func (m *Model) renderHelp() string {
 	sb.WriteString("Theme: T cycle presets\n")
 	sb.WriteString("Toasts: H toggle drawer\n")
 	sb.WriteString("Select: Space toggle • A select all • X clear selection\n")
+	sb.WriteString("Probe: P re-probe reachability of selected/current (does not start download)\n")
 sb.WriteString("Columns: t cycle URL/DEST/HOST • v compact view\n")
 	sb.WriteString("Actions: y/r start • p cancel • D delete • O open • C copy path • U copy URL\n")
 	sb.WriteString("Quit: q\n")
@@ -1197,21 +1307,27 @@ func hostIs(h, root string) bool {
 }
 
 func (m *Model) renderAuthStatus() string {
-	// derive statuses with precedence: rejected > set > unset
+	// derive statuses with precedence: disabled > rejected > set > unset
 	envHF := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv)
 	if envHF == "" { envHF = "HF_TOKEN" }
 	envCIV := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv)
 	if envCIV == "" { envCIV = "CIVITAI_TOKEN" }
+	hfEnabled := m.cfg.Sources.HuggingFace.Enabled
+	civEnabled := m.cfg.Sources.CivitAI.Enabled
 	var hf string
 	var civ string
-	if m.hfRejected {
+	if !hfEnabled {
+		hf = m.th.label.Render(fmt.Sprintf("HF (%s): disabled", envHF))
+	} else if m.hfRejected {
 		hf = m.th.bad.Render(fmt.Sprintf("HF (%s): rejected", envHF))
 	} else if m.hfTokenSet {
 		hf = m.th.ok.Render(fmt.Sprintf("HF (%s): set", envHF))
 	} else {
 		hf = m.th.bad.Render(fmt.Sprintf("HF (%s): unset", envHF))
 	}
-	if m.civRejected {
+	if !civEnabled {
+		civ = m.th.label.Render(fmt.Sprintf("CivitAI (%s): disabled", envCIV))
+	} else if m.civRejected {
 		civ = m.th.bad.Render(fmt.Sprintf("CivitAI (%s): rejected", envCIV))
 	} else if m.civTokenSet {
 		civ = m.th.ok.Render(fmt.Sprintf("CivitAI (%s): set", envCIV))
@@ -1327,10 +1443,42 @@ func utilSafe(name string) string {
 func (m *Model) startDownloadCmd(urlStr, dest string) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.running[urlStr+"|"+dest] = cancel
-	return m.startDownloadCmdCtx(ctx, urlStr, dest)
+	return m.downloadOrHoldCmd(ctx, urlStr, dest, true)
+}
+
+// probeSelectedCmd: probe reachability for rows without starting
+func (m *Model) probeSelectedCmd(rows []state.DownloadRow) tea.Cmd {
+	cmds := make([]tea.Cmd, 0, len(rows))
+	for _, r := range rows {
+		row := r
+		cmds = append(cmds, func() tea.Msg {
+			ctx := context.Background()
+			headers := map[string]string{}
+			if u, err := neturl.Parse(row.URL); err == nil {
+				h := strings.ToLower(u.Hostname())
+				if hostIs(h, "huggingface.co") && m.cfg.Sources.HuggingFace.Enabled {
+					env := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv); if env == "" { env = "HF_TOKEN" }
+					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer "+tok }
+				}
+				if hostIs(h, "civitai.com") && m.cfg.Sources.CivitAI.Enabled {
+					env := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv); if env == "" { env = "CIVITAI_TOKEN" }
+					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" { headers["Authorization"] = "Bearer "+tok }
+				}
+			}
+			reach, info := downloader.CheckReachable(ctx, m.cfg, row.URL, headers)
+			if !reach { _ = m.st.UpsertDownload(state.DownloadRow{URL: row.URL, Dest: row.Dest, Status: "hold"}) }
+			return probeMsg{url: row.URL, dest: row.Dest, reachable: reach, info: info}
+		})
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) startDownloadCmdCtx(ctx context.Context, urlStr, dest string) tea.Cmd {
+	return m.downloadOrHoldCmd(ctx, urlStr, dest, true)
+}
+
+// downloadOrHoldCmd optionally starts download; when start=false it only probes and updates hold status
+func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, start bool) tea.Cmd {
 	return func() tea.Msg {
 		resolved := urlStr
 		headers := map[string]string{}
@@ -1345,8 +1493,8 @@ func (m *Model) startDownloadCmdCtx(ctx context.Context, urlStr, dest string) te
 					if len(parts) >= 2 {
 						modelID := parts[1]
 						q := u.Query()
-					ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
-					civ := "civitai://model/" + modelID; if strings.TrimSpace(ver) != "" { civ += "?version=" + neturl.QueryEscape(ver) }
+						ver := q.Get("modelVersionId"); if ver == "" { ver = q.Get("version") }
+						civ := "civitai://model/" + modelID; if strings.TrimSpace(ver) != "" { civ += "?version=" + neturl.QueryEscape(ver) }
 						normToast = "normalized CivitAI page → " + civ
 						if res, err := resolver.Resolve(ctx, civ, m.cfg); err == nil { resolved = res.URL; headers = res.Headers; m.addToast(normToast) }
 					}
@@ -1384,10 +1532,28 @@ func (m *Model) startDownloadCmdCtx(ctx context.Context, urlStr, dest string) te
 				}
 			}
 		}
-		log := logging.New("error", false)
-		dl := downloader.NewAuto(m.cfg, log, m.st, nil)
-		final, _, err := dl.Download(ctx, resolved, dest, "", headers, m.cfg.General.AlwaysNoResume)
-		return dlDoneMsg{url: urlStr, dest: dest, path: final, err: err}
+		if start {
+			// Quick reachability probe; if network-unreachable, put job on hold and do not start download
+			reach, info := downloader.CheckReachable(ctx, m.cfg, resolved, headers)
+			if !reach {
+				_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold"})
+				// mirror autoplace/type mappings to resolved key so future retries work
+				origKey := urlStr+"|"+dest
+				resKey := resolved+"|"+dest
+				if m.autoPlace[origKey] { m.autoPlace[resKey] = true }
+				if t := m.placeType[origKey]; t != "" { m.placeType[resKey] = t }
+				m.addToast("probe failed: unreachable; job on hold ("+info+")")
+				return dlDoneMsg{url: resolved, dest: dest, path: "", err: fmt.Errorf("hold: unreachable")}
+			}
+			log := logging.New("error", false)
+			dl := downloader.NewAuto(m.cfg, log, m.st, nil)
+			final, _, err := dl.Download(ctx, resolved, dest, "", headers, m.cfg.General.AlwaysNoResume)
+			return dlDoneMsg{url: urlStr, dest: dest, path: final, err: err}
+		}
+		// Probe-only path
+		reach, info := downloader.CheckReachable(ctx, m.cfg, resolved, headers)
+		if !reach { _ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold"}) }
+		return probeMsg{url: resolved, dest: dest, reachable: reach, info: info}
 	}
 }
 

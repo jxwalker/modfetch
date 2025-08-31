@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"modfetch/internal/config"
 )
@@ -103,5 +104,26 @@ func ComputeRemoteSHA256(ctx context.Context, cfg *config.Config, rawURL string,
 	h := sha256.New()
 	if _, err := io.Copy(h, resp.Body); err != nil { return "", err }
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// CheckReachable performs a quick HEAD to determine network reachability to the resource.
+// It returns reachable=true when an HTTP response is received regardless of status code.
+// Only network errors (DNS failure, connect timeout, etc.) cause reachable=false.
+func CheckReachable(ctx context.Context, cfg *config.Config, rawURL string, headers map[string]string) (bool, string) {
+	cl := newHTTPClient(cfg)
+	ua := userAgent(cfg)
+	// Ensure a short timeout for UI responsiveness
+	if _, ok := ctx.Deadline(); !ok {
+		c2, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		ctx = c2
+	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, nil)
+	req.Header.Set("User-Agent", ua)
+	for k, v := range headers { req.Header.Set(k, v) }
+	resp, err := cl.Do(req)
+	if err != nil { return false, err.Error() }
+	defer resp.Body.Close()
+	return true, resp.Status
 }
 
