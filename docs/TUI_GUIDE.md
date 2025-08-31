@@ -48,7 +48,7 @@ Notes:
 Global
 - Navigation: j/k (select), / (filter), m (menu), h or ? (help)
 - Sorting: s (by speed), e (by ETA), o (clear sort)
-- View/Columns: v (compact view), t (cycle last column URL/DEST/HOST)
+- View/Columns/Theme: v (compact view), t (cycle last column URL/DEST/HOST), T (cycle theme)
 - Actions: n (new), r (refresh), d (details), g (group by status)
 
 Per-row
@@ -102,6 +102,7 @@ Add these under the ui section of your config YAML:
 - ui.show_url: boolean. If true, the table shows URL instead of DEST by default. Deprecated by ui.column_mode when set.
 - ui.column_mode: string: dest | url | host. Controls the last column.
 - ui.compact: boolean. If true, uses compact table (STATUS, PROGRESS, ETA, URL/DEST/HOST).
+- ui.theme: mapping of color overrides using 8-bit codes (e.g., border: "63").
 
 ## Recording sessions (asciinema)
 

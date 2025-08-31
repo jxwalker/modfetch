@@ -39,6 +39,8 @@ Quick start: interactive wizard
 - `validation`
   - `require_sha256`, `accept_md5_sha1_if_provided`
   - `safetensors_deep_verify_after_download`: when true, perform deep coverage/length verification of .safetensors files immediately after download; fail the command if invalid
+- `ui`
+  - `refresh_hz`, `column_mode`, `compact`, `theme`
 
 See `assets/sample-config/config.example.yml` for a full example.
 
@@ -79,5 +81,26 @@ placement:
         - app: a1111
           path_key: lora
 ```
+
+## UI options
+
+Configure visual aspects of the TUI under the `ui` section:
+
+```yaml
+ui:
+  refresh_hz: 1            # refresh rate (0-10)
+  column_mode: dest        # dest | url | host
+  compact: false           # compact table view
+  theme:                  # optional color overrides (8-bit codes)
+    border: "63"
+    title: "81"
+    tab_active: "219"
+    tab_inactive: "240"
+    head: "213"
+    ok: "42"
+    bad: "196"
+```
+
+Press `T` in the TUI to cycle built-in themes; the selection is saved to `ui_state_v2.json`.
 
 

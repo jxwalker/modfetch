@@ -13,16 +13,16 @@ import (
 // Config mirrors the YAML schema. All values should be supplied via YAML; we avoid hard-coded defaults.
 // Minimal validation occurs in Validate().
 type Config struct {
-	Version     int          `yaml:"version"`
-	General     General      `yaml:"general"`
-	Network     Network      `yaml:"network"`
-	Concurrency Concurrency  `yaml:"concurrency"`
-	Sources     Sources      `yaml:"sources"`
-	Placement   Placement    `yaml:"placement"`
-	Logging     Logging      `yaml:"logging"`
-	Metrics     Metrics      `yaml:"metrics"`
-	Validation  Validation   `yaml:"validation"`
-	UI          UIOptions    `yaml:"ui"`
+	Version     int         `yaml:"version"`
+	General     General     `yaml:"general"`
+	Network     Network     `yaml:"network"`
+	Concurrency Concurrency `yaml:"concurrency"`
+	Sources     Sources     `yaml:"sources"`
+	Placement   Placement   `yaml:"placement"`
+	Logging     Logging     `yaml:"logging"`
+	Metrics     Metrics     `yaml:"metrics"`
+	Validation  Validation  `yaml:"validation"`
+	UI          UIOptions   `yaml:"ui"`
 }
 
 type General struct {
@@ -34,8 +34,8 @@ type General struct {
 	AllowOverwrite bool   `yaml:"allow_overwrite"`
 	DryRun         bool   `yaml:"dry_run"`
 	// Downloads behavior
-	StagePartials  bool   `yaml:"stage_partials"`   // if true (default), write .part files under download_root/.parts or partials_root if set
-	AlwaysNoResume bool   `yaml:"always_no_resume"` // if true, do not resume partials unless overridden on CLI
+	StagePartials  bool `yaml:"stage_partials"`   // if true (default), write .part files under download_root/.parts or partials_root if set
+	AlwaysNoResume bool `yaml:"always_no_resume"` // if true, do not resume partials unless overridden on CLI
 }
 
 type Network struct {
@@ -46,17 +46,17 @@ type Network struct {
 }
 
 type Concurrency struct {
-	GlobalFiles     int    `yaml:"global_files"`
-	PerFileChunks   int    `yaml:"per_file_chunks"`
-	PerHostRequests int    `yaml:"per_host_requests"`
-	ChunkSizeMB     int    `yaml:"chunk_size_mb"`
-	MaxRetries      int    `yaml:"max_retries"`
+	GlobalFiles     int     `yaml:"global_files"`
+	PerFileChunks   int     `yaml:"per_file_chunks"`
+	PerHostRequests int     `yaml:"per_host_requests"`
+	ChunkSizeMB     int     `yaml:"chunk_size_mb"`
+	MaxRetries      int     `yaml:"max_retries"`
 	Backoff         Backoff `yaml:"backoff"`
 }
 
 type Backoff struct {
-	MinMS int  `yaml:"min_ms"`
-	MaxMS int  `yaml:"max_ms"`
+	MinMS  int  `yaml:"min_ms"`
+	MaxMS  int  `yaml:"max_ms"`
 	Jitter bool `yaml:"jitter"`
 }
 
@@ -91,17 +91,17 @@ type MappingTarget struct {
 }
 
 type Logging struct {
-	Level  string `yaml:"level"`  // debug|info|warn|error
-	Format string `yaml:"format"` // human|json
+	Level  string  `yaml:"level"`  // debug|info|warn|error
+	Format string  `yaml:"format"` // human|json
 	File   LogFile `yaml:"file"`
 }
 
 type LogFile struct {
-	Enabled       bool   `yaml:"enabled"`
-	Path          string `yaml:"path"`
-	MaxMegabytes  int    `yaml:"max_megabytes"`
-	MaxBackups    int    `yaml:"max_backups"`
-	MaxAgeDays    int    `yaml:"max_age_days"`
+	Enabled      bool   `yaml:"enabled"`
+	Path         string `yaml:"path"`
+	MaxMegabytes int    `yaml:"max_megabytes"`
+	MaxBackups   int    `yaml:"max_backups"`
+	MaxAgeDays   int    `yaml:"max_age_days"`
 }
 
 type Metrics struct {
@@ -119,6 +119,20 @@ type Validation struct {
 	SafetensorsDeepVerifyAfterDownload bool `yaml:"safetensors_deep_verify_after_download"`
 }
 
+type Theme struct {
+	Border      string `yaml:"border"`
+	Title       string `yaml:"title"`
+	Label       string `yaml:"label"`
+	TabActive   string `yaml:"tab_active"`
+	TabInactive string `yaml:"tab_inactive"`
+	Row         string `yaml:"row"`
+	RowSelected string `yaml:"row_selected"`
+	Head        string `yaml:"head"`
+	Footer      string `yaml:"footer"`
+	OK          string `yaml:"ok"`
+	Bad         string `yaml:"bad"`
+}
+
 type UIOptions struct {
 	// RefreshHz controls the TUI refresh frequency (ticks per second). If 0, defaults to 1.
 	// Values above 10 are clamped to 10 to avoid excessive CPU usage.
@@ -130,6 +144,8 @@ type UIOptions struct {
 	ColumnMode string `yaml:"column_mode"`
 	// Compact reduces columns in the v2 table (hides SPEED/THR) for a denser view.
 	Compact bool `yaml:"compact"`
+	// Theme overrides default colors in the TUI.
+	Theme Theme `yaml:"theme"`
 }
 
 // Load reads, parses, expands, and validates a YAML config file.
@@ -162,15 +178,27 @@ func Load(path string) (*Config, error) {
 
 func (c *Config) expandPaths() error {
 	var err error
-	if c.General.DataRoot, err = expandTilde(c.General.DataRoot); err != nil { return err }
-	if c.General.DownloadRoot, err = expandTilde(c.General.DownloadRoot); err != nil { return err }
-	if c.General.PartialsRoot, err = expandTilde(c.General.PartialsRoot); err != nil { return err }
-	if c.Logging.File.Path, err = expandTilde(c.Logging.File.Path); err != nil { return err }
-	if c.Metrics.PrometheusTextfile.Path, err = expandTilde(c.Metrics.PrometheusTextfile.Path); err != nil { return err }
+	if c.General.DataRoot, err = expandTilde(c.General.DataRoot); err != nil {
+		return err
+	}
+	if c.General.DownloadRoot, err = expandTilde(c.General.DownloadRoot); err != nil {
+		return err
+	}
+	if c.General.PartialsRoot, err = expandTilde(c.General.PartialsRoot); err != nil {
+		return err
+	}
+	if c.Logging.File.Path, err = expandTilde(c.Logging.File.Path); err != nil {
+		return err
+	}
+	if c.Metrics.PrometheusTextfile.Path, err = expandTilde(c.Metrics.PrometheusTextfile.Path); err != nil {
+		return err
+	}
 	for name, app := range c.Placement.Apps {
 		if app.Base != "" {
 			exp, err := expandTilde(app.Base)
-			if err != nil { return fmt.Errorf("placement.apps.%s.base: %w", name, err) }
+			if err != nil {
+				return fmt.Errorf("placement.apps.%s.base: %w", name, err)
+			}
 			app.Base = exp
 			c.Placement.Apps[name] = app
 		}
@@ -209,11 +237,19 @@ func (c *Config) Validate() error {
 }
 
 func expandTilde(p string) (string, error) {
-	if p == "" { return "", nil }
-	if p[0] != '~' { return p, nil }
+	if p == "" {
+		return "", nil
+	}
+	if p[0] != '~' {
+		return p, nil
+	}
 	h, err := os.UserHomeDir()
-	if err != nil { return "", err }
-	if p == "~" { return h, nil }
+	if err != nil {
+		return "", err
+	}
+	if p == "~" {
+		return h, nil
+	}
 	return filepath.Join(h, p[2:]), nil
 }
 
@@ -229,7 +265,8 @@ func stringsLower(s string) string {
 
 // Ensure paths that should exist (optional helper for future use)
 func EnsureDir(path string, perm fs.FileMode) error {
-	if path == "" { return nil }
+	if path == "" {
+		return nil
+	}
 	return os.MkdirAll(path, perm)
 }
-
