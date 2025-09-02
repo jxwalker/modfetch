@@ -131,13 +131,12 @@ This document tracks the backlog of enhancements, grouped by priority. It mirror
 
 ## Quick Wins (Can be done immediately)
 
-- Add `--dry-run` flag to download command
+- [x] Add `--dry-run` flag to download command (PR #74)
 - Add `--force` flag to skip SHA256 verification
-- Increase default chunk size to 16MB (better for modern connections)
+- [x] Increase default chunk size to 16MB (sample config) (PR #74)
 - Add download time estimation to CLI output
 - Fix TUI selected item persistence when filtering
-- Add Ctrl+C graceful shutdown handler
-- Add `--quiet` flag that actually suppresses all non-error output
+- [x] Add `--quiet` flag that actually suppresses all non-error output (suppresses human summary) (PR #74)
 - Fix progress bar showing 100% during chunk planning phase
 
 ## Technical Debt Items

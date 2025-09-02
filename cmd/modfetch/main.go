@@ -215,6 +215,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	placeFlag := fs.Bool("place", false, "place files after successful download")
 	summaryJSON := fs.Bool("summary-json", false, "print a JSON summary when a download completes")
 	batchParallel := fs.Int("batch-parallel", 0, "max parallel downloads when using --batch (default: config concurrency per_host_requests)")
+	dryRun := fs.Bool("dry-run", false, "plan only: resolve URL/URI and compute default destination; no download")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -482,6 +483,40 @@ func handleDownload(ctx context.Context, args []string) error {
 			}
 		}
 	}
+	// If dry-run, compute a default destination and print plan
+	if *dryRun {
+		candDest := strings.TrimSpace(*dest)
+		resolverURI := resolvedURL
+		if !(strings.HasPrefix(resolverURI, "hf://") || strings.HasPrefix(resolverURI, "civitai://")) {
+			resolverURI = *url
+		}
+		if candDest == "" && strings.HasPrefix(resolverURI, "civitai://") {
+			if res2, err := resolver.Resolve(ctx, resolverURI, c); err == nil && strings.TrimSpace(res2.SuggestedFilename) != "" {
+				if p, err := util.UniquePath(c.General.DownloadRoot, res2.SuggestedFilename, res2.VersionID); err == nil {
+					candDest = p
+				}
+			}
+		}
+		if candDest == "" {
+			base := util.URLPathBase(resolvedURL)
+			candDest = filepath.Join(c.General.DownloadRoot, util.SafeFileName(base))
+		}
+		if *summaryJSON {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			_ = enc.Encode(map[string]any{
+				"resolver_uri": *url,
+				"resolved_url": logging.SanitizeURL(resolvedURL),
+				"default_dest": candDest,
+			})
+			return nil
+		}
+		fmt.Printf("Plan (dry-run)\n")
+		fmt.Printf("  Resolver URI: %s\n", logging.SanitizeURL(*url))
+		fmt.Printf("  Resolved URL: %s\n", logging.SanitizeURL(resolvedURL))
+		fmt.Printf("  Default dest: %s\n", candDest)
+		return nil
+	}
 	// Prefer chunked downloader; it will fall back to single when needed
 	// Progress display (disabled for JSON or quiet)
 	var stopProg func()
@@ -548,7 +583,7 @@ func handleDownload(ctx context.Context, args []string) error {
 			"sha256":   sum,
 			"status":   "ok",
 		})
-	} else if !*jsonOut {
+	} else if !*jsonOut && !*quiet {
 		var rate string
 		if dur > 0 && size > 0 {
 			rate = humanize.Bytes(uint64(float64(size)/dur)) + "/s"
