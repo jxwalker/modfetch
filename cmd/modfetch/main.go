@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -116,6 +117,8 @@ func handleStatus(ctx context.Context, args []string) error {
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
 	jsonOut := fs.Bool("json", false, "json logs")
+	onlyErrors := fs.Bool("only-errors", false, "show only rows with error-like statuses (error, checksum_mismatch, verify_failed)")
+	summary := fs.Bool("summary", false, "print totals and error count")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -146,13 +149,29 @@ func handleStatus(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if *onlyErrors {
+		var filt []state.DownloadRow
+		for _, r := range rows {
+			ls := strings.ToLower(strings.TrimSpace(r.Status))
+			if ls == "error" || ls == "checksum_mismatch" || ls == "verify_failed" {
+				filt = append(filt, r)
+			}
+		}
+		rows = filt
+	}
 	if *jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
+		if *summary {
+			return enc.Encode(map[string]any{"total": len(rows), "errors": countErrors(rows), "rows": rows})
+		}
 		return enc.Encode(rows)
 	}
 	for _, r := range rows {
 		log.Infof("%s -> %s [%s] size=%d", logging.SanitizeURL(r.URL), r.Dest, r.Status, r.Size)
+	}
+	if *summary {
+		fmt.Printf("Summary: total=%d errors=%d\n", len(rows), countErrors(rows))
 	}
 	return nil
 }
@@ -191,6 +210,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	url := fs.String("url", "", "HTTP URL to download (direct) or resolver URI (e.g. hf://owner/repo/path)")
 	dest := fs.String("dest", "", "destination path (optional)")
 	sha := fs.String("sha256", "", "expected SHA256 (optional)")
+	shaFile := fs.String("sha256-file", "", "path to .sha256 or file containing expected hash (optional)")
 	batchPath := fs.String("batch", "", "YAML batch file with download jobs")
 	placeFlag := fs.Bool("place", false, "place files after successful download")
 	summaryJSON := fs.Bool("summary-json", false, "print a JSON summary when a download completes")
@@ -213,6 +233,11 @@ func handleDownload(ctx context.Context, args []string) error {
 	c, err := config.Load(*cfgPath)
 	if err != nil {
 		return err
+	}
+	if strings.TrimSpace(*sha) == "" && strings.TrimSpace(*shaFile) != "" {
+		v, perr := parseSHA256FromFile(*shaFile)
+		if perr != nil { return fmt.Errorf("sha256-file: %v", perr) }
+		*sha = v
 	}
 	// quiet forces log level to error unless JSON is requested
 	if *quiet && !*jsonOut {
@@ -765,4 +790,48 @@ func configOp(args []string, fn func(*config.Config, *logging.Logger) error) err
 	}
 	log := logging.New(*logLevel, *jsonOut)
 	return fn(c, log)
+}
+
+// parseSHA256FromFile reads the first 64-hex token from a file (supports .sha256 "hash  filename" format).
+func parseSHA256FromFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil { return "", err }
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := strings.TrimSpace(sc.Text())
+		if line == "" || strings.HasPrefix(line, "#") { continue }
+		// first token
+		var tok string
+		for i := 0; i < len(line); i++ {
+			if line[i] == ' ' || line[i] == '\t' { tok = line[:i]; break }
+		}
+		if tok == "" { tok = line }
+		tok = strings.TrimSpace(tok)
+		if len(tok) == 64 && isHex(tok) { return strings.ToLower(tok), nil }
+	}
+	if err := sc.Err(); err != nil { return "", err }
+	return "", fmt.Errorf("no 64-hex SHA256 found in %s", path)
+}
+
+func isHex(s string) bool {
+	if len(s) == 0 { return false }
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+			return false
+		}
+	}
+	return true
+}
+
+func countErrors(rows []state.DownloadRow) int {
+	cnt := 0
+	for _, r := range rows {
+		ls := strings.ToLower(strings.TrimSpace(r.Status))
+		if ls == "error" || ls == "checksum_mismatch" || ls == "verify_failed" {
+			cnt++
+		}
+	}
+	return cnt
 }
