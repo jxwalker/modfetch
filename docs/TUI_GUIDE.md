@@ -63,6 +63,12 @@ Common keys include:
 - `H` to toggle the toast drawer
 - `q` to quit
 
+## Themes
+
+- Presets: default, neon, drac, solar
+- Press `T` to cycle through presets. The current theme name is shown in the Stats panel (right side), alongside Sort/Group/Column view indicators.
+- The active sort is also reflected in the table header (SPEED*/ETA* or [sort: remaining]).
+
 ## Starting new downloads
 
 Default naming
