@@ -607,6 +607,7 @@ func handleClean(ctx context.Context, args []string) error {
 	dryRun := fs.Bool("dry-run", false, "show what would be removed, but do not delete")
 	destPath := fs.String("dest", "", "remove staged .part for this destination path (overrides days)")
 	includeNext := fs.Bool("include-next-to-dest", true, "also scan download_root for *.part when stage_partials=false")
+	sidecars := fs.Bool("sidecars", false, "also remove orphan .sha256 sidecar files (no matching base file)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -630,6 +631,7 @@ func handleClean(ctx context.Context, args []string) error {
 
 	removed := 0
 	skipped := 0
+	sideRemoved := 0
 	var errs []string
 
 	// Helper to maybe remove a file
@@ -668,6 +670,20 @@ func handleClean(ctx context.Context, args []string) error {
 		}
 		if fi, err := os.Stat(cand); err == nil && !fi.IsDir() {
 			removeFile(cand)
+		}
+		// optional: next-to-dest .sha256 sidecar
+		if *sidecars {
+			sc := *destPath + ".sha256"
+			if fi, err := os.Stat(sc); err == nil && !fi.IsDir() {
+				if *dryRun {
+					log.Infof("would remove sidecar: %s (age=%s)", sc, time.Since(fi.ModTime()).Round(time.Second))
+					sideRemoved++
+				} else if err := os.Remove(sc); err == nil {
+					sideRemoved++
+				} else {
+					errs = append(errs, fmt.Sprintf("%s: %v", sc, err))
+				}
+			}
 		}
 		// hashed in partials_root: find by base name prefix
 		partsDir := c.General.PartialsRoot
@@ -719,8 +735,23 @@ func handleClean(ctx context.Context, args []string) error {
 				if d.IsDir() {
 					return nil
 				}
-				if strings.HasSuffix(d.Name(), ".part") {
+				name := d.Name()
+				if strings.HasSuffix(name, ".part") {
 					removeFile(p)
+					return nil
+				}
+				if *sidecars && strings.HasSuffix(name, ".sha256") {
+					base := strings.TrimSuffix(p, ".sha256")
+					if _, err := os.Stat(base); os.IsNotExist(err) {
+						if *dryRun {
+							log.Infof("would remove orphan sidecar: %s", p)
+							sideRemoved++
+						} else if err := os.Remove(p); err == nil {
+							sideRemoved++
+						} else {
+							errs = append(errs, fmt.Sprintf("%s: %v", p, err))
+						}
+					}
 				}
 				return nil
 			})
@@ -730,9 +761,9 @@ func handleClean(ctx context.Context, args []string) error {
 	if *jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(map[string]any{"removed": removed, "skipped": skipped, "errors": errs})
+		return enc.Encode(map[string]any{"removed": removed, "skipped": skipped, "sidecars_removed": sideRemoved, "errors": errs})
 	}
-	log.Infof("removed: %d skipped: %d", removed, skipped)
+	log.Infof("removed: %d skipped: %d sidecars:%d", removed, skipped, sideRemoved)
 	if len(errs) > 0 {
 		log.Warnf("errors: %v", errs)
 	}

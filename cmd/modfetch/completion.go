@@ -43,15 +43,17 @@ _modfetch_completions()
         config)
             COMPREPLY=( $(compgen -W "validate print wizard --config --log-level --json" -- "$cur") ) ;;
         download)
-            COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --url --dest --sha256 --batch --place" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --url --dest --sha256 --sha256-file --batch --place" -- "$cur") ) ;;
         place)
             COMPREPLY=( $(compgen -W "--config --log-level --json --path --type --mode" -- "$cur") ) ;;
         verify)
-            COMPREPLY=( $(compgen -W "--config --path --all --log-level --json" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --path --all --safetensors --safetensors-deep --scan-dir --repair --quarantine-incomplete --only-errors --summary --fix-sidecar --log-level --json" -- "$cur") ) ;;
         status)
-            COMPREPLY=( $(compgen -W "--config --log-level --json" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --only-errors --summary" -- "$cur") ) ;;
         tui)
             COMPREPLY=( $(compgen -W "--config --log-level --v1 --v2" -- "$cur") ) ;;
+        clean)
+            COMPREPLY=( $(compgen -W "--config --log-level --json --days --dry-run --dest --include-next-to-dest --sidecars" -- "$cur") ) ;;
         batch)
             COMPREPLY=( $(compgen -W "import --config --log-level --json --input --output --dest-dir --sha-mode --type --place --mode --no-resolve-pages" -- "$cur") ) ;;
         completion)
@@ -76,19 +78,22 @@ _modfetch() {
       _arguments '*:options:(--config --log-level --json validate print wizard)'
       ;;
     download)
-      _arguments '*:options:(--config --log-level --json --quiet --url --dest --sha256 --batch --place)'
+      _arguments '*:options:(--config --log-level --json --quiet --url --dest --sha256 --sha256-file --batch --place)'
       ;;
     place)
       _arguments '*:options:(--config --log-level --json --path --type --mode)'
       ;;
     verify)
-      _arguments '*:options:(--config --path --all --log-level --json)'
+      _arguments '*:options:(--config --path --all --safetensors --safetensors-deep --scan-dir --repair --quarantine-incomplete --only-errors --summary --fix-sidecar --log-level --json)'
       ;;
     status)
-      _arguments '*:options:(--config --log-level --json)'
+      _arguments '*:options:(--config --log-level --json --only-errors --summary)'
       ;;
     tui)
       _arguments '*:options:(--config --log-level --v1 --v2)'
+      ;;
+    clean)
+      _arguments '*:options:(--config --log-level --json --days --dry-run --dest --include-next-to-dest --sidecars)'
       ;;
     batch)
       _arguments '*:options:(import --config --log-level --json --input --output --dest-dir --sha-mode --type --place --mode --no-resolve-pages)'
@@ -107,9 +112,17 @@ complete -c modfetch -f -n "__fish_use_subcommand" -a "download" -d "download as
 complete -c modfetch -f -n "__fish_use_subcommand" -a "place" -d "place files"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "verify" -d "verify checksums"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "status" -d "show status"
+complete -c modfetch -n "__fish_seen_subcommand_from status" -l only-errors -d "Only error rows"
+complete -c modfetch -n "__fish_seen_subcommand_from status" -l summary -d "Print totals and errors"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "tui" -d "dashboard"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "version" -d "print version"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "completion" -d "shell completions"
+complete -c modfetch -f -n "__fish_use_subcommand" -a "clean" -d "prune partials and sidecars"
+complete -c modfetch -n "__fish_seen_subcommand_from clean" -l days -d "Age threshold for .part"
+complete -c modfetch -n "__fish_seen_subcommand_from clean" -l dry-run -d "Do not delete"
+complete -c modfetch -n "__fish_seen_subcommand_from clean" -l dest -d "Target dest for staged .part"
+complete -c modfetch -n "__fish_seen_subcommand_from clean" -l include-next-to-dest -d "Scan next-to-dest .part"
+complete -c modfetch -n "__fish_seen_subcommand_from clean" -l sidecars -d "Remove orphan .sha256"
 
 # Common flags
 for cmd in config download place verify status tui batch
@@ -119,6 +132,7 @@ end
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l url -d "URL or resolver URI"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l dest -d "Destination path"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l sha256 -d "Expected SHA256"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l sha256-file -d "File containing expected hash"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l batch -d "Batch file"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l place -d "Place after download"
 # batch import flags
@@ -136,4 +150,12 @@ complete -c modfetch -n "__fish_seen_subcommand_from place" -l type -d "Artifact
 complete -c modfetch -n "__fish_seen_subcommand_from place" -l mode -d "Placement mode"
 complete -c modfetch -n "__fish_seen_subcommand_from verify" -l path -d "File to verify"
 complete -c modfetch -n "__fish_seen_subcommand_from verify" -l all -d "Verify all"
+complete -c modfetch -n "__fish_seen_subcommand_from verify" -l safetensors -d "Check .safetensors structure"
+complete -c modfetch -n "__fish_seen_subcommand_from verify" -l safetensors-deep -d "Deep-verify .safetensors"
+complete -c modfetch -n "__fish_seen_subcommand_from verify" -l scan-dir -d "Scan directory for .safetensors"
+complete -c modfetch -n "__fish_seen_subcommand_from verify" -l repair -d "Trim extra bytes on deep verify"
+complete -c modfetch -n "__fish_seen_subcommand_from verify" -l quarantine-incomplete -d "Quarantine incomplete files"
+complete -c modfetch -n "__fish_seen_subcommand_from verify" -l only-errors -d "Show only errors"
+complete -c modfetch -n "__fish_seen_subcommand_from verify" -l summary -d "Print summary"
+complete -c modfetch -n "__fish_seen_subcommand_from verify" -l fix-sidecar -d "Rewrite .sha256 sidecar on verified"
 `
