@@ -970,8 +970,11 @@ func (m *Model) renderTopRightStats() string {
 		fmt.Sprintf("Completed: %d", done),
 		fmt.Sprintf("Failed:    %d", failed),
 		fmt.Sprintf("Global Rate: %s/s", humanize.Bytes(uint64(gRate))),
-		m.renderAuthStatus(),
 	}
+	// View indicators
+	lines = append(lines, fmt.Sprintf("View: Sort:%s • Group:%s • Column:%s • Theme:%s", m.sortModeLabel(), m.groupByLabel(), m.columnMode, themeNameByIndex(m.themeIndex)))
+	// Auth status
+	lines = append(lines, m.renderAuthStatus())
 	return strings.Join(lines, "\n")
 }
 
@@ -1115,10 +1118,18 @@ func (m *Model) renderTable() string {
 	} else if m.columnMode == "host" {
 		lastLabel = "HOST"
 	}
+	speedLabel := "SPEED"
+	etaLabel := "ETA"
+	if m.sortMode == "speed" { speedLabel = speedLabel + "*" }
+	if m.sortMode == "eta" { etaLabel = etaLabel + "*" }
 	if m.isCompact() {
-		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-1s %-8s %-3s  %-16s  %-4s  %-12s  %-8s  %-s", "S", "STATUS", "RT", "PROG", "PCT", "SRC", "ETA", lastLabel)))
+		hdr := m.th.head.Render(fmt.Sprintf("%-1s %-8s %-3s  %-16s  %-4s  %-12s  %-8s  %-s", "S", "STATUS", "RT", "PROG", "PCT", "SRC", etaLabel, lastLabel))
+		if m.sortMode == "rem" { hdr = hdr + "  [sort: remaining]" }
+		sb.WriteString(hdr)
 	} else {
-		sb.WriteString(m.th.head.Render(fmt.Sprintf("%-1s %-8s %-3s  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %-s", "S", "STATUS", "RT", "PROG", "PCT", "SPEED", "THR", "SRC", "ETA", lastLabel)))
+		hdr := m.th.head.Render(fmt.Sprintf("%-1s %-8s %-3s  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %-s", "S", "STATUS", "RT", "PROG", "PCT", speedLabel, "THR", "SRC", etaLabel, lastLabel))
+		if m.sortMode == "rem" { hdr = hdr + "  [sort: remaining]" }
+		sb.WriteString(hdr)
 	}
 	sb.WriteString("\n")
 	maxRows := m.h - 10
@@ -2475,6 +2486,41 @@ func themeIndexByName(name string) int {
 	default:
 		return -1
 	}
+}
+
+func themeNameByIndex(idx int) string {
+	switch idx {
+	case 0:
+		return "default"
+	case 1:
+		return "neon"
+	case 2:
+		return "drac"
+	case 3:
+		return "solar"
+	default:
+		return "default"
+	}
+}
+
+func (m *Model) sortModeLabel() string {
+	switch strings.ToLower(strings.TrimSpace(m.sortMode)) {
+	case "speed":
+		return "speed"
+	case "eta":
+		return "eta"
+	case "rem":
+		return "remaining"
+	default:
+		return "none"
+	}
+}
+
+func (m *Model) groupByLabel() string {
+	if strings.TrimSpace(m.groupBy) == "" {
+		return "none"
+	}
+	return m.groupBy
 }
 
 func copyToClipboard(s string) error {
