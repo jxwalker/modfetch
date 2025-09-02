@@ -42,7 +42,7 @@ func TestChunked_RangeWithTransient429(t *testing.T) {
 		rng := r.Header.Get("Range")
 		if rng == "" {
 			w.WriteHeader(200)
-			w.Write(payload)
+			_, _ = w.Write(payload)
 			return
 		}
 		var start, end int
@@ -54,7 +54,7 @@ func TestChunked_RangeWithTransient429(t *testing.T) {
 		}
 		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(payload)))
 		w.WriteHeader(206)
-		w.Write(payload[start : end+1])
+		_, _ = w.Write(payload[start : end+1])
 	})
 	ts := httptest.NewServer(mux); defer ts.Close()
 	url := ts.URL + "/file.bin"
@@ -79,7 +79,7 @@ func TestChunked_RangeWithTransient429(t *testing.T) {
 	log := logging.New("info", false)
 	st, err := state.Open(cfg)
 	if err != nil { t.Fatalf("state: %v", err) }
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 
 	dl := NewAuto(cfg, log, st, nil)
 	dest, sha, err := dl.Download(context.Background(), url, "", "", nil, false)
@@ -99,7 +99,7 @@ func TestFallback_NoRangeSupport(t *testing.T) {
 			w.WriteHeader(200); return
 		}
 		if r.Method == http.MethodGet {
-			w.WriteHeader(200); w.Write(payload); return
+			w.WriteHeader(200); _, _ = w.Write(payload); return
 		}
 		w.WriteHeader(405)
 	})
@@ -122,7 +122,7 @@ func TestFallback_NoRangeSupport(t *testing.T) {
 	log := logging.New("info", false)
 	st, err := state.Open(cfg)
 	if err != nil { t.Fatalf("state: %v", err) }
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 
 	dl := NewAuto(cfg, log, st, nil)
 	dest, _, err := dl.Download(context.Background(), url, "", "", nil, false)
@@ -155,7 +155,7 @@ func TestChunked_CorruptOneChunkThenRepair(t *testing.T) {
 		if r.Method != http.MethodGet { w.WriteHeader(405); return }
 		rng := r.Header.Get("Range")
 		if rng == "" {
-			w.WriteHeader(200); w.Write(payload); return
+			w.WriteHeader(200); _, _ = w.Write(payload); return
 		}
 		var start, end int
 		if _, err := fmt.Sscanf(rng, "bytes=%d-%d", &start, &end); err != nil { w.WriteHeader(416); return }
@@ -168,7 +168,7 @@ func TestChunked_CorruptOneChunkThenRepair(t *testing.T) {
 			// corrupt bytes
 			for i := range chunk { chunk[i] ^= 0xFF }
 		}
-		w.Write(chunk)
+		_, _ = w.Write(chunk)
 	})
 	ts := httptest.NewServer(mux); defer ts.Close()
 	url := ts.URL + "/c.bin"
@@ -193,7 +193,7 @@ func TestChunked_CorruptOneChunkThenRepair(t *testing.T) {
 	log := logging.New("info", false)
 	st, err := state.Open(cfg)
 	if err != nil { t.Fatalf("state: %v", err) }
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 
 	dl := NewAuto(cfg, log, st, nil)
 	dest, sha, err := dl.Download(context.Background(), url, "", expected, nil, false)

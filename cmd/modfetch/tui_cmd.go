@@ -85,7 +85,7 @@ func handleTUI(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 	var m tea.Model
 	// Default to v2 unless legacy v1 explicitly requested
 	if *useV1 {

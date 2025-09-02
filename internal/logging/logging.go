@@ -67,7 +67,7 @@ func (l *Logger) log(level Level, msg string) {
 		_ = json.NewEncoder(l.out).Encode(payload)
 		return
 	}
-	fmt.Fprintf(l.out, "%s\t%s\n", strings.ToUpper(lvl), msg)
+	_, _ = fmt.Fprintf(l.out, "%s\t%s\n", strings.ToUpper(lvl), msg)
 }
 
 func levelString(l Level) string {

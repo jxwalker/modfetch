@@ -44,10 +44,6 @@ func NewChunked(cfg *config.Config, log *logging.Logger, st *state.DB, m interfa
 	ObserveDownloadSeconds(float64)
 	Write() error
 }) *Chunked {
-	timeout := time.Duration(cfg.Network.TimeoutSeconds) * time.Second
-	if timeout <= 0 {
-		timeout = 60 * time.Second
-	}
 	return &Chunked{cfg: cfg, log: log, st: st, client: newHTTPClient(cfg), metrics: m}
 }
 
@@ -70,7 +66,7 @@ func (e *Chunked) head(ctx context.Context, url string, headers map[string]strin
 	if err != nil {
 		return headInfo{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
 		return headInfo{}, fmt.Errorf("HEAD status: %s", resp.Status)
 	}
@@ -205,7 +201,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	if err != nil {
 		return "", "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	// If starting from an empty .part, clear any stale chunk state
 	if fi, _ := os.Stat(part); fi != nil && fi.Size() == 0 {
 		_ = e.st.DeleteChunks(url, destPath)
@@ -544,10 +540,10 @@ func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	// Require 206 for partial ranges; allow 200 only if the requested range is the entire file
 	if resp.StatusCode == http.StatusOK {
-		if !(c.Start == 0 && c.End == h.size-1) {
+	if c.Start != 0 || c.End != h.size-1 {
 			return "", fmt.Errorf("chunk %d: server ignored Range; got 200 for partial request", c.Index)
 		}
 	} else if resp.StatusCode != http.StatusPartialContent {
@@ -598,7 +594,7 @@ func (e *Chunked) probeRangeGET(ctx context.Context, url string, headers map[str
 	if err != nil {
 		return headInfo{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	// Expect 206 Partial Content
 	if resp.StatusCode != http.StatusPartialContent {
 		return headInfo{}, fmt.Errorf("probe: unexpected status %s", resp.Status)

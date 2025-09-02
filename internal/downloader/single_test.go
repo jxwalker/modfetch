@@ -30,7 +30,7 @@ func TestSingleDownloadHF(t *testing.T) {
 	log := logging.New("info", false)
 	st, err := state.Open(cfg)
 	if err != nil { t.Fatalf("state open: %v", err) }
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 
 	dl := NewSingle(cfg, log, st, nil)
 	final, sum, err := dl.Download(context.Background(), "https://raw.githubusercontent.com/github/gitignore/main/Go.gitignore", "", "", nil, false)

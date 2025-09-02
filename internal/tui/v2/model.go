@@ -125,7 +125,7 @@ type Model struct {
 	newStep          int
 	newInput         textinput.Model
 	newURL           string
-	newDest          string
+	newDest          string //nolint:unused
 	newType          string
 	newAutoPlace     bool
 	newAutoSuggested string // latest auto-suggested dest (to avoid overriding manual edits)
@@ -365,7 +365,8 @@ func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		val := strings.TrimSpace(m.newInput.Value())
-		if m.newStep == 1 {
+		switch m.newStep {
+		case 1:
 			if val == "" {
 				return m, nil
 			}
@@ -379,13 +380,13 @@ func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.newInput.Placeholder = "Artifact type (optional, e.g. sd.checkpoint)"
 			m.newStep = 2
 			return m, m.resolveMetaCmd(m.newURL)
-		} else if m.newStep == 2 {
+		case 2:
 			m.newType = val
 			m.newInput.SetValue("")
 			m.newInput.Placeholder = "Auto place after download? y/n (default n)"
 			m.newStep = 3
 			return m, nil
-		} else if m.newStep == 3 {
+		case 3:
 			v := strings.ToLower(strings.TrimSpace(val))
 			m.newAutoPlace = v == "y" || v == "yes" || v == "true" || v == "1"
 			var cand string
@@ -413,7 +414,7 @@ func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.newSuggestExt = ""
 			}
 			return m, m.suggestDestCmd(m.newURL)
-		} else if m.newStep == 4 {
+		case 4:
 			urlStr := m.newURL
 			dest := strings.TrimSpace(val)
 			if dest == "" {
@@ -800,8 +801,7 @@ func (m *Model) refresh() tea.Cmd {
 		_, isVis := vis[key]
 		status := strings.ToLower(r.Status)
 		shouldUpdate := isVis && (status == "running" || status == "planning" || status == "pending")
-		cur := m.curBytesCache[key]
-		total := r.Size
+		var cur, total int64
 		if shouldUpdate {
 			c2, t2 := m.computeCurAndTotal(r)
 			cur, total = c2, t2
@@ -830,6 +830,7 @@ func (m *Model) refresh() tea.Cmd {
 	return tea.Tick(m.tickEvery, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
+//nolint:unused,deadcode
 func (m *Model) renderStats() string {
 	var pending, active, done, failed int
 	var gRate float64
@@ -852,6 +853,7 @@ func (m *Model) renderStats() string {
 }
 
 // renderTopLeftHints shows compact key hints in a fixed-size box
+//nolint:unused,deadcode
 func (m *Model) renderTopLeftHints() string {
 	lines := []string{
 		m.th.head.Render("Hints"),
@@ -946,6 +948,7 @@ func (m *Model) renderBatchModal() string {
 }
 
 // renderTopRightStats shows aggregate metrics and recent toasts summary
+//nolint:unused,deadcode
 func (m *Model) renderTopRightStats() string {
 	var pending, active, done, failed int
 	var gRate float64
@@ -1113,9 +1116,10 @@ func (m *Model) renderTable() string {
 	rows := m.visibleRows()
 	var sb strings.Builder
 	lastLabel := "DEST"
-	if m.columnMode == "url" {
+	switch m.columnMode {
+	case "url":
 		lastLabel = "URL"
-	} else if m.columnMode == "host" {
+	case "host":
 		lastLabel = "HOST"
 	}
 	speedLabel := "SPEED"
@@ -1182,9 +1186,10 @@ func (m *Model) renderTable() string {
 			}
 		}
 		last := r.Dest
-		if m.columnMode == "url" {
+		switch m.columnMode {
+		case "url":
 			last = logging.SanitizeURL(r.URL)
-		} else if m.columnMode == "host" {
+		case "host":
 			last = hostOf(r.URL)
 		}
 		src := hostOf(r.URL)
@@ -1479,7 +1484,7 @@ func (m *Model) completePath(input string) string {
 		return s
 	}
 	// If single match, replace basename
-	base := prefix
+	var base string
 	if len(matches) == 1 {
 		base = matches[0]
 	} else {
@@ -1619,7 +1624,7 @@ func (m *Model) headFilename(u string) string {
 	if err != nil {
 		return ""
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	cd := resp.Header.Get("Content-Disposition")
 	if cd == "" {
 		return ""
@@ -1984,7 +1989,7 @@ func (m *Model) renderToastDrawer() string {
 // URL normalization helper (for modal note only)
 func (m *Model) normalizeURLForNote(raw string) (string, bool) {
 	s := strings.TrimSpace(raw)
-	if !(strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://")) {
+	if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
 		return "", false
 	}
 	u, err := neturl.Parse(s)
@@ -2169,7 +2174,7 @@ func (m *Model) importBatchFile(path string) tea.Cmd {
 		m.addToast("batch open failed: " + err.Error())
 		return nil
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
 	count := 0
 	cmds := make([]tea.Cmd, 0, 64)
@@ -2366,53 +2371,56 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 			_ = m.st.DeleteDownload(urlStr, dest)
 			_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "pending"})
 		}
-		if start && !m.cfg.Network.DisableAuthPreflight {
-			// Quick reachability/auth probe; if network-unreachable or unauthorized, put job on hold and do not start download
+		if start {
+			if !m.cfg.Network.DisableAuthPreflight {
+				// Quick reachability/auth probe; if network-unreachable or unauthorized, put job on hold and do not start download
+				reach, info := downloader.CheckReachable(ctx, m.cfg, resolved, headers)
+				if !reach {
+					_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold", LastError: info})
+					// mirror autoplace/type mappings to resolved key so future retries work
+					origKey := urlStr + "|" + dest
+					resKey := resolved + "|" + dest
+					if m.autoPlace[origKey] {
+						m.autoPlace[resKey] = true
+					}
+					if t := m.placeType[origKey]; t != "" {
+						m.placeType[resKey] = t
+					}
+					m.addToast("probe failed: unreachable; job on hold (" + info + ")")
+					return dlDoneMsg{url: resolved, dest: dest, path: "", err: fmt.Errorf("hold: unreachable")}
+				}
+				// If reachable, parse status code for early auth guidance
+				code := 0
+				if sp := strings.Fields(info); len(sp) > 0 { _, _ = fmt.Sscanf(sp[0], "%d", &code) }
+				if code == 401 || code == 403 {
+					host := hostOf(resolved)
+					msg := info
+					if strings.HasSuffix(strings.ToLower(host), "huggingface.co") {
+						env := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv)
+						if env == "" { env = "HF_TOKEN" }
+						msg = fmt.Sprintf("%s — set %s and ensure repo access/license accepted", info, env)
+					} else if strings.HasSuffix(strings.ToLower(host), "civitai.com") {
+						env := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv)
+						if env == "" { env = "CIVITAI_TOKEN" }
+						msg = fmt.Sprintf("%s — set %s and ensure content is accessible", info, env)
+					}
+					_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold", LastError: msg})
+					m.addToast("preflight auth: job on hold (" + msg + ")")
+					return dlDoneMsg{url: resolved, dest: dest, path: "", err: fmt.Errorf("hold: unauthorized")}
+				}
+			}
+			log := logging.New("error", false)
+			dl := downloader.NewAuto(m.cfg, log, m.st, nil)
+			final, _, err := dl.Download(ctx, resolved, dest, "", headers, m.cfg.General.AlwaysNoResume)
+			return dlDoneMsg{url: urlStr, dest: dest, path: final, err: err}
+		} else {
+			// Probe-only path
 			reach, info := downloader.CheckReachable(ctx, m.cfg, resolved, headers)
 			if !reach {
 				_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold", LastError: info})
-				// mirror autoplace/type mappings to resolved key so future retries work
-				origKey := urlStr + "|" + dest
-				resKey := resolved + "|" + dest
-				if m.autoPlace[origKey] {
-					m.autoPlace[resKey] = true
-				}
-				if t := m.placeType[origKey]; t != "" {
-					m.placeType[resKey] = t
-				}
-				m.addToast("probe failed: unreachable; job on hold (" + info + ")")
-				return dlDoneMsg{url: resolved, dest: dest, path: "", err: fmt.Errorf("hold: unreachable")}
 			}
-			// If reachable, parse status code for early auth guidance
-			code := 0
-			if sp := strings.Fields(info); len(sp) > 0 { fmt.Sscanf(sp[0], "%d", &code) }
-			if code == 401 || code == 403 {
-				host := hostOf(resolved)
-				msg := info
-				if strings.HasSuffix(strings.ToLower(host), "huggingface.co") {
-					env := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv)
-					if env == "" { env = "HF_TOKEN" }
-					msg = fmt.Sprintf("%s — set %s and ensure repo access/license accepted", info, env)
-				} else if strings.HasSuffix(strings.ToLower(host), "civitai.com") {
-					env := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv)
-					if env == "" { env = "CIVITAI_TOKEN" }
-					msg = fmt.Sprintf("%s — set %s and ensure content is accessible", info, env)
-				}
-				_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold", LastError: msg})
-				m.addToast("preflight auth: job on hold (" + msg + ")")
-				return dlDoneMsg{url: resolved, dest: dest, path: "", err: fmt.Errorf("hold: unauthorized")}
-			}
+			return probeMsg{url: resolved, dest: dest, reachable: reach, info: info}
 		}
-		log := logging.New("error", false)
-		dl := downloader.NewAuto(m.cfg, log, m.st, nil)
-			final, _, err := dl.Download(ctx, resolved, dest, "", headers, m.cfg.General.AlwaysNoResume)
-			return dlDoneMsg{url: urlStr, dest: dest, path: final, err: err}
-		// Probe-only path
-		reach, info := downloader.CheckReachable(ctx, m.cfg, resolved, headers)
-		if !reach {
-			_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold", LastError: info})
-		}
-		return probeMsg{url: resolved, dest: dest, reachable: reach, info: info}
 	}
 }
 
@@ -2422,7 +2430,7 @@ func openInFileManager(p string, reveal bool) error {
 		return fmt.Errorf("empty path")
 	}
 	// Determine directory to open even if file doesn't exist yet
-	dir := p
+	var dir string
 	if fi, err := os.Stat(p); err == nil {
 		if fi.IsDir() {
 			dir = p
@@ -2488,6 +2496,7 @@ func themeIndexByName(name string) int {
 	}
 }
 
+//nolint:unused,deadcode
 func themeNameByIndex(idx int) string {
 	switch idx {
 	case 0:
@@ -2503,6 +2512,7 @@ func themeNameByIndex(idx int) string {
 	}
 }
 
+//nolint:unused,deadcode
 func (m *Model) sortModeLabel() string {
 	switch strings.ToLower(strings.TrimSpace(m.sortMode)) {
 	case "speed":
@@ -2516,6 +2526,7 @@ func (m *Model) sortModeLabel() string {
 	}
 }
 
+//nolint:unused,deadcode
 func (m *Model) groupByLabel() string {
 	if strings.TrimSpace(m.groupBy) == "" {
 		return "none"

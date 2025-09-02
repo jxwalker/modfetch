@@ -160,29 +160,20 @@ func civitaiFetchModel(ctx context.Context, client *http.Client, headers map[str
 	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := client.Do(req)
 	if err != nil { return civitModel{}, err }
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode/100 != 2 { return civitModel{}, fmt.Errorf("civitai models: %s", resp.Status) }
 	var m civitModel
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil { return civitModel{}, err }
 	return m, nil
 }
 
-func civitaiFetchModelFiles(ctx context.Context, client *http.Client, headers map[string]string, modelID string) ([]civitFile, error) {
-	m, err := civitaiFetchModel(ctx, client, headers, modelID)
-	if err != nil { return nil, err }
-	if len(m.ModelVersions) == 0 { return nil, errors.New("civitai: no modelVersions") }
-	// choose latest by ID
-	v := m.ModelVersions[0]
-	for _, vv := range m.ModelVersions { if vv.ID > v.ID { v = vv } }
-	return v.Files, nil
-}
 
 func civitaiFetchVersion(ctx context.Context, client *http.Client, headers map[string]string, versionID string) (civitVersion, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/api/v1/model-versions/%s", civitaiBaseURL, url.PathEscape(versionID)), nil)
 	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := client.Do(req)
 	if err != nil { return civitVersion{}, err }
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode/100 != 2 { return civitVersion{}, fmt.Errorf("civitai version: %s", resp.Status) }
 	var v civitVersion
 	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil { return civitVersion{}, err }

@@ -34,7 +34,7 @@ func ProbeURL(ctx context.Context, cfg *config.Config, rawURL string, headers ma
 	resp, err := cl.Do(req)
 	var meta ProbeMeta
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		if resp.Request != nil && resp.Request.URL != nil { meta.FinalURL = resp.Request.URL.String() }
 		meta.ETag = resp.Header.Get("ETag")
 		meta.LastModified = resp.Header.Get("Last-Modified")
@@ -52,7 +52,7 @@ func ProbeURL(ctx context.Context, cfg *config.Config, rawURL string, headers ma
 		req2.Header.Set("Range", "bytes=0-0")
 		resp2, err2 := cl.Do(req2)
 		if err2 == nil {
-			defer resp2.Body.Close()
+			defer func() { _ = resp2.Body.Close() }()
 			if resp2.StatusCode == http.StatusPartialContent {
 				var start, end, total int64
 				if _, err := fmt.Sscanf(resp2.Header.Get("Content-Range"), "bytes %d-%d/%d", &start, &end, &total); err == nil && total > 0 {
@@ -77,7 +77,7 @@ func ProbeURL(ctx context.Context, cfg *config.Config, rawURL string, headers ma
 			req3.Header.Set("User-Agent", ua)
 			for k, v := range headers { req3.Header.Set(k, v) }
 			if resp3, err3 := cl.Do(req3); err3 == nil {
-				defer resp3.Body.Close()
+				defer func() { _ = resp3.Body.Close() }()
 				if clh := resp3.Header.Get("Content-Length"); clh != "" && meta.Size <= 0 { _, _ = fmt.Sscan(clh, &meta.Size) }
 				if cd := resp3.Header.Get("Content-Disposition"); cd != "" && meta.Filename == "" {
 					if fn := parseDispositionFilename(cd); fn != "" { meta.Filename = fn }
@@ -99,7 +99,7 @@ func ComputeRemoteSHA256(ctx context.Context, cfg *config.Config, rawURL string,
 	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := cl.Do(req)
 	if err != nil { return "", err }
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode/100 != 2 { return "", fmt.Errorf("GET status: %s", resp.Status) }
 	h := sha256.New()
 	if _, err := io.Copy(h, resp.Body); err != nil { return "", err }
@@ -123,7 +123,7 @@ func CheckReachable(ctx context.Context, cfg *config.Config, rawURL string, head
 	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := cl.Do(req)
 	if err != nil { return false, err.Error() }
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return true, resp.Status
 }
 

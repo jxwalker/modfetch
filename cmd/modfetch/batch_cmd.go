@@ -73,7 +73,7 @@ func handleBatchImport(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	s := bufio.NewScanner(f)
 	s.Buffer(make([]byte, 0, 1024), 1024*1024)
 

@@ -35,7 +35,7 @@ func TestChunkedDownload1MB(t *testing.T) {
 	log := logging.New("info", false)
 	st, err := state.Open(cfg)
 	if err != nil { t.Fatalf("state: %v", err) }
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 
 	dl := NewChunked(cfg, log, st, nil)
 	url := "https://proof.ovh.net/files/1Mb.dat"
@@ -69,7 +69,7 @@ func TestChunkedCorruptAndRepair(t *testing.T) {
 	log := logging.New("info", false)
 	st, err := state.Open(cfg)
 	if err != nil { t.Fatalf("state: %v", err) }
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 
 	dl := NewChunked(cfg, log, st, nil)
 	url := "https://proof.ovh.net/files/1Mb.dat"
@@ -79,7 +79,7 @@ func TestChunkedCorruptAndRepair(t *testing.T) {
 	// Corrupt middle 64 bytes
 	f, err := os.OpenFile(dest, os.O_RDWR, 0)
 	if err != nil { t.Fatalf("open dest: %v", err) }
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if _, err := f.Seek(512*1024, 0); err != nil { t.Fatalf("seek: %v", err) }
 	bad := make([]byte, 64)
 	for i := range bad { bad[i] = 0xFF }
@@ -89,9 +89,10 @@ func TestChunkedCorruptAndRepair(t *testing.T) {
 	if err != nil { t.Fatalf("download2(repair): %v", err) }
 	if fixedSHA != goodSHA {
 		// confirm by local recompute
-		f2, _ := os.Open(dest)
-		h := sha256.New()
-		io.Copy(h, f2)
+	f2, _ := os.Open(dest)
+	defer func() { _ = f2.Close() }()
+	h := sha256.New()
+	_, _ = io.Copy(h, f2)
 		s := hex.EncodeToString(h.Sum(nil))
 		if s != goodSHA {
 			t.Fatalf("sha not repaired: got=%s want=%s", s, goodSHA)

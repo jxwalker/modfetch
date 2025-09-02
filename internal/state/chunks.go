@@ -45,7 +45,7 @@ func (db *DB) UpsertChunk(c ChunkRow) error {
 func (db *DB) ListChunks(url, dest string) ([]ChunkRow, error) {
 	rows, err := db.SQL.Query(`SELECT url,dest,idx,start,end,size,sha256,status FROM chunks WHERE url=? AND dest=? ORDER BY idx`, url, dest)
 	if err != nil { return nil, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []ChunkRow
 	for rows.Next() {
 		var c ChunkRow

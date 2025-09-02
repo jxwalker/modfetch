@@ -31,7 +31,7 @@ func TestCivitAIResolveAndDownload_WithAuthAndChunks(t *testing.T) {
 	mux.HandleFunc("/api/v1/models/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
-		fmt.Fprintf(w, `{"modelVersions":[{"id":1,"files":[{"id":1,"name":"file.bin","type":"Model","primary":true,"downloadUrl":"%s/secure.bin"}]}]}` , base)
+	_, _ = fmt.Fprintf(w, `{"modelVersions":[{"id":1,"files":[{"id":1,"name":"file.bin","type":"Model","primary":true,"downloadUrl":"%s/secure.bin"}]}]}` , base)
 	})
 	mux.HandleFunc("/secure.bin", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodHead {
@@ -52,7 +52,7 @@ func TestCivitAIResolveAndDownload_WithAuthAndChunks(t *testing.T) {
 			rng := r.Header.Get("Range")
 			if rng == "" {
 				w.WriteHeader(200)
-				w.Write(payload)
+	_, _ = w.Write(payload)
 				return
 			}
 			var start, end int
@@ -62,7 +62,7 @@ func TestCivitAIResolveAndDownload_WithAuthAndChunks(t *testing.T) {
 			if start < 0 || end >= len(payload) || end < start { w.WriteHeader(416); return }
 			w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(payload)))
 			w.WriteHeader(206)
-			w.Write(payload[start:end+1])
+	_, _ = w.Write(payload[start:end+1])
 			return
 		}
 		w.WriteHeader(405)
@@ -90,7 +90,7 @@ func TestCivitAIResolveAndDownload_WithAuthAndChunks(t *testing.T) {
 	log := logging.New("info", false)
 	st, err := state.Open(cfg)
 	if err != nil { t.Fatalf("state: %v", err) }
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 
 	// Resolve and download
 	uri := "civitai://model/xyz"

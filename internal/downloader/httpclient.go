@@ -77,7 +77,7 @@ func resolveRedirectURL(baseClient *http.Client, rawURL string, headers map[stri
 	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := cl.Do(req)
 	if err != nil { return "", false }
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 300 || resp.StatusCode >= 400 { return "", false }
 	loc := resp.Header.Get("Location")
 	if loc == "" { return "", false }
