@@ -144,7 +144,7 @@ func handleStatus(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 	rows, err := st.ListDownloads()
 	if err != nil {
 		return err
@@ -249,7 +249,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 	startWall := time.Now()
 	// Metrics manager (Prometheus textfile), if enabled
 	m := metrics.New(c)
@@ -460,9 +460,6 @@ func handleDownload(ctx context.Context, args []string) error {
 		// Attach auth headers for direct URLs when possible
 		if u, err := neturl.Parse(resolvedURL); err == nil {
 			h := strings.ToLower(u.Hostname())
-			if headers == nil {
-				headers = map[string]string{}
-			}
 			if hostIs(h, "civitai.com") && c.Sources.CivitAI.Enabled {
 				if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
 					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
@@ -487,7 +484,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	if *dryRun {
 		candDest := strings.TrimSpace(*dest)
 		resolverURI := resolvedURL
-		if !(strings.HasPrefix(resolverURI, "hf://") || strings.HasPrefix(resolverURI, "civitai://")) {
+		if !strings.HasPrefix(resolverURI, "hf://") && !strings.HasPrefix(resolverURI, "civitai://") {
 			resolverURI = *url
 		}
 		if candDest == "" && strings.HasPrefix(resolverURI, "civitai://") {
@@ -524,7 +521,7 @@ func handleDownload(ctx context.Context, args []string) error {
 		candDest := strings.TrimSpace(*dest)
 		// Determine the resolver URI (could have been normalized above)
 		resolverURI := resolvedURL
-		if !(strings.HasPrefix(resolverURI, "hf://") || strings.HasPrefix(resolverURI, "civitai://")) {
+		if !strings.HasPrefix(resolverURI, "hf://") && !strings.HasPrefix(resolverURI, "civitai://") {
 			resolverURI = *url
 		}
 		if candDest == "" && strings.HasPrefix(resolverURI, "civitai://") {
@@ -547,7 +544,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	destArg := strings.TrimSpace(*dest)
 	// Determine the resolver URI to use for civitai SuggestedFilename
 	resolverURI2 := resolvedURL
-	if !(strings.HasPrefix(resolverURI2, "hf://") || strings.HasPrefix(resolverURI2, "civitai://")) {
+	if !strings.HasPrefix(resolverURI2, "hf://") && !strings.HasPrefix(resolverURI2, "civitai://") {
 		resolverURI2 = *url
 	}
 	if destArg == "" && strings.HasPrefix(resolverURI2, "civitai://") {
@@ -862,7 +859,7 @@ func configOp(args []string, fn func(*config.Config, *logging.Logger) error) err
 func parseSHA256FromFile(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil { return "", err }
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -884,7 +881,7 @@ func isHex(s string) bool {
 	if len(s) == 0 { return false }
 	for i := 0; i < len(s); i++ {
 		c := s[i]
-		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
 			return false
 		}
 	}

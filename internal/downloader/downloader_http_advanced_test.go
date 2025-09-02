@@ -41,7 +41,7 @@ func TestChunked_RangeTransient5xxThenSuccess(t *testing.T) {
 		if r.Method != http.MethodGet { w.WriteHeader(405); return }
 		rng := r.Header.Get("Range")
 		if rng == "" {
-			w.WriteHeader(200); w.Write(payload); return
+	w.WriteHeader(200); _, _ = w.Write(payload); return
 		}
 		var start, end int
 		if _, err := fmt.Sscanf(rng, "bytes=%d-%d", &start, &end); err != nil { w.WriteHeader(416); return }
@@ -53,7 +53,7 @@ func TestChunked_RangeTransient5xxThenSuccess(t *testing.T) {
 		if count == 1 { w.WriteHeader(503); return }
 		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(payload)))
 		w.WriteHeader(206)
-		w.Write(payload[start : end+1])
+	_, _ = w.Write(payload[start:end+1])
 	})
 	ts := httptest.NewServer(mux); defer ts.Close()
 	url := ts.URL + "/fivexx.bin"
@@ -80,7 +80,7 @@ func TestChunked_RangeTransient5xxThenSuccess(t *testing.T) {
 	log := logging.New("info", false)
 	st, err := state.Open(cfg)
 	if err != nil { t.Fatalf("state: %v", err) }
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 
 	dl := NewAuto(cfg, log, st, nil)
 	dest, sha, err := dl.Download(context.Background(), url, "", "", nil, false)
@@ -119,7 +119,7 @@ func TestChunked_SlowBodyCompletes(t *testing.T) {
 		for off := start; off <= end; off += chunk {
 			to := off + chunk
 			if to > end+1 { to = end+1 }
-			w.Write(payload[off:to])
+	_, _ = w.Write(payload[off:to])
 			time.Sleep(5 * time.Millisecond)
 		}
 	})
@@ -144,7 +144,7 @@ func TestChunked_SlowBodyCompletes(t *testing.T) {
 	log := logging.New("info", false)
 	st, err := state.Open(cfg)
 	if err != nil { t.Fatalf("state: %v", err) }
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 
 	dl := NewAuto(cfg, log, st, nil)
 	dest, sha, err := dl.Download(context.Background(), url, "", "", nil, false)
@@ -183,10 +183,10 @@ func TestChunked_TruncatedBodyThenRetrySuccess(t *testing.T) {
 		// First attempt for the first requested range: write only half
 		if atomic.CompareAndSwapInt32(&once, 0, 1) {
 			half := start + (end-start+1)/2
-			w.Write(payload[start:half])
+			_, _ = w.Write(payload[start:half])
 			return
 		}
-		w.Write(payload[start : end+1])
+		_, _ = w.Write(payload[start : end+1])
 	})
 	ts := httptest.NewServer(mux); defer ts.Close()
 	url := ts.URL + "/trunc.bin"
@@ -213,7 +213,7 @@ func TestChunked_TruncatedBodyThenRetrySuccess(t *testing.T) {
 	log := logging.New("info", false)
 	st, err := state.Open(cfg)
 	if err != nil { t.Fatalf("state: %v", err) }
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 
 	dl := NewAuto(cfg, log, st, nil)
 	dest, sha, err := dl.Download(context.Background(), url, "", expected, nil, false)

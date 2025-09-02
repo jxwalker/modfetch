@@ -106,32 +106,32 @@ func (m *Manager) Write() error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
+	defer func() { _ = os.Remove(f.Name()) }()
 	// Prometheus textfile format
 	// Use modfetch_ prefix
-	fmt.Fprintf(f, "# HELP modfetch_bytes_downloaded_total Total bytes downloaded.\n")
-	fmt.Fprintf(f, "# TYPE modfetch_bytes_downloaded_total counter\n")
-	fmt.Fprintf(f, "modfetch_bytes_downloaded_total %d\n", m.bytesTotal.Load())
+	_, _ = fmt.Fprintf(f, "# HELP modfetch_bytes_downloaded_total Total bytes downloaded.\n")
+	_, _ = fmt.Fprintf(f, "# TYPE modfetch_bytes_downloaded_total counter\n")
+	_, _ = fmt.Fprintf(f, "modfetch_bytes_downloaded_total %d\n", m.bytesTotal.Load())
 
-	fmt.Fprintf(f, "# HELP modfetch_retries_total Total chunk retries.\n")
-	fmt.Fprintf(f, "# TYPE modfetch_retries_total counter\n")
-	fmt.Fprintf(f, "modfetch_retries_total %d\n", m.retriesTotal.Load())
+	_, _ = fmt.Fprintf(f, "# HELP modfetch_retries_total Total chunk retries.\n")
+	_, _ = fmt.Fprintf(f, "# TYPE modfetch_retries_total counter\n")
+	_, _ = fmt.Fprintf(f, "modfetch_retries_total %d\n", m.retriesTotal.Load())
 
-	fmt.Fprintf(f, "# HELP modfetch_downloads_success_total Total successful downloads.\n")
-	fmt.Fprintf(f, "# TYPE modfetch_downloads_success_total counter\n")
-	fmt.Fprintf(f, "modfetch_downloads_success_total %d\n", m.downloadsSuccess.Load())
+	_, _ = fmt.Fprintf(f, "# HELP modfetch_downloads_success_total Total successful downloads.\n")
+	_, _ = fmt.Fprintf(f, "# TYPE modfetch_downloads_success_total counter\n")
+	_, _ = fmt.Fprintf(f, "modfetch_downloads_success_total %d\n", m.downloadsSuccess.Load())
 
-	fmt.Fprintf(f, "# HELP modfetch_last_download_seconds Duration of the last completed download in seconds.\n")
-	fmt.Fprintf(f, "# TYPE modfetch_last_download_seconds gauge\n")
-	fmt.Fprintf(f, "modfetch_last_download_seconds %.6f\n", m.lastDownloadSec.Load())
+	_, _ = fmt.Fprintf(f, "# HELP modfetch_last_download_seconds Duration of the last completed download in seconds.\n")
+	_, _ = fmt.Fprintf(f, "# TYPE modfetch_last_download_seconds gauge\n")
+	_, _ = fmt.Fprintf(f, "modfetch_last_download_seconds %.6f\n", m.lastDownloadSec.Load())
 
-	fmt.Fprintf(f, "# HELP modfetch_active_downloads Number of active downloads.\n")
-	fmt.Fprintf(f, "# TYPE modfetch_active_downloads gauge\n")
-	fmt.Fprintf(f, "modfetch_active_downloads %d\n", m.activeDownloads.Load())
+	_, _ = fmt.Fprintf(f, "# HELP modfetch_active_downloads Number of active downloads.\n")
+	_, _ = fmt.Fprintf(f, "# TYPE modfetch_active_downloads gauge\n")
+	_, _ = fmt.Fprintf(f, "modfetch_active_downloads %d\n", m.activeDownloads.Load())
 
-	fmt.Fprintf(f, "# HELP modfetch_metrics_timestamp_seconds UNIX timestamp when this file was written.\n")
-	fmt.Fprintf(f, "# TYPE modfetch_metrics_timestamp_seconds gauge\n")
-	fmt.Fprintf(f, "modfetch_metrics_timestamp_seconds %d\n", time.Now().Unix())
+	_, _ = fmt.Fprintf(f, "# HELP modfetch_metrics_timestamp_seconds UNIX timestamp when this file was written.\n")
+	_, _ = fmt.Fprintf(f, "# TYPE modfetch_metrics_timestamp_seconds gauge\n")
+	_, _ = fmt.Fprintf(f, "modfetch_metrics_timestamp_seconds %d\n", time.Now().Unix())
 
 	if err := f.Close(); err != nil {
 		return err

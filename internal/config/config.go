@@ -50,6 +50,8 @@ type Network struct {
 	RetryOnRateLimit          bool   `yaml:"retry_on_rate_limit"`
 	// Cap the wait derived from Retry-After to avoid excessively long sleeps (seconds)
 	RateLimitMaxDelaySeconds  int    `yaml:"rate_limit_max_delay_seconds"`
+	// When true, skip the early HEAD/0-0 auth preflight in CLI and TUI v2
+	DisableAuthPreflight      bool   `yaml:"disable_auth_preflight"`
 }
 
 type ResolverConf struct {
@@ -77,8 +79,17 @@ type Sources struct {
 }
 
 type SourceWithToken struct {
-	Enabled  bool   `yaml:"enabled"`
-	TokenEnv string `yaml:"token_env"`
+	Enabled  bool          `yaml:"enabled"`
+	TokenEnv string        `yaml:"token_env"`
+	Naming   SourceNaming  `yaml:"naming"`
+}
+
+type SourceNaming struct {
+	// Pattern controls default filename generation when dest is omitted.
+	// Supported tokens vary by resolver:
+	// - CivitAI: {model_name}, {version_name}, {version_id}, {file_name}, {file_type}
+	// - HuggingFace: {owner}, {repo}, {path}, {rev}, {file_name}
+	Pattern string `yaml:"pattern"`
 }
 
 type ClassifierConfig struct {

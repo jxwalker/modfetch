@@ -180,7 +180,14 @@ case "enter":
 		case "n":
 			m.newDL = true; m.newURL.SetValue(""); m.newDest.SetValue(""); m.newFocus = 0; m.newURL.Focus(); m.newDest.Blur(); m.newMsg = ""; return m, nil
 		case "f":
-			if m.filterPreset == "all" { m.filterPreset = "active" } else if m.filterPreset == "active" { m.filterPreset = "errors" } else { m.filterPreset = "all" }
+			switch m.filterPreset {
+			case "all":
+				m.filterPreset = "active"
+			case "active":
+				m.filterPreset = "errors"
+			default:
+				m.filterPreset = "all"
+			}
 			return m, refreshCmd()
 		case "g":
 			m.groupOn = !m.groupOn; return m, refreshCmd()
@@ -563,11 +570,11 @@ func (m *model) helpView() string {
 func (m *model) menuView() string {
 	var b strings.Builder
 	b.WriteString(lipgloss.NewStyle().Bold(true).Render("Menu") + "\n")
-	for i, it := range m.menuItems {
-		line := fmt.Sprintf("  %s", it)
-		if i == m.menuIndex { line = "> "+it } else { line = "  "+it }
-		b.WriteString(line+"\n")
-	}
+		for i, it := range m.menuItems {
+			var line string
+			if i == m.menuIndex { line = "> "+it } else { line = "  "+it }
+			b.WriteString(line+"\n")
+		}
 	b.WriteString(m.styles.label.Render("Use ↑/↓ to select, Enter to apply, m or Esc to close")+"\n")
 	return b.String()
 }
@@ -576,7 +583,15 @@ func (m *model) applyMenuChoice(i int) tea.Cmd {
 	if i < 0 || i >= len(m.menuItems) { return nil }
 	switch m.menuItems[i] {
 	case "New download": m.newDL = true; m.newURL.SetValue(""); m.newDest.SetValue(""); m.newFocus=0; m.newURL.Focus(); m.newMsg=""
-	case "Filter preset": if m.filterPreset=="all" { m.filterPreset="active" } else if m.filterPreset=="active" { m.filterPreset="errors" } else { m.filterPreset="all" }
+	case "Filter preset":
+		switch m.filterPreset {
+		case "all":
+			m.filterPreset = "active"
+		case "active":
+			m.filterPreset = "errors"
+		default:
+			m.filterPreset = "all"
+		}
 	case "Group by status": m.groupOn = !m.groupOn
 	case "Toggle columns": m.showURLFirst = !m.showURLFirst
 	case "Sort by speed": m.sortMode = "speed"
@@ -738,7 +753,7 @@ func openInFileManager(p string, reveal bool) error {
 	p = strings.TrimSpace(p)
 	if p == "" { return fmt.Errorf("empty path") }
 	// Determine directory to open even if file doesn't exist yet
-	dir := p
+	var dir string
 	if fi, err := os.Stat(p); err == nil {
 		if fi.IsDir() { dir = p } else { dir = filepath.Dir(p) }
 	} else {

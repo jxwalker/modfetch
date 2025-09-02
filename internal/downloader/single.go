@@ -32,7 +32,7 @@ func probeRangeGET(client *http.Client, url string, headers map[string]string, u
 	if err != nil {
 		return 0, false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusPartialContent {
 		return 0, false
 	}
@@ -63,10 +63,6 @@ func NewSingle(cfg *config.Config, log *logging.Logger, st *state.DB, m interfac
 	ObserveDownloadSeconds(float64)
 	Write() error
 }) *Single {
-	timeout := time.Duration(cfg.Network.TimeoutSeconds) * time.Second
-	if timeout <= 0 {
-		timeout = 60 * time.Second
-	}
 	return &Single{
 		cfg:     cfg,
 		log:     log,
@@ -151,7 +147,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		}
 		return "", "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if _, err := f.Seek(start, io.SeekStart); err != nil {
 		return "", "", err
 	}
@@ -174,7 +170,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		}
 		return "", "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Mark as running once we have a good response
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusPartialContent {
@@ -254,7 +250,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		}
 		msg := friendlyHTTPStatusMessage(s.cfg, host, resp.StatusCode, resp.Status, hadAuth)
 		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error", LastError: msg})
-		return "", "", fmt.Errorf(msg)
+		return "", "", errors.New(msg)
 	}
 
 	// Do not preallocate for single-stream so that .part size reflects real progress
@@ -269,7 +265,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		}
 		ioMsg := friendlyIOError(err).Error()
 		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error", LastError: ioMsg})
-		return "", "", fmt.Errorf(ioMsg)
+		return "", "", errors.New(ioMsg)
 	}
 	// Ensure file data is durable before rename
 	_ = f.Sync()
@@ -337,7 +333,7 @@ func (s *Single) head(ctx context.Context, url string, headers map[string]string
 	}
 	resp, err := s.client.Do(req)
 	if err == nil {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		etag = strings.Trim(resp.Header.Get("ETag"), "\"")
 		lastMod = resp.Header.Get("Last-Modified")
 		if cl := resp.Header.Get("Content-Length"); cl != "" {

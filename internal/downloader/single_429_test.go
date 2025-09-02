@@ -45,7 +45,7 @@ func TestSingle_429RateLimited_HoldWithRetryAfter(t *testing.T) {
 	log := logging.New("info", false)
 	st, err := state.Open(cfg)
 	if err != nil { t.Fatalf("state: %v", err) }
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 
 	dl := NewSingle(cfg, log, st, nil)
 	_, _, err = dl.Download(context.Background(), url, "", "", nil, false)

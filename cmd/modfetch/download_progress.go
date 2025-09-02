@@ -24,8 +24,6 @@ func startProgressLoop(ctx context.Context, st *state.DB, cfg *config.Config, ur
 	var stopped atomic.Bool
 
 	go func() {
-		var lastCompleted int64
-		var lastT = time.Now()
 		// smoothing window of recent samples (bytes, time)
 		type sample struct{ t time.Time; b int64 }
 		var win []sample
@@ -68,12 +66,6 @@ func startProgressLoop(ctx context.Context, st *state.DB, cfg *config.Config, ur
 				}
 				// Rate (smoothed) and ETA
 				now := time.Now()
-				dt := now.Sub(lastT).Seconds()
-				if dt <= 0 { dt = 1 }
-				delta := completed - lastCompleted
-				if delta < 0 { delta = 0 }
-				lastCompleted = completed
-				lastT = now
 				win = append(win, sample{t: now, b: completed})
 				// drop samples older than 5s
 				cut := now.Add(-5 * time.Second)

@@ -18,6 +18,11 @@ type Resolved struct {
 	FileName          string
 	FileType          string // Source-specific type (e.g., CivitAI file.type: Model|VAE|TextualInversion)
 	SuggestedFilename string
+	// Optional metadata for Hugging Face
+	RepoOwner string
+	RepoName  string
+	RepoPath  string
+	Rev       string
 }
 
 type Resolver interface {

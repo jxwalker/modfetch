@@ -23,6 +23,11 @@ Usage
   modfetch completion fish > ~/.config/fish/completions/modfetch.fish
   ```
 
+Download flags covered
+- --url, --dest, --sha256, --place, --batch
+- --quiet, --json, --log-level
+- --summary-json, --no-resume, --batch-parallel, --naming-pattern, --no-auth-preflight, --dry-run
+
 Notes
 - The provided completions are lightweight and cover subcommands and common flags. They do not shell out to the binary for dynamic completions.
 - Regenerate completions after new releases to pick up added flags/commands.

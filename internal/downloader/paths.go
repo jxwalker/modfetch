@@ -53,10 +53,10 @@ func renameOrCopy(src, dst string) error {
 func copyFile(src, dst string) error {
 	sf, err := os.Open(src)
 	if err != nil { return err }
-	defer sf.Close()
+	defer func() { _ = sf.Close() }()
 	df, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil { return err }
-	defer df.Close()
+	defer func() { _ = df.Close() }()
 	if _, err := io.Copy(df, sf); err != nil { return err }
 	if err := df.Sync(); err != nil { return err }
 	return nil

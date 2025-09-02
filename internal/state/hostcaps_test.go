@@ -9,7 +9,7 @@ func TestHostCapsUpsertGet(t *testing.T) {
 	cfg := &config.Config{Version:1, General: config.General{DataRoot: t.TempDir(), DownloadRoot: t.TempDir()}}
 	dbptr, err := Open(cfg)
 	if err != nil { t.Fatalf("open: %v", err) }
-	defer dbptr.SQL.Close()
+	defer func() { _ = dbptr.SQL.Close() }()
 
 	host := "example.com"
 	if err := dbptr.UpsertHostCaps(host, true, false); err != nil { t.Fatalf("upsert: %v", err) }

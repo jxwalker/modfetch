@@ -106,14 +106,27 @@ func (c *CivitAI) Resolve(ctx context.Context, uri string, cfg *config.Config) (
 	download := files[pick].DownloadURL
 	if download == "" { return nil, errors.New("selected civitai file has empty downloadUrl") }
 	fileName := files[pick].Name
-	// Suggested filename:
-	// Use "ModelName - FileName" only when FileName does not already start with ModelName
-	// (case-insensitive and ignoring separators). Otherwise, keep FileName as-is to avoid duplication.
-	suggested := fileName
-	if strings.TrimSpace(modelName) != "" {
-		base := strings.TrimSuffix(fileName, filepath.Ext(fileName))
-		if !hasPrefixName(base, modelName) {
-			suggested = modelName + " - " + fileName
+	// Suggested filename via pattern if configured, otherwise fallback to ModelName - FileName heuristic
+	suggested := ""
+	if cfg != nil && strings.TrimSpace(cfg.Sources.CivitAI.Naming.Pattern) != "" {
+		pat := strings.TrimSpace(cfg.Sources.CivitAI.Naming.Pattern)
+		tokens := map[string]string{
+			"model_name":   modelName,
+			"version_name": verName,
+			"version_id":   verID,
+			"file_name":    fileName,
+			"file_type":    files[pick].Type,
+		}
+		suggested = util.ExpandPattern(pat, tokens)
+	}
+	if strings.TrimSpace(suggested) == "" {
+		// Fallback heuristic
+		suggested = fileName
+		if strings.TrimSpace(modelName) != "" {
+			base := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+			if !hasPrefixName(base, modelName) {
+				suggested = modelName + " - " + fileName
+			}
 		}
 	}
 	suggested = util.SafeFileName(suggested)
@@ -147,29 +160,20 @@ func civitaiFetchModel(ctx context.Context, client *http.Client, headers map[str
 	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := client.Do(req)
 	if err != nil { return civitModel{}, err }
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode/100 != 2 { return civitModel{}, fmt.Errorf("civitai models: %s", resp.Status) }
 	var m civitModel
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil { return civitModel{}, err }
 	return m, nil
 }
 
-func civitaiFetchModelFiles(ctx context.Context, client *http.Client, headers map[string]string, modelID string) ([]civitFile, error) {
-	m, err := civitaiFetchModel(ctx, client, headers, modelID)
-	if err != nil { return nil, err }
-	if len(m.ModelVersions) == 0 { return nil, errors.New("civitai: no modelVersions") }
-	// choose latest by ID
-	v := m.ModelVersions[0]
-	for _, vv := range m.ModelVersions { if vv.ID > v.ID { v = vv } }
-	return v.Files, nil
-}
 
 func civitaiFetchVersion(ctx context.Context, client *http.Client, headers map[string]string, versionID string) (civitVersion, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/api/v1/model-versions/%s", civitaiBaseURL, url.PathEscape(versionID)), nil)
 	for k, v := range headers { req.Header.Set(k, v) }
 	resp, err := client.Do(req)
 	if err != nil { return civitVersion{}, err }
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode/100 != 2 { return civitVersion{}, fmt.Errorf("civitai version: %s", resp.Status) }
 	var v civitVersion
 	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil { return civitVersion{}, err }

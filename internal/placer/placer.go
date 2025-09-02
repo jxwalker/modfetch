@@ -120,7 +120,7 @@ func sha256File(p string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return "", err
@@ -141,12 +141,12 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer sf.Close()
+	defer func() { _ = sf.Close() }()
 	df, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return err
 	}
-	defer df.Close()
+	defer func() { _ = df.Close() }()
 	_, err = io.Copy(df, sf)
 	return err
 }

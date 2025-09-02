@@ -44,7 +44,7 @@ func handleHostCaps(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 	if *clearAll {
 		if err := st.ClearHostCaps(); err != nil {
 			return err

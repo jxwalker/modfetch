@@ -51,6 +51,10 @@ jobs:
 See also: `assets/sample-config/jobs.example.yml` in this repository.
 
 ## Running a batch
+
+- You can override default resolver naming per import with `--naming-pattern "..."` (applies when dest is omitted).
+  - CivitAI tokens: `{model_name}`, `{version_name}`, `{version_id}`, `{file_name}`, `{file_type}`
+  - Hugging Face tokens: `{owner}`, `{repo}`, `{path}`, `{rev}`, `{file_name}`
 - Place your jobs file at a convenient path, e.g., `/opt/modfetch/jobs/uat.yml` or within your repo.
 - Execute with your YAML config and optionally enable global placement for all jobs via --place:
 

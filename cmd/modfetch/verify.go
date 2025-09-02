@@ -68,16 +68,16 @@ func handleVerify(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		defer st.SQL.Close()
+		defer func() { _ = st.SQL.Close() }()
 	}
 
 	report := map[string]any{}
 	verifyOne := func(row state.DownloadRow) error {
-		f, err := os.Open(row.Dest)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
+	f, err := os.Open(row.Dest)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
 		h := sha256.New()
 		if _, err := io.Copy(h, f); err != nil {
 			return err
@@ -247,7 +247,7 @@ func sanityCheckSafeTensors(p string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var hdrLen uint64
 	if err := binary.Read(f, binary.LittleEndian, &hdrLen); err != nil {
 		return false, err
@@ -277,7 +277,7 @@ func deepVerifySafeTensors(p string) (bool, int64, error) {
 	if err != nil {
 		return false, 0, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	fi, err := f.Stat()
 	if err != nil {
 		return false, 0, err
@@ -422,7 +422,7 @@ func scanSafetensorsDir(root string, deep bool, repair bool, quarantineIncomplet
 			return nil
 		}
 		low := strings.ToLower(p)
-		if !(strings.HasSuffix(low, ".safetensors") || strings.HasSuffix(low, ".sft")) {
+		if !strings.HasSuffix(low, ".safetensors") && !strings.HasSuffix(low, ".sft") {
 			return nil
 		}
 		ok, need, derr := deepVerifySafeTensors(p)

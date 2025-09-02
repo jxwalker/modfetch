@@ -26,6 +26,7 @@ Quick start: interactive wizard
   - `timeout_seconds`, `max_redirects`, `tls_verify`, `user_agent`
   - `retry_on_rate_limit`: true|false. When true, honor HTTP 429 Retry-After to determine wait between retries.
   - `rate_limit_max_delay_seconds`: integer (>=0). Caps the wait derived from Retry-After (default cap 600s if unset).
+  - `disable_auth_preflight`: true|false. When true, skip the early HEAD/0–0 preflight in CLI and TUI v2 (default is enabled; disable to avoid HEAD on some hosts).
 - `concurrency`
   - `global_files`, `per_file_chunks`, `per_host_requests`, `chunk_size_mb`, `max_retries`, `backoff`
 - `sources`

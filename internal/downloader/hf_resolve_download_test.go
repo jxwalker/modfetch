@@ -30,7 +30,7 @@ func TestHFResolveAndDownload(t *testing.T) {
 	log := logging.New("info", false)
 	st, err := state.Open(cfg)
 	if err != nil { t.Fatalf("state: %v", err) }
-	defer st.SQL.Close()
+	defer func() { _ = st.SQL.Close() }()
 
 	uri := "hf://gpt2/README.md?rev=main"
 	res, err := resolver.Resolve(context.Background(), uri, cfg)

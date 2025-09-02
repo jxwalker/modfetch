@@ -71,7 +71,7 @@ func detectMagic(p string) string {
 	if err != nil {
 		return ""
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	buf := make([]byte, 8)
 	n, err := io.ReadFull(f, buf)
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {

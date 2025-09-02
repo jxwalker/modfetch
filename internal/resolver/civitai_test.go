@@ -18,7 +18,7 @@ func TestCivitAIResolve_ModelLatestAndHeaders(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if strings.HasPrefix(r.URL.Path, "/api/v1/models/") {
 			w.WriteHeader(200)
-			w.Write([]byte(`{
+			_, _ = w.Write([]byte(`{
 			  "modelVersions": [
 			    {"id":11, "files":[{"id":1,"name":"v11.notprimary.safetensors","type":"Model","primary":false,"downloadUrl":"` + tsURLPlaceholder + `/dl/a.bin"}]},
 			    {"id":12, "files":[
@@ -31,7 +31,7 @@ func TestCivitAIResolve_ModelLatestAndHeaders(t *testing.T) {
 		}
 		if strings.HasPrefix(r.URL.Path, "/api/v1/model-versions/") {
 			w.WriteHeader(200)
-			w.Write([]byte(`{"id":12, "files":[{"id":9, "name":"mv.primary.safetensors","type":"Model","primary":true,"downloadUrl":"` + tsURLPlaceholder + `/dl/mv.bin"}]}`))
+			_, _ = w.Write([]byte(`{"id":12, "files":[{"id":9, "name":"mv.primary.safetensors","type":"Model","primary":true,"downloadUrl":"` + tsURLPlaceholder + `/dl/mv.bin"}]}`))
 			return
 		}
 		w.WriteHeader(404)

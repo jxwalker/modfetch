@@ -51,7 +51,7 @@ func (db *DB) ListHostCaps() ([]HostCaps, error) {
 	if db == nil || db.SQL == nil { return nil, errors.New("nil db") }
 	rows, err := db.SQL.Query(`SELECT host, head_ok, accept_ranges FROM host_caps ORDER BY host`)
 	if err != nil { return nil, err }
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []HostCaps
 	for rows.Next() {
 		var host string

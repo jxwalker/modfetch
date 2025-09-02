@@ -15,12 +15,12 @@ import (
 // If the file is shorter than required, returns an error.
 // Returns true when the file was modified (truncated).
 func adjustSafetensors(path string, log *logging.Logger) (bool, error) {
-	if !(strings.HasSuffix(strings.ToLower(path), ".safetensors") || strings.HasSuffix(strings.ToLower(path), ".sft")) {
+	if !strings.HasSuffix(strings.ToLower(path), ".safetensors") && !strings.HasSuffix(strings.ToLower(path), ".sft") {
 		return false, nil
 	}
 	f, err := os.OpenFile(path, os.O_RDWR, 0)
 	if err != nil { return false, err }
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	fi, err := f.Stat()
 	if err != nil { return false, err }
 	if fi.Size() < 8 { return false, fmt.Errorf("safetensors: file too small: %d", fi.Size()) }
@@ -63,12 +63,12 @@ func adjustSafetensors(path string, log *logging.Logger) (bool, error) {
 // deepVerifySafetensors validates header coverage, data offsets and exact file length match.
 // Returns ok, declared_total_size, error.
 func deepVerifySafetensors(path string) (bool, int64, error) {
-	if !(strings.HasSuffix(strings.ToLower(path), ".safetensors") || strings.HasSuffix(strings.ToLower(path), ".sft")) {
+	if !strings.HasSuffix(strings.ToLower(path), ".safetensors") && !strings.HasSuffix(strings.ToLower(path), ".sft") {
 		return true, 0, nil
 	}
 	f, err := os.Open(path)
 	if err != nil { return false, 0, err }
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	fi, err := f.Stat(); if err != nil { return false, 0, err }
 	if fi.Size() < 8 { return false, 0, fmt.Errorf("file too small: %d", fi.Size()) }
 	var hdrLen uint64
