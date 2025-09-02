@@ -45,6 +45,7 @@ Common errors and remedies
   - Single: "sha256 mismatch: expected=... actual=..."
   - Chunked: "sha256 mismatch after repair: expected=... got=..."
   - Action: verify the expected SHA256; if provided by upstream, re-run. For chunked downloads, modfetch re-hashes chunks and re-fetches corrupted ranges automatically before failing.
+  - Post-check: running `modfetch verify --all` will update DB rows to verified or checksum_mismatch and record the actual SHA for auditing.
 
 - Permission denied creating directories
   - Message: errors when creating directories under general.download_root or placement targets

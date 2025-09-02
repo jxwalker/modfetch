@@ -78,18 +78,19 @@ modfetch download --config ~/.config/modfetch/config.yml \
 
 Verify a specific previously downloaded item recorded in the DB:
 
-modfetch verify --config ~/.config/modfetch/config.yml --path /path/to/file
+modfetch verify --config ~/.config/modfetch/config.yml \
+  --path /path/to/file
 
 Verify all completed downloads in state:
 
-modfetch verify --config ~/.config/modfetch/config.yml --all
+modfetch verify --config ~/.config/modfetch/config.yml \
+  --all
 
-Tips:
-- Add `--only-errors` to show only problematic files
+Behavior:
+- Updates DB statuses for each item. On success: verified. On mismatch: checksum_mismatch (and ActualSHA256 is recorded).
+- Use `--only-errors` to show only problematic files
 - Add `--summary` to print total scanned, error count, and a list of error paths
 - Combine with `--safetensors-deep` to include deep validation in state-backed checks
-
-### Deep-verify safetensors and directory scan/repair
 
 Scan a directory of .safetensors/.sft for structural correctness and exact coverage:
 

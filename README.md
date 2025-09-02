@@ -127,7 +127,11 @@ Usage (see docs/USER_GUIDE.md for details)
   
   modfetch verify --config /path/to/config.yml --all
   
+  - The verify command updates DB statuses: verified for matches; checksum_mismatch when the actual SHA differs from ExpectedSHA256.
   - Use `--only-errors` to show only problematic files; add `--summary` for totals and paths
+  - You can target a single file recorded in state:
+    
+        modfetch verify --config /path/to/config.yml --path /path/to/file
 - Deep‑verify safetensors and scan/repair a directory:
   
   modfetch verify --config /path/to/config.yml --scan-dir /path/to/models --safetensors-deep
