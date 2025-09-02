@@ -197,6 +197,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	batchParallel := fs.Int("batch-parallel", 0, "max parallel downloads when using --batch (default: config concurrency per_host_requests)")
 	namingPattern := fs.String("naming-pattern", "", "override default resolver naming pattern (applies when dest is omitted)")
 	noAuthPreflight := fs.Bool("no-auth-preflight", false, "disable early auth preflight (HEAD/0-0 probe)")
+	dryRun := fs.Bool("dry-run", false, "plan only: resolve URL/URI, compute default destination and remote metadata; no download")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -485,6 +486,80 @@ func handleDownload(ctx context.Context, args []string) error {
 			}
 		}
 	}
+	// If dry-run, print plan and exit without downloading
+	if *dryRun {
+		plan := map[string]any{
+			"resolver_uri": *url,
+			"resolved_url": logging.SanitizeURL(resolvedURL),
+			"host":        func() string { if u, err := neturl.Parse(resolvedURL); err == nil && u!=nil { return strings.ToLower(u.Hostname()) }; return "" }(),
+		}
+		// Compute default destination (without creating files). Try resolver-based naming when applicable.
+		candDest := strings.TrimSpace(*dest)
+		resolverURI := resolvedURL
+		if !(strings.HasPrefix(resolverURI, "hf://") || strings.HasPrefix(resolverURI, "civitai://")) {
+			resolverURI = *url
+		}
+		if candDest == "" && (strings.HasPrefix(resolverURI, "hf://") || strings.HasPrefix(resolverURI, "civitai://")) {
+			if res2, err := resolver.Resolve(ctx, resolverURI, c); err == nil {
+				name := res2.SuggestedFilename
+				if strings.TrimSpace(*namingPattern) != "" {
+					toks := map[string]string{
+						"model_name":   res2.ModelName,
+						"version_name": res2.VersionName,
+						"version_id":   res2.VersionID,
+						"file_name":    res2.FileName,
+						"file_type":    res2.FileType,
+						"owner":        res2.RepoOwner,
+						"repo":         res2.RepoName,
+						"path":         res2.RepoPath,
+						"rev":          res2.Rev,
+					}
+					name2 := util.ExpandPattern(*namingPattern, toks)
+					if strings.TrimSpace(name2) != "" { name = util.SafeFileName(name2) }
+				}
+				// We propose a unique destination but do not create files in dry-run
+				if p, err := util.UniquePath(c.General.DownloadRoot, name, res2.VersionID); err == nil {
+					candDest = p
+				}
+			}
+		}
+		if candDest == "" {
+			base := util.URLPathBase(resolvedURL)
+			candDest = filepath.Join(c.General.DownloadRoot, util.SafeFileName(base))
+		}
+		plan["default_dest"] = candDest
+		// Preflight metadata via ProbeURL unless disabled by config
+		if !c.Network.DisableAuthPreflight {
+			meta, _ := downloader.ProbeURL(ctx, c, resolvedURL, headers)
+			if strings.TrimSpace(meta.Filename) != "" { plan["remote_filename"] = meta.Filename }
+			if meta.Size > 0 { plan["size"] = meta.Size }
+			plan["accept_range"] = meta.AcceptRange
+			if strings.TrimSpace(meta.FinalURL) != "" { plan["final_url"] = logging.SanitizeURL(meta.FinalURL) }
+		} else {
+			plan["preflight_skipped"] = true
+		}
+		// Auth attached (boolean only; token not printed)
+		plan["auth_attached"] = func() bool { _, ok := headers["Authorization"]; return ok }()
+		if *summaryJSON {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			_ = enc.Encode(plan)
+		} else {
+			fmt.Printf("Plan (dry-run)\n")
+			fmt.Printf("  Resolver URI: %s\n", logging.SanitizeURL(*url))
+			fmt.Printf("  Resolved URL: %s\n", logging.SanitizeURL(resolvedURL))
+			if v, ok := plan["final_url"]; ok { fmt.Printf("  Final URL:    %s\n", v) }
+			fmt.Printf("  Host:         %s\n", plan["host"]) 
+			fmt.Printf("  Default dest: %s\n", plan["default_dest"]) 
+			if v, ok := plan["remote_filename"]; ok { fmt.Printf("  Remote file:  %s\n", v) }
+			if v, ok := plan["size"]; ok { fmt.Printf("  Size:         %v\n", v) }
+			if v, ok := plan["accept_range"]; ok { fmt.Printf("  Accept-Range: %v\n", v) }
+			if v, ok := plan["preflight_skipped"]; ok { fmt.Printf("  Preflight:    skipped (%v)\n", v) }
+			fmt.Printf("  Auth header attached: %v\n", plan["auth_attached"]) 
+		}
+		return nil
+	}
+
 	// Prefer chunked downloader; it will fall back to single when needed
 	// Progress display (disabled for JSON or quiet)
 	var stopProg func()

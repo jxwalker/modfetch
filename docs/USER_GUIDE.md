@@ -58,6 +58,22 @@ modfetch download --config ~/.config/modfetch/config.yml \
 modfetch download --config ~/.config/modfetch/config.yml \
   --url 'civitai://model/123456?file=myfile.safetensors'
 
+#### Dry-run planning
+
+Use `--dry-run` to plan without downloading. It resolves resolver URIs and direct URLs, computes the default destination (respecting resolver SuggestedFilename and `--naming-pattern`), and probes remote metadata (filename, size, Accept-Range). It performs no database or file writes.
+
+- Secrets are never printed; only a boolean `auth_attached` is shown.
+- If `network.disable_auth_preflight: true` is set in the config, the probe is skipped.
+
+Examples:
+
+modfetch download --config ~/.config/modfetch/config.yml \
+  --url 'https://example.com/file.bin' --dry-run
+
+# JSON plan (machine-readable)
+modfetch download --config ~/.config/modfetch/config.yml \
+  --url 'hf://org/repo/path?rev=main' --dry-run --summary-json
+
 ### Verify (state-based)
 
 Verify a specific previously downloaded item recorded in the DB:

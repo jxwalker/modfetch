@@ -89,6 +89,12 @@ Usage (see docs/USER_GUIDE.md for details)
     - TUI and importer try a HEAD request for CivitAI direct endpoints to use server‑provided filenames when available
   - Quiet mode: add `--quiet`
   - Auth preflight: runs a lightweight HEAD/0–0 probe and fails early on 401/403 with guidance; disable with `--no-auth-preflight` or set `network.disable_auth_preflight: true` in config
+  - Dry-run planning: use `--dry-run` to resolve URLs/URIs, compute the default destination, and probe remote metadata (filename, size, Accept-Range) without downloading or writing. Combine with `--summary-json` for machine-readable output.
+    - Secrets are never printed (only a boolean `auth_attached`).
+    - If `network.disable_auth_preflight: true` is set, the metadata probe is skipped.
+    
+        modfetch download --config /path/to/config.yml --url 'hf://org/repo/path?rev=main' --dry-run
+        modfetch download --config /path/to/config.yml --url 'https://example.com/file.bin' --dry-run --summary-json
   - On completion, a summary is printed (dest, size, SHA256, duration, average speed)
   - Cancel with Ctrl+C (SIGINT/SIGTERM); partial files are cleaned up
 - Place artifacts into apps:
