@@ -115,6 +115,53 @@ func TestDownloadDryRun_DirectURL_NoAuth(t *testing.T) {
 	}
 }
 
+func TestDownloadDryRun_HFResolver_NamingPatternApplied(t *testing.T) {
+	tmp := t.TempDir()
+	dlRoot := filepath.Join(tmp, "dl")
+	_ = os.MkdirAll(dlRoot, 0o755)
+	cfgPath := filepath.Join(tmp, "cfg.yml")
+	cfg := "version: 1\n" +
+		"general:\n  data_root: \"" + strings.ReplaceAll(tmp, "\\", "\\\\") + "\"\n  download_root: \"" + strings.ReplaceAll(dlRoot, "\\", "\\\\") + "\"\n" +
+		"network:\n  disable_auth_preflight: true\n" +
+		"sources:\n  huggingface:\n    enabled: true\n    token_env: \"HF_TOKEN\"\n"
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil { t.Fatal(err) }
+	old := os.Getenv("HF_TOKEN")
+	_ = os.Setenv("HF_TOKEN", "TOK")
+	t.Cleanup(func(){ _ = os.Setenv("HF_TOKEN", old) })
+
+	oldStdout := os.Stdout
+	outFile, err := os.CreateTemp(tmp, "stdout-*.json")
+	if err != nil { t.Fatal(err) }
+	defer outFile.Close()
+	os.Stdout = outFile
+	t.Cleanup(func(){ os.Stdout = oldStdout })
+
+	uri := "hf://owner/repo/path/to/My File.bin?rev=main"
+	args := []string{"--config", cfgPath, "--url", uri, "--dry-run", "--summary-json", "--naming-pattern", "{owner}-{repo}-{rev}-{file_name}"}
+	if err := handleDownload(context.Background(), args); err != nil {
+		t.Fatalf("handleDownload --dry-run failed: %v", err)
+	}
+	_ = outFile.Sync()
+	b, err := os.ReadFile(outFile.Name())
+	if err != nil { t.Fatal(err) }
+	var plan map[string]any
+	if err := json.Unmarshal(b, &plan); err != nil {
+		t.Fatalf("decode json: %v (raw=%s)", err, string(b))
+	}
+	if got := getBool(plan, "auth_attached"); !got {
+		t.Fatalf("expected auth_attached true for HF with token env set")
+	}
+	def := getString(plan, "default_dest")
+	if !strings.HasPrefix(def, dlRoot) {
+		t.Fatalf("default_dest not under download_root: %s", def)
+	}
+	expBase := "owner-repo-main-My-File.bin"
+	gotBase := filepath.Base(def)
+	if strings.ToLower(gotBase) != strings.ToLower(expBase) {
+		t.Fatalf("expected base %s got %s", expBase, gotBase)
+	}
+}
+
 // helpers
 func getString(m map[string]any, k string) string {
 	if v, ok := m[k]; ok {
