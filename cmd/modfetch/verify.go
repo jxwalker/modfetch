@@ -37,6 +37,7 @@ func handleVerify(ctx context.Context, args []string) error {
 	quarantineIncomplete := fs.Bool("quarantine-incomplete", false, "When used with --scan-dir: move incomplete files to .incomplete")
 	onlyErrors := fs.Bool("only-errors", false, "Show only files with errors or non-verified status")
 	summary := fs.Bool("summary", false, "Print a summary of total scanned and error count")
+	fixSidecar := fs.Bool("fix-sidecar", false, "Rewrite .sha256 sidecar with actual hash for verified files")
 	logLevel := fs.String("log-level", "info", "log level")
 	jsonOut := fs.Bool("json", false, "json logs")
 	if err := fs.Parse(args); err != nil {
@@ -88,6 +89,16 @@ func handleVerify(ctx context.Context, args []string) error {
 		}
 		_ = st.UpsertDownload(state.DownloadRow{URL: row.URL, Dest: row.Dest, ExpectedSHA256: row.ExpectedSHA256, ActualSHA256: actual, ETag: row.ETag, LastModified: row.LastModified, Size: row.Size, Status: status})
 		res := map[string]any{"path": row.Dest, "sha256": actual, "status": status, "size": row.Size}
+		// Optionally rewrite sidecar if verified
+		if *fixSidecar && status == "verified" {
+			sc := row.Dest + ".sha256"
+			content := actual + "  " + filepath.Base(row.Dest) + "\n"
+			if err := os.WriteFile(sc, []byte(content), 0o644); err == nil {
+				res["sidecar_written"] = true
+			} else {
+				res["sidecar_error"] = err.Error()
+			}
+		}
 		if *checkST && (filepath.Ext(row.Dest) == ".safetensors" || filepath.Ext(row.Dest) == ".sft") {
 			ok, herr := sanityCheckSafeTensors(row.Dest)
 			res["safetensors_ok"] = ok
