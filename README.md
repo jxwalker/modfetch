@@ -88,7 +88,7 @@ Usage (see docs/USER_GUIDE.md for details)
     - direct URLs use the basename of the final resolved URL; query/fragment is stripped and the name is sanitized
     - TUI and importer try a HEAD request for CivitAI direct endpoints to use server‑provided filenames when available
   - Quiet mode: add `--quiet`
-  - Auth preflight: runs a lightweight HEAD/0–0 probe and fails early on 401/403 with guidance; disable with `--no-auth-preflight`
+  - Auth preflight: runs a lightweight HEAD/0–0 probe and fails early on 401/403 with guidance; disable with `--no-auth-preflight` or set `network.disable_auth_preflight: true` in config
   - On completion, a summary is printed (dest, size, SHA256, duration, average speed)
   - Cancel with Ctrl+C (SIGINT/SIGTERM); partial files are cleaned up
 - Place artifacts into apps:

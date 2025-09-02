@@ -19,6 +19,8 @@ network:
   # retry_on_rate_limit: false
   # Cap waits derived from Retry-After (seconds)
   # rate_limit_max_delay_seconds: 600
+  # Skip early auth preflight (HEAD/0–0) in CLI and TUI v2 (default: false)
+  # disable_auth_preflight: true
 
 concurrency:
   global_files: 4

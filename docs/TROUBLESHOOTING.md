@@ -54,9 +54,15 @@ Common errors and remedies
   - Message: 401/403 from huggingface.co or civitai.com
   - Action: export HF_TOKEN or CIVITAI_TOKEN in your shell if accessing gated resources. Do not store secrets in YAML.
 
-Diagnostic tips
+- Preflight HEAD blocked by host
+  - Message: immediate 401/403 or 405/501 on preflight, or "probe failed" in TUI before starting
+  - Action: some endpoints block HEAD requests. You can disable the early auth preflight if needed:
+    - CLI: add --no-auth-preflight
+    - Config: set network.disable_auth_preflight: true
+
+- Diagnostic tips
 - Increase verbosity: use --log-level debug
 - Use --json to get structured logs for programmatic analysis
 - Use --summary-json to emit a single JSON summary per completed download
-- TUI: press h or ? for help; s to sort by speed, e to sort by ETA
+- TUI: press h or ? for help; s to sort by speed, e to sort by ETA, R to sort by remaining
 

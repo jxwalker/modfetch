@@ -460,7 +460,7 @@ func handleDownload(ctx context.Context, args []string) error {
 		}
 	}
 	// Early auth preflight (optional)
-	if !*noAuthPreflight {
+	if !*noAuthPreflight && !c.Network.DisableAuthPreflight {
 		reach, status := downloader.CheckReachable(ctx, c, resolvedURL, headers)
 		if reach {
 			code := 0
