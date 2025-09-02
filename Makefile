@@ -5,7 +5,9 @@ DIST := dist
 VERSION ?= $(shell git describe --tags --always --dirty=-dev 2>/dev/null || echo dev)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: all build test clean dist linux darwin macos-universal checksums
+GOLANGCI_BIN ?= $(shell command -v golangci-lint 2>/dev/null)
+
+.PHONY: all build test clean dist linux darwin macos-universal checksums fmt fmt-check vet lint ci
 
 all: build
 
@@ -14,6 +16,28 @@ build:
 
 test:
 	go test ./...
+
+fmt:
+	go fmt ./...
+
+# Fails if files need formatting
+fmt-check:
+	@echo "Checking gofmt..."
+	@diff -u <(echo -n) <(gofmt -s -l .) || (echo "Run 'make fmt' to format the above files" && exit 1)
+
+vet:
+	go vet ./...
+
+lint:
+ifdef GOLANGCI_BIN
+	$(GOLANGCI_BIN) run ./...
+else
+	@echo "golangci-lint not found. Install: https://golangci-lint.run/ or run via CI."
+	@exit 1
+endif
+
+ci: vet fmt-check test
+	@echo "CI checks completed"
 
 clean:
 	rm -rf bin $(DIST)

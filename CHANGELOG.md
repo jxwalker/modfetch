@@ -5,8 +5,12 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 Improvements
-- Downloader: explicit 429 handling. On rate limiting (HTTP 429), jobs are placed on hold with a clear, host-aware message persisted to `last_error`, including `Retry-After` when provided. Optional auto-retry honors server-provided `Retry-After` when `network.retry_on_rate_limit` is enabled.
-- TUI v2: clearer surfacing of rate limits. Rows placed on hold due to 429 render as `hold(rl)` in the table; the auth ribbon shows `rate-limited` for the affected host; a toast indicates the host and suggests trying later.
+- CLI: `status` supports `--only-errors` (filter) and `--summary` (totals and error count). JSON includes `{ total, errors, rows }` when `--summary` is set.
+- CLI: `download` accepts `--sha256-file` to read an expected hash from a file (supports .sha256 "hash  filename" format).
+- CLI: `clean` adds `--sidecars` to remove orphan `.sha256` sidecar files; JSON output now includes `sidecars_removed`.
+- CLI: `verify` adds `--fix-sidecar` to rewrite `<dest>.sha256` for verified files.
+- TUI v2: clearer surfacing of rate limits and view indicators; table header marks active sort (SPEED*/ETA*/[sort: remaining]); Stats panel shows Sort/Group/Column/Theme.
+- CI: introduce `golangci-lint` job and cache setup; keep vet/test/build/govulncheck; Makefile adds `fmt`, `fmt-check`, `vet`, `lint`, and `ci` targets.
 
 New
 - Config: `network.retry_on_rate_limit` (bool) to respect `Retry-After` on HTTP 429; `network.rate_limit_max_delay_seconds` to cap the wait (defaults to 600s if unset; 0 uses the default).

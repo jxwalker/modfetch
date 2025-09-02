@@ -87,6 +87,8 @@ Usage (see docs/USER_GUIDE.md for details)
     - civitai:// uses `<ModelName> - <OriginalFileName>` if `--dest` is omitted (with collision‑safe suffixes)
     - direct URLs use the basename of the final resolved URL; query/fragment is stripped and the name is sanitized
     - TUI and importer try a HEAD request for CivitAI direct endpoints to use server‑provided filenames when available
+  - SHA256 expectation:
+    - pass `--sha256 <HEX>` or `--sha256-file <path>` (.sha256 "hash  filename" format supported)
   - Quiet mode: add `--quiet`
   - On completion, a summary is printed (dest, size, SHA256, duration, average speed)
   - Cancel with Ctrl+C (SIGINT/SIGTERM); partial files are cleaned up
@@ -105,13 +107,14 @@ Usage (see docs/USER_GUIDE.md for details)
   
   - Keys:
     - Navigation: j/k (select), / (filter), m (menu), h/? (help)
-    - Sorting: s (sort by speed), e (sort by ETA), o (clear sort)
+    - Sorting: s (sort by speed), e (sort by ETA), R (remaining bytes), o (clear sort)
     - Actions: n (new), r (refresh), d (details), g (group by status), t (toggle columns)
     - Per‑row actions: p (pause/cancel), y (retry), C (copy path), U (copy URL), O (open/reveal), D (delete staged), X (clear row)
   - Behavior:
     - Resolving spinner appears immediately, then planning → running
     - Live speed and ETA for both chunked and single‑stream fallback downloads
     - Accepts CivitAI model page URLs (https://civitai.com/models/ID) and rewrites them internally to the correct direct download URL
+    - The header marks the active sort (SPEED*/ETA*/[sort: remaining]); the Stats panel shows View indicators (Sort/Group/Column/Theme)
   - See the full TUI guide: docs/TUI_GUIDE.md
   - Preview the next‑gen TUI v2 (experimental):
     
@@ -121,6 +124,7 @@ Usage (see docs/USER_GUIDE.md for details)
   modfetch verify --config /path/to/config.yml --all
   
   - Use `--only-errors` to show only problematic files; add `--summary` for totals and paths
+  - Write/refresh a sidecar: add `--fix-sidecar` to rewrite `<dest>.sha256` once verified
 - Deep‑verify safetensors and scan/repair a directory:
   
   modfetch verify --config /path/to/config.yml --scan-dir /path/to/models --safetensors-deep
@@ -134,6 +138,10 @@ Usage (see docs/USER_GUIDE.md for details)
 - Placement dry‑run:
   
   modfetch place --config /path/to/config.yml --path /path/to/model.safetensors --dry-run
+  
+- Clean partials and orphan sidecars:
+  
+  modfetch clean --config /path/to/config.yml --days 7 --include-next-to-dest --sidecars
   
 
 Resolvers
