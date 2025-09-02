@@ -42,7 +42,7 @@ network:
   timeout_seconds: 60
 concurrency:
   per_file_chunks: 4
-  chunk_size_mb: 8
+  chunk_size_mb: 16
 sources:
   huggingface: { enabled: true, token_env: "HF_TOKEN" }
   civitai:     { enabled: true, token_env: "CIVITAI_TOKEN" }

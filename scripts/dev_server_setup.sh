@@ -112,7 +112,7 @@ network:
 concurrency:
   global_files: 4
   per_file_chunks: 4
-  chunk_size_mb: 8
+  chunk_size_mb: 16
   max_retries: 8
   backoff:
     min_ms: 200

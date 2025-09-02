@@ -133,7 +133,6 @@ This document tracks the backlog of enhancements, grouped by priority. It mirror
 
 - Add `--dry-run` flag to download command
 - Add `--force` flag to skip SHA256 verification
-- Increase default chunk size to 16MB (better for modern connections)
 - Add download time estimation to CLI output
 - Fix TUI selected item persistence when filtering
 - Add Ctrl+C graceful shutdown handler

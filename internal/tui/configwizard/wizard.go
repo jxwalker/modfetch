@@ -58,7 +58,7 @@ func New(defaults *config.Config) *Wizard {
 	fields = append(fields, mk("sources.civitai.enabled (true|false)", cvEn))
 	fields = append(fields, mk("sources.civitai.token_env", cvTok))
 	// chunk params
-	csm := 8
+	csm := 16
 	pfc := 4
 	if defaults != nil {
 		if defaults.Concurrency.ChunkSizeMB > 0 { csm = defaults.Concurrency.ChunkSizeMB }
@@ -145,7 +145,7 @@ func (w *Wizard) buildConfig() *config.Config {
 	o.Sources.HuggingFace.TokenEnv = get(4)
 	o.Sources.CivitAI.Enabled = parseBool(get(5))
 	o.Sources.CivitAI.TokenEnv = get(6)
-	o.Concurrency.ChunkSizeMB = parseInt(get(7), 8)
+	o.Concurrency.ChunkSizeMB = parseInt(get(7), 16)
 	o.Concurrency.PerFileChunks = parseInt(get(8), 4)
 	return o
 }
