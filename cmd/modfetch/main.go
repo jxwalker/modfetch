@@ -195,6 +195,8 @@ func handleDownload(ctx context.Context, args []string) error {
 	placeFlag := fs.Bool("place", false, "place files after successful download")
 	summaryJSON := fs.Bool("summary-json", false, "print a JSON summary when a download completes")
 	batchParallel := fs.Int("batch-parallel", 0, "max parallel downloads when using --batch (default: config concurrency per_host_requests)")
+	namingPattern := fs.String("naming-pattern", "", "override default resolver naming pattern (applies when dest is omitted)")
+	noAuthPreflight := fs.Bool("no-auth-preflight", false, "disable early auth preflight (HEAD/0-0 probe)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -457,6 +459,32 @@ func handleDownload(ctx context.Context, args []string) error {
 			}
 		}
 	}
+	// Early auth preflight (optional)
+	if !*noAuthPreflight {
+		reach, status := downloader.CheckReachable(ctx, c, resolvedURL, headers)
+		if reach {
+			code := 0
+			if sp := strings.Fields(status); len(sp) > 0 {
+				fmt.Sscanf(sp[0], "%d", &code)
+			}
+			if code == 401 || code == 403 {
+				host := ""
+				if u, err := neturl.Parse(resolvedURL); err == nil && u != nil { host = strings.ToLower(u.Hostname()) }
+				// Suggest env var setup
+				if hostIs(host, "huggingface.co") {
+					env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv)
+					if env == "" { env = "HF_TOKEN" }
+					return fmt.Errorf("preflight failed: %s — set %s and ensure repo access/license accepted", status, env)
+				}
+				if hostIs(host, "civitai.com") {
+					env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv)
+					if env == "" { env = "CIVITAI_TOKEN" }
+					return fmt.Errorf("preflight failed: %s — set %s and ensure content is accessible", status, env)
+				}
+				return fmt.Errorf("preflight failed: %s", status)
+			}
+		}
+	}
 	// Prefer chunked downloader; it will fall back to single when needed
 	// Progress display (disabled for JSON or quiet)
 	var stopProg func()
@@ -467,10 +495,26 @@ func handleDownload(ctx context.Context, args []string) error {
 		if !(strings.HasPrefix(resolverURI, "hf://") || strings.HasPrefix(resolverURI, "civitai://")) {
 			resolverURI = *url
 		}
-		if candDest == "" && strings.HasPrefix(resolverURI, "civitai://") {
-			// If we resolved civitai:// earlier, try SuggestedFilename by resolving again cheaply
+		if candDest == "" && (strings.HasPrefix(resolverURI, "hf://") || strings.HasPrefix(resolverURI, "civitai://")) {
+			// Resolve again to compute a good default filename
 			if res2, err := resolver.Resolve(ctx, resolverURI, c); err == nil && strings.TrimSpace(res2.SuggestedFilename) != "" {
-				if p, err := util.UniquePath(c.General.DownloadRoot, res2.SuggestedFilename, res2.VersionID); err == nil {
+				name := res2.SuggestedFilename
+				if strings.TrimSpace(*namingPattern) != "" {
+					toks := map[string]string{
+						"model_name":   res2.ModelName,
+						"version_name": res2.VersionName,
+						"version_id":   res2.VersionID,
+						"file_name":    res2.FileName,
+						"file_type":    res2.FileType,
+						"owner":        res2.RepoOwner,
+						"repo":         res2.RepoName,
+						"path":         res2.RepoPath,
+						"rev":          res2.Rev,
+					}
+					name2 := util.ExpandPattern(*namingPattern, toks)
+					if strings.TrimSpace(name2) != "" { name = util.SafeFileName(name2) }
+				}
+				if p, err := util.UniquePath(c.General.DownloadRoot, name, res2.VersionID); err == nil {
 					candDest = p
 				}
 			}
@@ -490,9 +534,25 @@ func handleDownload(ctx context.Context, args []string) error {
 	if !(strings.HasPrefix(resolverURI2, "hf://") || strings.HasPrefix(resolverURI2, "civitai://")) {
 		resolverURI2 = *url
 	}
-	if destArg == "" && strings.HasPrefix(resolverURI2, "civitai://") {
+	if destArg == "" && (strings.HasPrefix(resolverURI2, "hf://") || strings.HasPrefix(resolverURI2, "civitai://")) {
 		if res2, err := resolver.Resolve(ctx, resolverURI2, c); err == nil && strings.TrimSpace(res2.SuggestedFilename) != "" {
-			if p, err := util.UniquePath(c.General.DownloadRoot, res2.SuggestedFilename, res2.VersionID); err == nil {
+			name := res2.SuggestedFilename
+			if strings.TrimSpace(*namingPattern) != "" {
+				toks := map[string]string{
+					"model_name":   res2.ModelName,
+					"version_name": res2.VersionName,
+					"version_id":   res2.VersionID,
+					"file_name":    res2.FileName,
+					"file_type":    res2.FileType,
+					"owner":        res2.RepoOwner,
+					"repo":         res2.RepoName,
+					"path":         res2.RepoPath,
+					"rev":          res2.Rev,
+				}
+				name2 := util.ExpandPattern(*namingPattern, toks)
+				if strings.TrimSpace(name2) != "" { name = util.SafeFileName(name2) }
+			}
+			if p, err := util.UniquePath(c.General.DownloadRoot, name, res2.VersionID); err == nil {
 				destArg = p
 			}
 		}

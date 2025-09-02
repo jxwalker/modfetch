@@ -47,6 +47,7 @@ func handleBatchImport(ctx context.Context, args []string) error {
 	defPlace := fs.Bool("place", false, "Default place flag for jobs (override per-line via place=")
 	defMode := fs.String("mode", "", "Default placement mode: symlink|hardlink|copy (override per-line via mode=")
 	noResolvePages := fs.Bool("no-resolve-pages", false, "Disable civitai.com model page -> civitai:// uri normalization")
+	namingPattern := fs.String("naming-pattern", "", "override default resolver naming pattern (applies when dest is omitted)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -193,11 +194,25 @@ func handleBatchImport(ctx context.Context, args []string) error {
 			}
 			probeURL = res.URL
 			headers = res.Headers
-			// For civitai, if no dest given, prefer SuggestedFilename with version hint
-			if jDest == "" && strings.HasPrefix(resolvedURI, "civitai://") && strings.TrimSpace(res.SuggestedFilename) != "" {
-				if p, err := util.UniquePath(root, res.SuggestedFilename, res.VersionID); err == nil {
-					jDest = p
+			// If no dest given, prefer Resolver SuggestedFilename; allow CLI override pattern
+			if strings.TrimSpace(jDest) == "" && strings.TrimSpace(res.SuggestedFilename) != "" {
+				name := res.SuggestedFilename
+				if strings.TrimSpace(*namingPattern) != "" {
+					toks := map[string]string{
+						"model_name":   res.ModelName,
+						"version_name": res.VersionName,
+						"version_id":   res.VersionID,
+						"file_name":    res.FileName,
+						"file_type":    res.FileType,
+						"owner":        res.RepoOwner,
+						"repo":         res.RepoName,
+						"path":         res.RepoPath,
+						"rev":          res.Rev,
+					}
+					name2 := util.ExpandPattern(*namingPattern, toks)
+					if strings.TrimSpace(name2) != "" { name = util.SafeFileName(name2) }
 				}
+				if p, err := util.UniquePath(root, name, res.VersionID); err == nil { jDest = p }
 			}
 		} else {
 			// Attach auth headers for known hosts (direct URLs)

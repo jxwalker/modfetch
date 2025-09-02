@@ -1,5 +1,51 @@
 # Resolvers: hf:// and civitai://
 
+This guide documents the resolver URI formats and configurable naming patterns.
+
+Supported schemes
+- Hugging Face: `hf://{owner}/{repo}/{path}?rev=main`
+- CivitAI: `civitai://model/{id}[?version=ID][&file=substring]`
+
+Configurable naming patterns
+- You can control the default filename used when `--dest` is omitted.
+- Configure per source in config:
+  - `sources.huggingface.naming.pattern`
+  - `sources.civitai.naming.pattern`
+- Or override per run with `--naming-pattern "..."` on `modfetch download` and `modfetch batch import`.
+
+Available tokens
+- CivitAI: `{model_name}`, `{version_name}`, `{version_id}`, `{file_name}`, `{file_type}`
+- Hugging Face: `{owner}`, `{repo}`, `{path}`, `{rev}`, `{file_name}`
+
+Examples
+```yaml path=null start=null
+sources:
+  civitai:
+    enabled: true
+    token_env: CIVITAI_TOKEN
+    naming:
+      pattern: "{model_name} - {file_name}"
+  huggingface:
+    enabled: true
+    token_env: HF_TOKEN
+    naming:
+      pattern: "{repo} - {file_name}"
+```
+
+CLI override
+```bash path=null start=null
+# Use repo-prefixed naming for this run
+modfetch download --config ~/.config/modfetch/config.yml \
+  --url 'hf://bigscience/bloom/LICENSE?rev=main' \
+  --naming-pattern '{repo} - {file_name}'
+```
+
+Notes
+- Resolvers populate metadata so patterns can be expanded accurately.
+- Final filenames are sanitized and de-duplicated; collision-safe suffixes are added when needed.
+
+# Resolvers: hf:// and civitai://
+
 This project supports two URI schemes that resolve to HTTP(S) download URLs with optional Authorization headers.
 
 Supported schemes

@@ -2341,7 +2341,7 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 			_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "pending"})
 		}
 		if start {
-			// Quick reachability probe; if network-unreachable, put job on hold and do not start download
+			// Quick reachability/auth probe; if network-unreachable or unauthorized, put job on hold and do not start download
 			reach, info := downloader.CheckReachable(ctx, m.cfg, resolved, headers)
 			if !reach {
 				_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold", LastError: info})
@@ -2356,6 +2356,25 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 				}
 				m.addToast("probe failed: unreachable; job on hold (" + info + ")")
 				return dlDoneMsg{url: resolved, dest: dest, path: "", err: fmt.Errorf("hold: unreachable")}
+			}
+			// If reachable, parse status code for early auth guidance
+			code := 0
+			if sp := strings.Fields(info); len(sp) > 0 { fmt.Sscanf(sp[0], "%d", &code) }
+			if code == 401 || code == 403 {
+				host := hostOf(resolved)
+				msg := info
+				if strings.HasSuffix(strings.ToLower(host), "huggingface.co") {
+					env := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv)
+					if env == "" { env = "HF_TOKEN" }
+					msg = fmt.Sprintf("%s — set %s and ensure repo access/license accepted", info, env)
+				} else if strings.HasSuffix(strings.ToLower(host), "civitai.com") {
+					env := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv)
+					if env == "" { env = "CIVITAI_TOKEN" }
+					msg = fmt.Sprintf("%s — set %s and ensure content is accessible", info, env)
+				}
+				_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold", LastError: msg})
+				m.addToast("preflight auth: job on hold (" + msg + ")")
+				return dlDoneMsg{url: resolved, dest: dest, path: "", err: fmt.Errorf("hold: unauthorized")}
 			}
 			log := logging.New("error", false)
 			dl := downloader.NewAuto(m.cfg, log, m.st, nil)

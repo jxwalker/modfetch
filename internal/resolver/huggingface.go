@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"modfetch/internal/config"
+	"modfetch/internal/util"
 )
 
 type HuggingFace struct{}
@@ -33,13 +34,15 @@ func (h *HuggingFace) Resolve(ctx context.Context, uri string, cfg *config.Confi
 	if len(parts) < 2 {
 		return nil, errors.New("hf uri must be hf://repo/path or hf://owner/repo/path")
 	}
-	var repoID string
+	var owner, repo string
 	var filePath string
 	if len(parts) == 2 {
-		repoID = parts[0]
+		owner = ""
+		repo = parts[0]
 		filePath = parts[1]
 	} else {
-		repoID = parts[0] + "/" + parts[1]
+		owner = parts[0]
+		repo = parts[1]
 		filePath = path.Join(parts[2:]...)
 	}
 	rev := "main"
@@ -48,6 +51,8 @@ func (h *HuggingFace) Resolve(ctx context.Context, uri string, cfg *config.Confi
 		if v := q.Get("rev"); v != "" { rev = v }
 	}
 	// Construct resolve URL
+	repoID := repo
+	if strings.TrimSpace(owner) != "" { repoID = owner + "/" + repo }
 	base := "https://huggingface.co/" + repoID
 	resURL := base + "/resolve/" + url.PathEscape(rev) + "/" + strings.ReplaceAll(filePath, "+", "%2B")
 
@@ -60,7 +65,25 @@ func (h *HuggingFace) Resolve(ctx context.Context, uri string, cfg *config.Confi
 			}
 		}
 	}
-	return &Resolved{URL: resURL, Headers: headers}, nil
+	// Compute SuggestedFilename via naming pattern if provided
+	fileName := path.Base(filePath)
+	var suggested string
+	if cfg != nil && strings.TrimSpace(cfg.Sources.HuggingFace.Naming.Pattern) != "" {
+		pat := strings.TrimSpace(cfg.Sources.HuggingFace.Naming.Pattern)
+		tokens := map[string]string{
+			"owner":     owner,
+			"repo":      repo,
+			"path":      filePath,
+			"rev":       rev,
+			"file_name": fileName,
+		}
+		suggested = util.SafeFileName(util.ExpandPattern(pat, tokens))
+		if strings.TrimSpace(suggested) == "" { suggested = "" }
+	}
+	if suggested == "" {
+		suggested = util.SafeFileName(fileName)
+	}
+	return &Resolved{URL: resURL, Headers: headers, FileName: fileName, SuggestedFilename: suggested, RepoOwner: owner, RepoName: repo, RepoPath: filePath, Rev: rev}, nil
 }
 
 // getenv split to enable testing
