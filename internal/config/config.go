@@ -50,6 +50,8 @@ type Network struct {
 	RetryOnRateLimit          bool   `yaml:"retry_on_rate_limit"`
 	// Cap the wait derived from Retry-After to avoid excessively long sleeps (seconds)
 	RateLimitMaxDelaySeconds  int    `yaml:"rate_limit_max_delay_seconds"`
+	// When true, skip the early HEAD/0-0 auth preflight in CLI and TUI v2
+	DisableAuthPreflight      bool   `yaml:"disable_auth_preflight"`
 }
 
 type ResolverConf struct {

@@ -108,7 +108,7 @@ type Model struct {
 	selected        int
 	filterOn        bool
 	filterInput     textinput.Model
-	sortMode        string // ""|"speed"|"eta"
+	sortMode        string // ""|"speed"|"eta"|"rem"
 	groupBy         string // ""|"host"
 	lastRefresh     time.Time
 	prog            progress.Model
@@ -281,6 +281,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case dlDoneMsg:
 		if msg.err != nil {
 			m.err = msg.err
+			m.addToast("failed: " + msg.err.Error())
 			// Mark token rejection/rate limit hints on known hosts based on error text
 			errTxt := strings.ToLower(m.err.Error())
 			if strings.Contains(errTxt, "unauthorized") || strings.Contains(errTxt, "401") || strings.Contains(errTxt, "forbidden") || strings.Contains(errTxt, "403") || strings.Contains(errTxt, "not authorized") {
@@ -514,6 +515,9 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "o":
 		m.sortMode = ""
+		return m, nil
+	case "R":
+		m.sortMode = "rem"
 		return m, nil
 	case "g":
 		if m.groupBy == "host" {
@@ -855,7 +859,7 @@ func (m *Model) renderTopLeftHints() string {
 		"New: n new download • b batch import (txt file)",
 		"Nav: j/k up/down",
 		"Filter: / enter • Enter apply • Esc clear",
-		"Sort: s speed • e ETA • o clear | Group: g host",
+		"Sort: s speed • e ETA • R remaining • o clear | Group: g host",
 		"Select: Space toggle • A all • X clear",
 		"Actions: y/r start • p cancel • D delete | Open: O • Copy: C/U | Probe: P",
 		"View: t column • v compact • i inspector • T theme • H toasts • ? help • q quit",
@@ -1064,7 +1068,7 @@ func (m *Model) applySort(in []state.DownloadRow) []state.DownloadRow {
 		cj, tj, rj, _ := m.progressFor(out[j])
 		etaI := etaSeconds(ci, ti, ri)
 		etaJ := etaSeconds(cj, tj, rj)
-		switch m.sortMode {
+	switch m.sortMode {
 		case "speed":
 			return ri > rj
 		case "eta":
@@ -1078,6 +1082,17 @@ func (m *Model) applySort(in []state.DownloadRow) []state.DownloadRow {
 				return true
 			}
 			return etaI < etaJ
+		case "rem":
+			// Sort by remaining bytes ascending (unknown totals last)
+			remI := int64(1<<62)
+			remJ := int64(1<<62)
+			if ti > 0 { remI = ti - ci }
+			if tj > 0 { remJ = tj - cj }
+			if remI == remJ {
+				// Tie-breaker by higher rate
+				return ri > rj
+			}
+			return remI < remJ
 		}
 		return false
 	})
@@ -1920,7 +1935,7 @@ func (m *Model) saveUIState() {
 
 func (m *Model) renderCommandsBar() string {
 	// concise single-line commands reference
-	return m.th.footer.Render("n new • b batch • y/r start • p cancel • D delete • O open • / filter • s/e sort • o clear • g group host • t col • v compact • i inspector • H toasts • ? help • q quit")
+	return m.th.footer.Render("n new • b batch • y/r start • p cancel • D delete • O open • / filter • s/e/R sort • o clear • g group host • t col • v compact • i inspector • H toasts • ? help • q quit")
 }
 
 func (m *Model) renderHelp() string {
@@ -1929,7 +1944,7 @@ func (m *Model) renderHelp() string {
 	sb.WriteString("Tabs: 1 Pending • 2 Active • 3 Completed • 4 Failed\n")
 	sb.WriteString("Nav: j/k up/down\n")
 	sb.WriteString("Filter: / to enter; Enter to apply; Esc to clear\n")
-	sb.WriteString("Sort: s speed • e ETA • o clear\n")
+	sb.WriteString("Sort: s speed • e ETA • R remaining • o clear\n")
 	sb.WriteString("Group: g group by host\n")
 	sb.WriteString("Theme: T cycle presets\n")
 	sb.WriteString("Toasts: H toggle drawer\n")
@@ -2340,7 +2355,7 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 			_ = m.st.DeleteDownload(urlStr, dest)
 			_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "pending"})
 		}
-		if start {
+		if start && !m.cfg.Network.DisableAuthPreflight {
 			// Quick reachability/auth probe; if network-unreachable or unauthorized, put job on hold and do not start download
 			reach, info := downloader.CheckReachable(ctx, m.cfg, resolved, headers)
 			if !reach {
@@ -2376,11 +2391,11 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 				m.addToast("preflight auth: job on hold (" + msg + ")")
 				return dlDoneMsg{url: resolved, dest: dest, path: "", err: fmt.Errorf("hold: unauthorized")}
 			}
-			log := logging.New("error", false)
-			dl := downloader.NewAuto(m.cfg, log, m.st, nil)
+		}
+		log := logging.New("error", false)
+		dl := downloader.NewAuto(m.cfg, log, m.st, nil)
 			final, _, err := dl.Download(ctx, resolved, dest, "", headers, m.cfg.General.AlwaysNoResume)
 			return dlDoneMsg{url: urlStr, dest: dest, path: final, err: err}
-		}
 		// Probe-only path
 		reach, info := downloader.CheckReachable(ctx, m.cfg, resolved, headers)
 		if !reach {

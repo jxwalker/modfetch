@@ -55,7 +55,7 @@ Common keys include:
 - `D` to delete
 - `O` to open the destination
 - `/` to filter
-- `s`/`e`/`o` to sort by speed, sort by ETA, or clear sorting
+- `s`/`e`/`R`/`o` to sort by speed, sort by ETA, sort by remaining bytes, or clear sorting
 - `g` to group by host
 - `t` to cycle the URL/DEST/HOST column
 - `v` to toggle compact view
