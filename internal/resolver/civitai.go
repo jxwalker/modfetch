@@ -106,14 +106,27 @@ func (c *CivitAI) Resolve(ctx context.Context, uri string, cfg *config.Config) (
 	download := files[pick].DownloadURL
 	if download == "" { return nil, errors.New("selected civitai file has empty downloadUrl") }
 	fileName := files[pick].Name
-	// Suggested filename:
-	// Use "ModelName - FileName" only when FileName does not already start with ModelName
-	// (case-insensitive and ignoring separators). Otherwise, keep FileName as-is to avoid duplication.
-	suggested := fileName
-	if strings.TrimSpace(modelName) != "" {
-		base := strings.TrimSuffix(fileName, filepath.Ext(fileName))
-		if !hasPrefixName(base, modelName) {
-			suggested = modelName + " - " + fileName
+	// Suggested filename via pattern if configured, otherwise fallback to ModelName - FileName heuristic
+	suggested := ""
+	if cfg != nil && strings.TrimSpace(cfg.Sources.CivitAI.Naming.Pattern) != "" {
+		pat := strings.TrimSpace(cfg.Sources.CivitAI.Naming.Pattern)
+		tokens := map[string]string{
+			"model_name":   modelName,
+			"version_name": verName,
+			"version_id":   verID,
+			"file_name":    fileName,
+			"file_type":    files[pick].Type,
+		}
+		suggested = util.ExpandPattern(pat, tokens)
+	}
+	if strings.TrimSpace(suggested) == "" {
+		// Fallback heuristic
+		suggested = fileName
+		if strings.TrimSpace(modelName) != "" {
+			base := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+			if !hasPrefixName(base, modelName) {
+				suggested = modelName + " - " + fileName
+			}
 		}
 	}
 	suggested = util.SafeFileName(suggested)
