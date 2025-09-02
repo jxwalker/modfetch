@@ -43,7 +43,7 @@ _modfetch_completions()
         config)
             COMPREPLY=( $(compgen -W "validate print wizard --config --log-level --json" -- "$cur") ) ;;
         download)
-            COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --url --dest --sha256 --batch --place" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --url --dest --sha256 --batch --place --summary-json --no-resume --batch-parallel --naming-pattern --no-auth-preflight --dry-run" -- "$cur") ) ;;
         place)
             COMPREPLY=( $(compgen -W "--config --log-level --json --path --type --mode" -- "$cur") ) ;;
         verify)
@@ -76,7 +76,7 @@ _modfetch() {
       _arguments '*:options:(--config --log-level --json validate print wizard)'
       ;;
     download)
-      _arguments '*:options:(--config --log-level --json --quiet --url --dest --sha256 --batch --place)'
+      _arguments '*:options:(--config --log-level --json --quiet --url --dest --sha256 --batch --place --summary-json --no-resume --batch-parallel --naming-pattern --no-auth-preflight --dry-run)'
       ;;
     place)
       _arguments '*:options:(--config --log-level --json --path --type --mode)'
@@ -121,6 +121,13 @@ complete -c modfetch -n "__fish_seen_subcommand_from download" -l dest -d "Desti
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l sha256 -d "Expected SHA256"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l batch -d "Batch file"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l place -d "Place after download"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l summary-json -d "JSON summary"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l quiet -d "Suppress progress/info"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l no-resume -d "Do not resume; start fresh"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l batch-parallel -d "Parallelism for --batch"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l naming-pattern -d "Resolver naming pattern"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l no-auth-preflight -d "Disable early auth preflight"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l dry-run -d "Plan only; no download"
 # batch import flags
 complete -c modfetch -n "__fish_seen_subcommand_from batch" -a "import" -d "Import URLs to YAML batch"
 complete -c modfetch -n "__fish_seen_subcommand_from batch" -l input -d "Text file with URLs"
