@@ -1,8 +1,6 @@
 package placer
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +10,7 @@ import (
 
 	"modfetch/internal/classifier"
 	"modfetch/internal/config"
+	"modfetch/internal/util"
 )
 
 // ComputeTargets returns absolute destination directories for an artifact type
@@ -116,16 +115,7 @@ func exists(p string) bool {
 }
 
 func sha256File(p string) (string, error) {
-	f, err := os.Open(p)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = f.Close() }()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return util.HashFileSHA256(p)
 }
 
 func sameSHA256(p string, want string) (bool, error) {

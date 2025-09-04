@@ -1,24 +1,27 @@
 package state
 
 import (
+	"database/sql"
 	"errors"
 )
 
 type ChunkRow struct {
-	URL      string
-	Dest     string
-	Index    int
-	Start    int64
-	End      int64
-	Size     int64
-	SHA256   string
-	Status   string // pending | running | complete | dirty
+	URL    string
+	Dest   string
+	Index  int
+	Start  int64
+	End    int64
+	Size   int64
+	SHA256 string
+	Status string // pending | running | complete | dirty
 }
 
 func init() {}
 
 func (db *DB) InitChunksTable() error {
-	if db == nil || db.SQL == nil { return errors.New("nil db") }
+	if db == nil || db.SQL == nil {
+		return errors.New("nil db")
+	}
 	_, err := db.SQL.Exec(`CREATE TABLE IF NOT EXISTS chunks (
 		url TEXT NOT NULL,
 		dest TEXT NOT NULL,
@@ -37,19 +40,46 @@ func (db *DB) InitChunksTable() error {
 
 func (db *DB) UpsertChunk(c ChunkRow) error {
 	_, err := db.SQL.Exec(`INSERT INTO chunks(url,dest,idx,start,end,size,sha256,status,updated_at) VALUES(?,?,?,?,?,?,?,?,strftime('%s','now'))
-	ON CONFLICT(url,dest,idx) DO UPDATE SET start=excluded.start,end=excluded.end,size=excluded.size,sha256=excluded.sha256,status=excluded.status,updated_at=strftime('%s','now')`,
+ON CONFLICT(url,dest,idx) DO UPDATE SET start=excluded.start,end=excluded.end,size=excluded.size,sha256=COALESCE(NULLIF(excluded.sha256, ''), chunks.sha256),status=excluded.status,updated_at=strftime('%s','now')`,
 		c.URL, c.Dest, c.Index, c.Start, c.End, c.Size, c.SHA256, c.Status)
+	return err
+}
+
+// Tx variants for grouping operations atomically
+func (db *DB) UpsertChunkTx(tx *sql.Tx, c ChunkRow) error {
+	_, err := tx.Exec(`INSERT INTO chunks(url,dest,idx,start,end,size,sha256,status,updated_at) VALUES(?,?,?,?,?,?,?,?,strftime('%s','now'))
+ON CONFLICT(url,dest,idx) DO UPDATE SET start=excluded.start,end=excluded.end,size=excluded.size,sha256=COALESCE(NULLIF(excluded.sha256, ''), chunks.sha256),status=excluded.status,updated_at=strftime('%s','now')`,
+		c.URL, c.Dest, c.Index, c.Start, c.End, c.Size, c.SHA256, c.Status)
+	return err
+}
+
+func (db *DB) UpdateChunkStatusTx(tx *sql.Tx, url, dest string, idx int, status string) error {
+	_, err := tx.Exec(`UPDATE chunks SET status=?, updated_at=strftime('%s','now') WHERE url=? AND dest=? AND idx=?`, status, url, dest, idx)
+	return err
+}
+
+func (db *DB) UpdateChunkSHATx(tx *sql.Tx, url, dest string, idx int, sha string) error {
+	_, err := tx.Exec(`UPDATE chunks SET sha256=?, updated_at=strftime('%s','now') WHERE url=? AND dest=? AND idx=?`, sha, url, dest, idx)
+	return err
+}
+
+func (db *DB) DeleteChunksTx(tx *sql.Tx, url, dest string) error {
+	_, err := tx.Exec(`DELETE FROM chunks WHERE url=? AND dest=?`, url, dest)
 	return err
 }
 
 func (db *DB) ListChunks(url, dest string) ([]ChunkRow, error) {
 	rows, err := db.SQL.Query(`SELECT url,dest,idx,start,end,size,sha256,status FROM chunks WHERE url=? AND dest=? ORDER BY idx`, url, dest)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer func() { _ = rows.Close() }()
 	var out []ChunkRow
 	for rows.Next() {
 		var c ChunkRow
-		if err := rows.Scan(&c.URL, &c.Dest, &c.Index, &c.Start, &c.End, &c.Size, &c.SHA256, &c.Status); err != nil { return nil, err }
+		if err := rows.Scan(&c.URL, &c.Dest, &c.Index, &c.Start, &c.End, &c.Size, &c.SHA256, &c.Status); err != nil {
+			return nil, err
+		}
 		out = append(out, c)
 	}
 	return out, rows.Err()
@@ -70,4 +100,3 @@ func (db *DB) DeleteChunks(url, dest string) error {
 	_, err := db.SQL.Exec(`DELETE FROM chunks WHERE url=? AND dest=?`, url, dest)
 	return err
 }
-

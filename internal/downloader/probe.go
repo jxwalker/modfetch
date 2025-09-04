@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"modfetch/internal/config"
@@ -30,25 +32,41 @@ func ProbeURL(ctx context.Context, cfg *config.Config, rawURL string, headers ma
 	// First try HEAD (follows redirects)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, nil)
 	req.Header.Set("User-Agent", ua)
-	for k, v := range headers { req.Header.Set(k, v) }
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := cl.Do(req)
 	var meta ProbeMeta
 	if err == nil {
 		defer func() { _ = resp.Body.Close() }()
-		if resp.Request != nil && resp.Request.URL != nil { meta.FinalURL = resp.Request.URL.String() }
+		if resp.Request != nil && resp.Request.URL != nil {
+			meta.FinalURL = resp.Request.URL.String()
+		}
 		meta.ETag = resp.Header.Get("ETag")
 		meta.LastModified = resp.Header.Get("Last-Modified")
-		if cd := resp.Header.Get("Content-Disposition"); cd != "" { if fn := parseDispositionFilename(cd); fn != "" { meta.Filename = fn } }
-		if clh := resp.Header.Get("Content-Length"); clh != "" { _, _ = fmt.Sscan(clh, &meta.Size) }
+		if cd := resp.Header.Get("Content-Disposition"); cd != "" {
+			if fn := parseDispositionFilename(cd); fn != "" {
+				meta.Filename = fn
+			}
+		}
+		if clh := resp.Header.Get("Content-Length"); clh != "" {
+			if n, err := strconv.ParseInt(strings.TrimSpace(clh), 10, 64); err == nil && n >= 0 {
+				meta.Size = n
+			}
+		}
 		meta.AcceptRange = false
-		if ar := resp.Header.Get("Accept-Ranges"); ar != "" { meta.AcceptRange = true }
+		if ar := resp.Header.Get("Accept-Ranges"); strings.EqualFold(strings.TrimSpace(ar), "bytes") {
+			meta.AcceptRange = true
+		}
 	}
 	// If we still lack size or accept-range, try Range GET probe
 	if meta.Size <= 0 || !meta.AcceptRange {
 		// Request 0-0
 		req2, _ := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 		req2.Header.Set("User-Agent", ua)
-		for k, v := range headers { req2.Header.Set(k, v) }
+		for k, v := range headers {
+			req2.Header.Set(k, v)
+		}
 		req2.Header.Set("Range", "bytes=0-0")
 		resp2, err2 := cl.Do(req2)
 		if err2 == nil {
@@ -59,10 +77,14 @@ func ProbeURL(ctx context.Context, cfg *config.Config, rawURL string, headers ma
 					meta.Size = total
 					meta.AcceptRange = true
 				}
-				if meta.FinalURL == "" && resp2.Request != nil && resp2.Request.URL != nil { meta.FinalURL = resp2.Request.URL.String() }
+				if meta.FinalURL == "" && resp2.Request != nil && resp2.Request.URL != nil {
+					meta.FinalURL = resp2.Request.URL.String()
+				}
 				if meta.Filename == "" {
 					if cd := resp2.Header.Get("Content-Disposition"); cd != "" {
-						if fn := parseDispositionFilename(cd); fn != "" { meta.Filename = fn }
+						if fn := parseDispositionFilename(cd); fn != "" {
+							meta.Filename = fn
+						}
 					}
 				}
 			}
@@ -75,17 +97,27 @@ func ProbeURL(ctx context.Context, cfg *config.Config, rawURL string, headers ma
 			// try a HEAD on resolved
 			req3, _ := http.NewRequestWithContext(ctx, http.MethodHead, ru, nil)
 			req3.Header.Set("User-Agent", ua)
-			for k, v := range headers { req3.Header.Set(k, v) }
+			for k, v := range headers {
+				req3.Header.Set(k, v)
+			}
 			if resp3, err3 := cl.Do(req3); err3 == nil {
 				defer func() { _ = resp3.Body.Close() }()
-				if clh := resp3.Header.Get("Content-Length"); clh != "" && meta.Size <= 0 { _, _ = fmt.Sscan(clh, &meta.Size) }
+				if clh := resp3.Header.Get("Content-Length"); clh != "" && meta.Size <= 0 {
+					if n, err := strconv.ParseInt(strings.TrimSpace(clh), 10, 64); err == nil && n >= 0 {
+						meta.Size = n
+					}
+				}
 				if cd := resp3.Header.Get("Content-Disposition"); cd != "" && meta.Filename == "" {
-					if fn := parseDispositionFilename(cd); fn != "" { meta.Filename = fn }
+					if fn := parseDispositionFilename(cd); fn != "" {
+						meta.Filename = fn
+					}
 				}
 			}
 		}
 	}
-	if meta.FinalURL == "" { meta.FinalURL = rawURL }
+	if meta.FinalURL == "" {
+		meta.FinalURL = rawURL
+	}
 	return meta, nil
 }
 
@@ -96,13 +128,21 @@ func ComputeRemoteSHA256(ctx context.Context, cfg *config.Config, rawURL string,
 	ua := userAgent(cfg)
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	req.Header.Set("User-Agent", ua)
-	for k, v := range headers { req.Header.Set(k, v) }
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := cl.Do(req)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode/100 != 2 { return "", fmt.Errorf("GET status: %s", resp.Status) }
+	if resp.StatusCode/100 != 2 {
+		return "", fmt.Errorf("GET status: %s", resp.Status)
+	}
 	h := sha256.New()
-	if _, err := io.Copy(h, resp.Body); err != nil { return "", err }
+	if _, err := io.Copy(h, resp.Body); err != nil {
+		return "", err
+	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
@@ -120,10 +160,13 @@ func CheckReachable(ctx context.Context, cfg *config.Config, rawURL string, head
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodHead, rawURL, nil)
 	req.Header.Set("User-Agent", ua)
-	for k, v := range headers { req.Header.Set(k, v) }
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := cl.Do(req)
-	if err != nil { return false, err.Error() }
+	if err != nil {
+		return false, err.Error()
+	}
 	defer func() { _ = resp.Body.Close() }()
 	return true, resp.Status
 }
-

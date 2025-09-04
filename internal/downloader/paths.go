@@ -41,7 +41,9 @@ func StagePartPath(cfg *config.Config, url, dest string) string {
 func renameOrCopy(src, dst string) error {
 	if err := os.Rename(src, dst); err != nil {
 		if linkErr, ok := err.(*os.LinkError); ok && linkErr.Err == syscall.EXDEV {
-			if err2 := copyFile(src, dst); err2 != nil { return err2 }
+			if err2 := copyFile(src, dst); err2 != nil {
+				return err2
+			}
 			_ = os.Remove(src)
 			return nil
 		}
@@ -52,12 +54,20 @@ func renameOrCopy(src, dst string) error {
 
 func copyFile(src, dst string) error {
 	sf, err := os.Open(src)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer func() { _ = sf.Close() }()
 	df, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer func() { _ = df.Close() }()
-	if _, err := io.Copy(df, sf); err != nil { return err }
-	if err := df.Sync(); err != nil { return err }
+	if _, err := io.Copy(df, sf); err != nil {
+		return err
+	}
+	if err := df.Sync(); err != nil {
+		return err
+	}
 	return nil
 }

@@ -37,21 +37,22 @@ type General struct {
 	AllowOverwrite bool   `yaml:"allow_overwrite"`
 	DryRun         bool   `yaml:"dry_run"`
 	// Downloads behavior
-	StagePartials  bool `yaml:"stage_partials"`   // if true (default), write .part files under download_root/.parts or partials_root if set
-	AlwaysNoResume bool `yaml:"always_no_resume"` // if true, do not resume partials unless overridden on CLI
+	StagePartials      bool `yaml:"stage_partials"`        // if true (default), write .part files under download_root/.parts or partials_root if set
+	AlwaysNoResume     bool `yaml:"always_no_resume"`      // if true, do not resume partials unless overridden on CLI
+	AutoRecoverOnStart bool `yaml:"auto_recover_on_start"` // if true, TUI auto-resumes previously running downloads on startup
 }
 
 type Network struct {
-	TimeoutSeconds            int    `yaml:"timeout_seconds"`
-	MaxRedirects              int    `yaml:"max_redirects"`
-	TLSVerify                 bool   `yaml:"tls_verify"`
-	UserAgent                 string `yaml:"user_agent"`
+	TimeoutSeconds int    `yaml:"timeout_seconds"`
+	MaxRedirects   int    `yaml:"max_redirects"`
+	TLSVerify      bool   `yaml:"tls_verify"`
+	UserAgent      string `yaml:"user_agent"`
 	// When true, respect HTTP 429 Retry-After for retries (chunked and single fallback)
-	RetryOnRateLimit          bool   `yaml:"retry_on_rate_limit"`
+	RetryOnRateLimit bool `yaml:"retry_on_rate_limit"`
 	// Cap the wait derived from Retry-After to avoid excessively long sleeps (seconds)
-	RateLimitMaxDelaySeconds  int    `yaml:"rate_limit_max_delay_seconds"`
+	RateLimitMaxDelaySeconds int `yaml:"rate_limit_max_delay_seconds"`
 	// When true, skip the early HEAD/0-0 auth preflight in CLI and TUI v2
-	DisableAuthPreflight      bool   `yaml:"disable_auth_preflight"`
+	DisableAuthPreflight bool `yaml:"disable_auth_preflight"`
 }
 
 type ResolverConf struct {
@@ -79,9 +80,9 @@ type Sources struct {
 }
 
 type SourceWithToken struct {
-	Enabled  bool          `yaml:"enabled"`
-	TokenEnv string        `yaml:"token_env"`
-	Naming   SourceNaming  `yaml:"naming"`
+	Enabled  bool         `yaml:"enabled"`
+	TokenEnv string       `yaml:"token_env"`
+	Naming   SourceNaming `yaml:"naming"`
 }
 
 type SourceNaming struct {

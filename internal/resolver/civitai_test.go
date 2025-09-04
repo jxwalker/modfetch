@@ -45,22 +45,28 @@ func TestCivitAIResolve_ModelLatestAndHeaders(t *testing.T) {
 	// Override base URL for resolver
 	oldBase := civitaiBaseURL
 	civitaiBaseURL = tsURL
-	defer func(){ civitaiBaseURL = oldBase }()
+	defer func() { civitaiBaseURL = oldBase }()
 
 	// Config enabling CivitAI with token env
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "cfg.yml")
-	cfgYaml := []byte("version: 1\n"+
-		"general:\n  data_root: \""+tmp+"/data\"\n  download_root: \""+tmp+"/dl\"\n"+
+	cfgYaml := []byte("version: 1\n" +
+		"general:\n  data_root: \"" + tmp + "/data\"\n  download_root: \"" + tmp + "/dl\"\n" +
 		"sources:\n  civitai:\n    enabled: true\n    token_env: \"CIVITAI_TOKEN\"\n")
-	if err := os.WriteFile(cfgPath, cfgYaml, 0o644); err != nil { t.Fatal(err) }
+	if err := os.WriteFile(cfgPath, cfgYaml, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	_ = os.Setenv("CIVITAI_TOKEN", "XYZ")
 	cfg, err := config.Load(cfgPath)
-	if err != nil { t.Fatalf("config: %v", err) }
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
 
 	// Latest primary
 	res, err := (&CivitAI{}).Resolve(context.Background(), "civitai://model/123", cfg)
-	if err != nil { t.Fatalf("resolve: %v", err) }
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
 	if !strings.HasSuffix(res.URL, "/dl/primary.bin") {
 		t.Fatalf("unexpected url: %s", res.URL)
 	}
@@ -74,7 +80,9 @@ func TestCivitAIResolve_ModelLatestAndHeaders(t *testing.T) {
 
 	// Filter by file name substring
 	res2, err := (&CivitAI{}).Resolve(context.Background(), "civitai://model/123?file=vae", cfg)
-	if err != nil { t.Fatalf("resolve2: %v", err) }
+	if err != nil {
+		t.Fatalf("resolve2: %v", err)
+	}
 	if !strings.HasSuffix(res2.URL, "/dl/vae.bin") {
 		t.Fatalf("unexpected url2: %s", res2.URL)
 	}
@@ -84,7 +92,9 @@ func TestCivitAIResolve_ModelLatestAndHeaders(t *testing.T) {
 
 	// Specific version
 	res3, err := (&CivitAI{}).Resolve(context.Background(), "civitai://model/123?version=12", cfg)
-	if err != nil { t.Fatalf("resolve3: %v", err) }
+	if err != nil {
+		t.Fatalf("resolve3: %v", err)
+	}
 	if !strings.HasSuffix(res3.URL, "/dl/mv.bin") {
 		t.Fatalf("unexpected url3: %s", res3.URL)
 	}
@@ -113,4 +123,3 @@ type respRewriter struct {
 func (rw *respRewriter) Write(b []byte) (int, error) {
 	return rw.ResponseWriter.Write([]byte(strings.ReplaceAll(string(b), tsURLPlaceholder, rw.replace)))
 }
-

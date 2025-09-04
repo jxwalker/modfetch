@@ -67,6 +67,8 @@ type dlDoneMsg struct {
 	err             error
 }
 
+type recoverRowsMsg struct{ rows []state.DownloadRow }
+
 type destSuggestMsg struct {
 	url  string
 	dest string
@@ -180,28 +182,36 @@ type uiState struct {
 }
 
 func New(cfg *config.Config, st *state.DB, version string) tea.Model {
-p := progress.New(progress.WithDefaultGradient(), progress.WithWidth(16))
-	fi := textinput.New(); fi.Placeholder = "filter (url or dest contains)"; fi.CharLimit = 4096
+	p := progress.New(progress.WithDefaultGradient(), progress.WithWidth(16))
+	fi := textinput.New()
+	fi.Placeholder = "filter (url or dest contains)"
+	fi.CharLimit = 4096
 	// compute refresh
 	refresh := time.Second
 	if hz := cfg.UI.RefreshHz; hz > 0 {
-		if hz > 10 { hz = 10 }
+		if hz > 10 {
+			hz = 10
+		}
 		refresh = time.Second / time.Duration(hz)
 	}
-// decide initial column mode
+	// decide initial column mode
 	mode := strings.ToLower(strings.TrimSpace(cfg.UI.ColumnMode))
 	if mode != "dest" && mode != "url" && mode != "host" {
-		if cfg.UI.ShowURL { mode = "url" } else { mode = "dest" }
+		if cfg.UI.ShowURL {
+			mode = "url"
+		} else {
+			mode = "dest"
+		}
 	}
-m := &Model{
+	m := &Model{
 		cfg: cfg, st: st, th: defaultTheme(), activeTab: -1, prog: p, prev: map[string]obs{}, prevStatus: map[string]string{},
-		build: strings.TrimSpace(version),
+		build:   strings.TrimSpace(version),
 		running: map[string]context.CancelFunc{}, selectedKeys: map[string]bool{}, filterInput: fi,
 		rateCache: map[string]float64{}, etaCache: map[string]string{}, totalCache: map[string]int64{}, curBytesCache: map[string]int64{}, rateHist: map[string][]float64{}, hostCache: map[string]string{},
-		retrying: map[string]time.Time{},
-		tickEvery: refresh,
+		retrying:   map[string]time.Time{},
+		tickEvery:  refresh,
 		columnMode: mode,
-		placeType: map[string]string{}, autoPlace: map[string]bool{},
+		placeType:  map[string]string{}, autoPlace: map[string]bool{},
 	}
 	// Apply config.theme if provided (initial preset); UI state may override
 	if name := strings.TrimSpace(cfg.UI.Theme); name != "" {
@@ -218,6 +228,12 @@ m := &Model{
 }
 
 func (m *Model) Init() tea.Cmd {
+	if m.cfg != nil && m.cfg.General.AutoRecoverOnStart {
+		return tea.Batch(
+			tea.Tick(m.tickEvery, func(t time.Time) tea.Msg { return tickMsg(t) }),
+			m.recoverCmd(),
+		)
+	}
 	return tea.Tick(m.tickEvery, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
@@ -239,6 +255,26 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateNormal(msg)
 	case tickMsg:
 		return m, m.refresh()
+	case recoverRowsMsg:
+		// Start downloads for rows that appear to have been running previously
+		rows := msg.rows
+		if len(rows) == 0 {
+			return m, nil
+		}
+		cmds := make([]tea.Cmd, 0, len(rows))
+		now := time.Now()
+		for _, r := range rows {
+			key := keyFor(r)
+			if _, ok := m.running[key]; ok {
+				continue
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			m.running[key] = cancel
+			m.retrying[key] = now
+			cmds = append(cmds, m.startDownloadCmdCtx(ctx, r.URL, r.Dest))
+		}
+		m.addToast(fmt.Sprintf("auto-recover: resumed %d", len(cmds)))
+		return m, tea.Batch(cmds...)
 	case destSuggestMsg:
 		// Update the suggested dest only if the user hasn't edited it since our last suggestion
 		if m.newJob && m.newStep == 4 && strings.TrimSpace(m.newURL) == strings.TrimSpace(msg.url) {
@@ -308,7 +344,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// On success, clear any prior rejection for the host
 		u := strings.ToLower(msg.url)
-	if strings.HasPrefix(u, "hf://") || strings.Contains(u, "huggingface") {
+		if strings.HasPrefix(u, "hf://") || strings.Contains(u, "huggingface") {
 			m.hfRejected = false
 			m.hfRateLimited = false
 		}
@@ -758,6 +794,24 @@ func (m *Model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
+func (m *Model) recoverCmd() tea.Cmd {
+	return func() tea.Msg {
+		rows, err := m.st.ListDownloads()
+		if err != nil {
+			return recoverRowsMsg{rows: nil}
+		}
+		var todo []state.DownloadRow
+		for _, r := range rows {
+			st := strings.ToLower(strings.TrimSpace(r.Status))
+			if st == "running" || st == "hold" {
+				// Skip completed
+				todo = append(todo, r)
+			}
+		}
+		return recoverRowsMsg{rows: todo}
+	}
+}
+
 func (m *Model) refresh() tea.Cmd {
 	// Update token env presence status on each refresh tick
 	m.updateTokenEnvStatus()
@@ -853,6 +907,7 @@ func (m *Model) renderStats() string {
 }
 
 // renderTopLeftHints shows compact key hints in a fixed-size box
+//
 //nolint:unused,deadcode
 func (m *Model) renderTopLeftHints() string {
 	lines := []string{
@@ -948,6 +1003,7 @@ func (m *Model) renderBatchModal() string {
 }
 
 // renderTopRightStats shows aggregate metrics and recent toasts summary
+//
 //nolint:unused,deadcode
 func (m *Model) renderTopRightStats() string {
 	var pending, active, done, failed int
@@ -1074,7 +1130,7 @@ func (m *Model) applySort(in []state.DownloadRow) []state.DownloadRow {
 		cj, tj, rj, _ := m.progressFor(out[j])
 		etaI := etaSeconds(ci, ti, ri)
 		etaJ := etaSeconds(cj, tj, rj)
-	switch m.sortMode {
+		switch m.sortMode {
 		case "speed":
 			return ri > rj
 		case "eta":
@@ -1090,10 +1146,14 @@ func (m *Model) applySort(in []state.DownloadRow) []state.DownloadRow {
 			return etaI < etaJ
 		case "rem":
 			// Sort by remaining bytes ascending (unknown totals last)
-			remI := int64(1<<62)
-			remJ := int64(1<<62)
-			if ti > 0 { remI = ti - ci }
-			if tj > 0 { remJ = tj - cj }
+			remI := int64(1 << 62)
+			remJ := int64(1 << 62)
+			if ti > 0 {
+				remI = ti - ci
+			}
+			if tj > 0 {
+				remJ = tj - cj
+			}
 			if remI == remJ {
 				// Tie-breaker by higher rate
 				return ri > rj
@@ -1124,15 +1184,23 @@ func (m *Model) renderTable() string {
 	}
 	speedLabel := "SPEED"
 	etaLabel := "ETA"
-	if m.sortMode == "speed" { speedLabel = speedLabel + "*" }
-	if m.sortMode == "eta" { etaLabel = etaLabel + "*" }
+	if m.sortMode == "speed" {
+		speedLabel = speedLabel + "*"
+	}
+	if m.sortMode == "eta" {
+		etaLabel = etaLabel + "*"
+	}
 	if m.isCompact() {
 		hdr := m.th.head.Render(fmt.Sprintf("%-1s %-8s %-3s  %-16s  %-4s  %-12s  %-8s  %-s", "S", "STATUS", "RT", "PROG", "PCT", "SRC", etaLabel, lastLabel))
-		if m.sortMode == "rem" { hdr = hdr + "  [sort: remaining]" }
+		if m.sortMode == "rem" {
+			hdr = hdr + "  [sort: remaining]"
+		}
 		sb.WriteString(hdr)
 	} else {
 		hdr := m.th.head.Render(fmt.Sprintf("%-1s %-8s %-3s  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %-s", "S", "STATUS", "RT", "PROG", "PCT", speedLabel, "THR", "SRC", etaLabel, lastLabel))
-		if m.sortMode == "rem" { hdr = hdr + "  [sort: remaining]" }
+		if m.sortMode == "rem" {
+			hdr = hdr + "  [sort: remaining]"
+		}
 		sb.WriteString(hdr)
 	}
 	sb.WriteString("\n")
@@ -1539,7 +1607,7 @@ func (m *Model) immediateDestCandidate(urlStr string) string {
 			if base == "" {
 				base = "download"
 			}
-return filepath.Join(m.cfg.General.DownloadRoot, util.SafeFileName(base))
+			return filepath.Join(m.cfg.General.DownloadRoot, util.SafeFileName(base))
 		}
 	}
 	// HTTP(S)
@@ -1592,7 +1660,7 @@ func (m *Model) suggestDestCmd(urlStr string) tea.Cmd {
 				h := strings.ToLower(u.Hostname())
 				if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/api/download/") {
 					if name := m.headFilename(urlStr); strings.TrimSpace(name) != "" {
-name = util.SafeFileName(name)
+						name = util.SafeFileName(name)
 						d = filepath.Join(m.cfg.General.DownloadRoot, name)
 					}
 				}
@@ -1669,7 +1737,7 @@ func (m *Model) computePlacementSuggestionImmediate(urlStr, atype string) string
 	if strings.TrimSpace(base) == "" {
 		base = "download"
 	}
-return filepath.Join(dirs[0], util.SafeFileName(base))
+	return filepath.Join(dirs[0], util.SafeFileName(base))
 }
 
 func (m *Model) inferExt() string {
@@ -1732,7 +1800,7 @@ func (m *Model) suggestPlacementCmd(urlStr, atype string) tea.Cmd {
 		if strings.TrimSpace(base) == "" {
 			base = "download"
 		}
-d := filepath.Join(dirs[0], util.SafeFileName(base))
+		d := filepath.Join(dirs[0], util.SafeFileName(base))
 		return destSuggestMsg{url: urlStr, dest: d}
 	}
 }
@@ -2104,7 +2172,7 @@ func (m *Model) computeDefaultDest(urlStr string) string {
 		if res, err := resolver.Resolve(ctx, u, m.cfg); err == nil {
 			name := res.SuggestedFilename
 			if strings.TrimSpace(name) == "" {
-			name = util.URLPathBase(res.URL)
+				name = util.URLPathBase(res.URL)
 			}
 			name = util.SafeFileName(name)
 			return filepath.Join(m.cfg.General.DownloadRoot, name)
@@ -2222,7 +2290,6 @@ func (m *Model) importBatchFile(path string) tea.Cmd {
 	m.addToast(fmt.Sprintf("batch: started %d", count))
 	return tea.Batch(cmds...)
 }
-
 
 func (m *Model) startDownloadCmd(urlStr, dest string) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -2391,17 +2458,23 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 				}
 				// If reachable, parse status code for early auth guidance
 				code := 0
-				if sp := strings.Fields(info); len(sp) > 0 { _, _ = fmt.Sscanf(sp[0], "%d", &code) }
+				if sp := strings.Fields(info); len(sp) > 0 {
+					_, _ = fmt.Sscanf(sp[0], "%d", &code)
+				}
 				if code == 401 || code == 403 {
 					host := hostOf(resolved)
 					msg := info
 					if strings.HasSuffix(strings.ToLower(host), "huggingface.co") {
 						env := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv)
-						if env == "" { env = "HF_TOKEN" }
+						if env == "" {
+							env = "HF_TOKEN"
+						}
 						msg = fmt.Sprintf("%s — set %s and ensure repo access/license accepted", info, env)
 					} else if strings.HasSuffix(strings.ToLower(host), "civitai.com") {
 						env := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv)
-						if env == "" { env = "CIVITAI_TOKEN" }
+						if env == "" {
+							env = "CIVITAI_TOKEN"
+						}
 						msg = fmt.Sprintf("%s — set %s and ensure content is accessible", info, env)
 					}
 					_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold", LastError: msg})
@@ -2477,7 +2550,7 @@ func themePresets() []Theme {
 	solar.head = solar.head.Foreground(lipgloss.Color("178"))
 	solar.border = solar.border.BorderForeground(lipgloss.Color("136"))
 	solar.tabActive = solar.tabActive.Foreground(lipgloss.Color("166"))
-	return []Theme{ base, neon, drac, solar }
+	return []Theme{base, neon, drac, solar}
 }
 
 func themeIndexByName(name string) int {

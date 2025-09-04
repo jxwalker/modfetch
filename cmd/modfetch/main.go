@@ -12,8 +12,8 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -216,6 +216,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	summaryJSON := fs.Bool("summary-json", false, "print a JSON summary when a download completes")
 	batchParallel := fs.Int("batch-parallel", 0, "max parallel downloads when using --batch (default: config concurrency per_host_requests)")
 	dryRun := fs.Bool("dry-run", false, "plan only: resolve URL/URI and compute default destination; no download")
+	forceSkip := fs.Bool("force", false, "skip SHA256 verification even if --sha256/--sha256-file is provided")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -237,7 +238,9 @@ func handleDownload(ctx context.Context, args []string) error {
 	}
 	if strings.TrimSpace(*sha) == "" && strings.TrimSpace(*shaFile) != "" {
 		v, perr := parseSHA256FromFile(*shaFile)
-		if perr != nil { return fmt.Errorf("sha256-file: %v", perr) }
+		if perr != nil {
+			return fmt.Errorf("sha256-file: %v", perr)
+		}
 		*sha = v
 	}
 	// quiet forces log level to error unless JSON is requested
@@ -263,32 +266,45 @@ func handleDownload(ctx context.Context, args []string) error {
 		var destMu sync.Mutex
 		reserved := map[string]struct{}{}
 		reserveSpecific := func(p string) bool {
-			destMu.Lock(); defer destMu.Unlock()
-			if _, ok := reserved[p]; ok { return false }
+			destMu.Lock()
+			defer destMu.Unlock()
+			if _, ok := reserved[p]; ok {
+				return false
+			}
 			reserved[p] = struct{}{}
 			return true
 		}
 		reserveUnique := func(dir, base, versionHint string) (string, error) {
-			destMu.Lock(); defer destMu.Unlock()
+			destMu.Lock()
+			defer destMu.Unlock()
 			base = util.SafeFileName(base)
 			ext := filepath.Ext(base)
 			name := strings.TrimSuffix(base, ext)
 			// try plain
 			p := filepath.Join(dir, base)
 			if _, err := os.Stat(p); os.IsNotExist(err) {
-				if _, ok := reserved[p]; !ok { reserved[p] = struct{}{}; return p, nil }
+				if _, ok := reserved[p]; !ok {
+					reserved[p] = struct{}{}
+					return p, nil
+				}
 			}
 			// try version
 			if strings.TrimSpace(versionHint) != "" {
 				cand := filepath.Join(dir, fmt.Sprintf("%s (v%s)%s", name, versionHint, ext))
 				if _, err := os.Stat(cand); os.IsNotExist(err) {
-					if _, ok := reserved[cand]; !ok { reserved[cand] = struct{}{}; return cand, nil }
+					if _, ok := reserved[cand]; !ok {
+						reserved[cand] = struct{}{}
+						return cand, nil
+					}
 				}
 			}
 			for i := 2; ; i++ {
 				cand := filepath.Join(dir, fmt.Sprintf("%s (%d)%s", name, i, ext))
 				if _, err := os.Stat(cand); os.IsNotExist(err) {
-					if _, ok := reserved[cand]; !ok { reserved[cand] = struct{}{}; return cand, nil }
+					if _, ok := reserved[cand]; !ok {
+						reserved[cand] = struct{}{}
+						return cand, nil
+					}
 				}
 			}
 		}
@@ -344,20 +360,33 @@ func handleDownload(ctx context.Context, args []string) error {
 							meta, _ := downloader.ProbeURL(gctx, c, resolvedURL, headers)
 							base := strings.TrimSpace(meta.Filename)
 							if base == "" {
-								if meta.FinalURL != "" { base = util.URLPathBase(meta.FinalURL) } else { base = util.URLPathBase(resolvedURL) }
+								if meta.FinalURL != "" {
+									base = util.URLPathBase(meta.FinalURL)
+								} else {
+									base = util.URLPathBase(resolvedURL)
+								}
 							}
 							p, err := reserveUnique(c.General.DownloadRoot, base, "")
-							if err != nil { return fmt.Errorf("job %d dest reserve: %v", it.idx, err) }
+							if err != nil {
+								return fmt.Errorf("job %d dest reserve: %v", it.idx, err)
+							}
 							destCandidate = p
 						}
 						// If user provided explicit dest, ensure single writer
 						if job.Dest != "" {
 							if ok := reserveSpecific(destCandidate); !ok {
-								logMu.Lock(); log.Warnf("skipping job %d: destination already reserved: %s", it.idx, destCandidate); logMu.Unlock()
+								logMu.Lock()
+								log.Warnf("skipping job %d: destination already reserved: %s", it.idx, destCandidate)
+								logMu.Unlock()
 								continue
 							}
 						}
-						final, sum, err := dl.Download(gctx, resolvedURL, destCandidate, job.SHA256, headers, false)
+						// Allow global --force to skip expected SHA verification even if job specifies one
+						expected := job.SHA256
+						if *forceSkip {
+							expected = ""
+						}
+						final, sum, err := dl.Download(gctx, resolvedURL, destCandidate, expected, headers, false)
 						if err != nil {
 							return fmt.Errorf("job %d download: %w", it.idx, err)
 						}
@@ -554,7 +583,11 @@ func handleDownload(ctx context.Context, args []string) error {
 			}
 		}
 	}
-	final, sum, err := dl.Download(ctx, resolvedURL, destArg, *sha, headers, (*noResume) || c.General.AlwaysNoResume)
+	expected := *sha
+	if *forceSkip {
+		expected = ""
+	}
+	final, sum, err := dl.Download(ctx, resolvedURL, destArg, expected, headers, (*noResume) || c.General.AlwaysNoResume)
 	if stopProg != nil {
 		stopProg()
 	}
@@ -858,27 +891,42 @@ func configOp(args []string, fn func(*config.Config, *logging.Logger) error) err
 // parseSHA256FromFile reads the first 64-hex token from a file (supports .sha256 "hash  filename" format).
 func parseSHA256FromFile(path string) (string, error) {
 	f, err := os.Open(path)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
-		if line == "" || strings.HasPrefix(line, "#") { continue }
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
 		// first token
 		var tok string
 		for i := 0; i < len(line); i++ {
-			if line[i] == ' ' || line[i] == '\t' { tok = line[:i]; break }
+			if line[i] == ' ' || line[i] == '\t' {
+				tok = line[:i]
+				break
+			}
 		}
-		if tok == "" { tok = line }
+		if tok == "" {
+			tok = line
+		}
 		tok = strings.TrimSpace(tok)
-		if len(tok) == 64 && isHex(tok) { return strings.ToLower(tok), nil }
+		if len(tok) == 64 && isHex(tok) {
+			return strings.ToLower(tok), nil
+		}
 	}
-	if err := sc.Err(); err != nil { return "", err }
+	if err := sc.Err(); err != nil {
+		return "", err
+	}
 	return "", fmt.Errorf("no 64-hex SHA256 found in %s", path)
 }
 
 func isHex(s string) bool {
-	if len(s) == 0 { return false }
+	if len(s) == 0 {
+		return false
+	}
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {

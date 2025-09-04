@@ -3,8 +3,8 @@ package logging
 import "testing"
 
 func TestSanitizeURL(t *testing.T) {
-	cases := []struct{
-		in string
+	cases := []struct {
+		in   string
 		want string
 	}{
 		{"https://user:pass@example.com/path?token=secret&x=1#frag", "https://example.com/path"},
@@ -18,4 +18,3 @@ func TestSanitizeURL(t *testing.T) {
 		}
 	}
 }
-

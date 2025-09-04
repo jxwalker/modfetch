@@ -44,7 +44,9 @@ type Logger struct {
 
 func New(level string, jsonOut bool) *Logger {
 	out := io.Writer(os.Stderr)
-	if jsonOut { out = os.Stdout }
+	if jsonOut {
+		out = os.Stdout
+	}
 	return &Logger{min: ParseLevel(level), json: jsonOut, out: out}
 }
 
@@ -56,13 +58,15 @@ func (l *Logger) Warnf(format string, a ...any)  { l.log(Warn, fmt.Sprintf(forma
 func (l *Logger) Errorf(format string, a ...any) { l.log(Error, fmt.Sprintf(format, a...)) }
 
 func (l *Logger) log(level Level, msg string) {
-	if !l.Enabled(level) { return }
+	if !l.Enabled(level) {
+		return
+	}
 	lvl := levelString(level)
 	if l.json {
 		payload := map[string]any{
-			"ts": time.Now().Format(time.RFC3339Nano),
+			"ts":    time.Now().Format(time.RFC3339Nano),
 			"level": lvl,
-			"msg": msg,
+			"msg":   msg,
 		}
 		_ = json.NewEncoder(l.out).Encode(payload)
 		return
@@ -92,10 +96,16 @@ type throttleEntry struct {
 // WarnfThrottled logs a warning at most once per window for a given key.
 // Repeated calls within the window are suppressed and summarized on the next log.
 func (l *Logger) WarnfThrottled(key string, window time.Duration, format string, a ...any) {
-	if l == nil { return }
-	if window <= 0 { window = time.Second }
+	if l == nil {
+		return
+	}
+	if window <= 0 {
+		window = time.Second
+	}
 	l.mu.Lock()
-	if l.throttle == nil { l.throttle = make(map[string]throttleEntry) }
+	if l.throttle == nil {
+		l.throttle = make(map[string]throttleEntry)
+	}
 	e := l.throttle[key]
 	now := time.Now()
 	if now.Before(e.until) {
@@ -115,4 +125,3 @@ func (l *Logger) WarnfThrottled(key string, window time.Duration, format string,
 	}
 	l.log(Warn, msg)
 }
-

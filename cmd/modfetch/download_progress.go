@@ -25,7 +25,10 @@ func startProgressLoop(ctx context.Context, st *state.DB, cfg *config.Config, ur
 
 	go func() {
 		// smoothing window of recent samples (bytes, time)
-		type sample struct{ t time.Time; b int64 }
+		type sample struct {
+			t time.Time
+			b int64
+		}
 		var win []sample
 		var lastNonZeroRate float64
 		var lastNonZeroAt time.Time
@@ -41,14 +44,20 @@ func startProgressLoop(ctx context.Context, st *state.DB, cfg *config.Config, ur
 				status := ""
 				rows, _ = st.ListDownloads()
 				for _, r := range rows {
-					if r.URL == url && r.Dest == dest { total = r.Size; status = r.Status; break }
+					if r.URL == url && r.Dest == dest {
+						total = r.Size
+						status = r.Status
+						break
+					}
 				}
 				// Completed bytes
 				completed := int64(0)
 				chunks, _ := st.ListChunks(url, dest)
 				if len(chunks) > 0 {
 					for _, c := range chunks {
-						if strings.EqualFold(c.Status, "complete") { completed += c.Size }
+						if strings.EqualFold(c.Status, "complete") {
+							completed += c.Size
+						}
 					}
 				} else {
 					// If chunked planning is underway, avoid counting preallocated .part size to prevent 100%→backwards artifacts
@@ -58,9 +67,17 @@ func startProgressLoop(ctx context.Context, st *state.DB, cfg *config.Config, ur
 						// Single: read staged .part size if exists, else final
 						if cfg != nil {
 							pp := stagedPartPath(cfg, url, dest)
-							if fi, err := os.Stat(pp); err == nil { completed = fi.Size() } else if fi, err := os.Stat(dest); err == nil { completed = fi.Size() }
+							if fi, err := os.Stat(pp); err == nil {
+								completed = fi.Size()
+							} else if fi, err := os.Stat(dest); err == nil {
+								completed = fi.Size()
+							}
 						} else {
-							if fi, err := os.Stat(dest+".part"); err == nil { completed = fi.Size() } else if fi, err := os.Stat(dest); err == nil { completed = fi.Size() }
+							if fi, err := os.Stat(dest + ".part"); err == nil {
+								completed = fi.Size()
+							} else if fi, err := os.Stat(dest); err == nil {
+								completed = fi.Size()
+							}
 						}
 					}
 				}
@@ -69,7 +86,9 @@ func startProgressLoop(ctx context.Context, st *state.DB, cfg *config.Config, ur
 				win = append(win, sample{t: now, b: completed})
 				// drop samples older than 5s
 				cut := now.Add(-5 * time.Second)
-				for len(win) > 1 && win[0].t.Before(cut) { win = win[1:] }
+				for len(win) > 1 && win[0].t.Before(cut) {
+					win = win[1:]
+				}
 				// compute smoothed rate
 				var rate float64
 				if len(win) >= 2 {
@@ -79,7 +98,10 @@ func startProgressLoop(ctx context.Context, st *state.DB, cfg *config.Config, ur
 						rate = float64(bytes) / span
 					}
 				}
-				if rate > 0 { lastNonZeroRate = rate; lastNonZeroAt = now }
+				if rate > 0 {
+					lastNonZeroRate = rate
+					lastNonZeroAt = now
+				}
 				// Use last non-zero for brief stalls to avoid flicker
 				if rate <= 0 && time.Since(lastNonZeroAt) < 2*time.Second {
 					rate = lastNonZeroRate
@@ -95,14 +117,21 @@ func startProgressLoop(ctx context.Context, st *state.DB, cfg *config.Config, ur
 				cDone := 0
 				cRun := 0
 				for _, c := range chunks {
-					if strings.EqualFold(c.Status, "complete") { cDone++ }
-					if strings.EqualFold(c.Status, "running") { cRun++ }
+					if strings.EqualFold(c.Status, "complete") {
+						cDone++
+					}
+					if strings.EqualFold(c.Status, "running") {
+						cRun++
+					}
 				}
 				// Fetch retries from downloads row
 				retries := int64(0)
 				rows, _ := st.ListDownloads()
 				for _, r := range rows {
-					if r.URL == url && r.Dest == dest { retries = r.Retries; break }
+					if r.URL == url && r.Dest == dest {
+						retries = r.Retries
+						break
+					}
 				}
 				// Bar
 				bar := renderBar(completed, max64(total, completed), 30)
@@ -129,30 +158,49 @@ func startProgressLoop(ctx context.Context, st *state.DB, cfg *config.Config, ur
 }
 
 func renderBar(completed, total int64, width int) string {
-	if total <= 0 { total = 1 }
+	if total <= 0 {
+		total = 1
+	}
 	ratio := float64(completed) / float64(total)
-	if ratio < 0 { ratio = 0 }
-	if ratio > 1 { ratio = 1 }
+	if ratio < 0 {
+		ratio = 0
+	}
+	if ratio > 1 {
+		ratio = 1
+	}
 	filled := int(ratio * float64(width))
-	if filled > width { filled = width }
+	if filled > width {
+		filled = width
+	}
 	b := strings.Repeat("=", filled)
-	if filled < width { b += ">" + strings.Repeat(" ", width-filled-1) } else if filled == width {
+	if filled < width {
+		b += ">" + strings.Repeat(" ", width-filled-1)
+	} else if filled == width {
 		b = strings.Repeat("=", width)
 	}
 	return "[" + b + "]"
 }
 
 func pct(a, b int64) float64 {
-	if b <= 0 { return 0 }
+	if b <= 0 {
+		return 0
+	}
 	return float64(a) * 100 / float64(b)
 }
 
 func ifnz(v float64, def string) string {
-	if v <= 0 { return def }
+	if v <= 0 {
+		return def
+	}
 	return humanize.Bytes(uint64(v))
 }
 
-func max64(a, b int64) int64 { if a > b { return a }; return b }
+func max64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
+}
 
 // stagedPartPath mirrors downloader.stagePartPath hashing to locate .part for progress
 func stagedPartPath(cfg *config.Config, url, dest string) string {
@@ -170,4 +218,3 @@ func stagedPartPath(cfg *config.Config, url, dest string) string {
 	file := fmt.Sprintf("%s.%s.part", name, key)
 	return filepath.Join(partsDir, file)
 }
-
