@@ -40,7 +40,7 @@ func (db *DB) InitChunksTable() error {
 
 func (db *DB) UpsertChunk(c ChunkRow) error {
 	_, err := db.SQL.Exec(`INSERT INTO chunks(url,dest,idx,start,end,size,sha256,status,updated_at) VALUES(?,?,?,?,?,?,?,?,strftime('%s','now'))
-ON CONFLICT(url,dest,idx) DO UPDATE SET start=excluded.start,end=excluded.end,size=excluded.size,sha256=excluded.sha256,status=excluded.status,updated_at=strftime('%s','now')`,
+ON CONFLICT(url,dest,idx) DO UPDATE SET start=excluded.start,end=excluded.end,size=excluded.size,sha256=COALESCE(NULLIF(excluded.sha256, ''), chunks.sha256),status=excluded.status,updated_at=strftime('%s','now')`,
 		c.URL, c.Dest, c.Index, c.Start, c.End, c.Size, c.SHA256, c.Status)
 	return err
 }
@@ -48,7 +48,7 @@ ON CONFLICT(url,dest,idx) DO UPDATE SET start=excluded.start,end=excluded.end,si
 // Tx variants for grouping operations atomically
 func (db *DB) UpsertChunkTx(tx *sql.Tx, c ChunkRow) error {
 	_, err := tx.Exec(`INSERT INTO chunks(url,dest,idx,start,end,size,sha256,status,updated_at) VALUES(?,?,?,?,?,?,?,?,strftime('%s','now'))
-ON CONFLICT(url,dest,idx) DO UPDATE SET start=excluded.start,end=excluded.end,size=excluded.size,sha256=excluded.sha256,status=excluded.status,updated_at=strftime('%s','now')`,
+ON CONFLICT(url,dest,idx) DO UPDATE SET start=excluded.start,end=excluded.end,size=excluded.size,sha256=COALESCE(NULLIF(excluded.sha256, ''), chunks.sha256),status=excluded.status,updated_at=strftime('%s','now')`,
 		c.URL, c.Dest, c.Index, c.Start, c.End, c.Size, c.SHA256, c.Status)
 	return err
 }

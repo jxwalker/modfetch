@@ -43,13 +43,14 @@ func parseRetryAfter(raw string) time.Duration {
 
 func friendlyHTTPStatusMessage(cfg *config.Config, host string, statusCode int, status string, hadAuth bool) string {
 	h := strings.ToLower(strings.TrimSpace(host))
-	hfEnv := strings.TrimSpace(cfg.Sources.HuggingFace.TokenEnv)
-	if hfEnv == "" {
-		hfEnv = "HF_TOKEN"
-	}
-	civEnv := strings.TrimSpace(cfg.Sources.CivitAI.TokenEnv)
-	if civEnv == "" {
-		civEnv = "CIVITAI_TOKEN"
+	hfEnv, civEnv := "HF_TOKEN", "CIVITAI_TOKEN"
+	if cfg != nil {
+		if v := strings.TrimSpace(cfg.Sources.HuggingFace.TokenEnv); v != "" {
+			hfEnv = v
+		}
+		if v := strings.TrimSpace(cfg.Sources.CivitAI.TokenEnv); v != "" {
+			civEnv = v
+		}
 	}
 
 	mk := func(base string) string {

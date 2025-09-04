@@ -3,6 +3,7 @@ package util
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -19,6 +20,26 @@ func TestSafeFileName(t *testing.T) {
 		if got != want {
 			t.Fatalf("SafeFileName(%q)=%q want %q", in, got, want)
 		}
+	}
+}
+
+func TestUniquePath_VersionHintSanitized(t *testing.T) {
+	d := t.TempDir()
+	base := "file.bin"
+	// occupy base so hint path is tried
+	p1, _ := UniquePath(d, base, "")
+	_ = os.WriteFile(p1, []byte("x"), 0o644)
+
+	p2, err := UniquePath(d, base, "../v12/../../evil")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := filepath.Base(p2)
+	if strings.Contains(b, "/") || strings.Contains(b, "\\") {
+		t.Fatalf("versionHint not sanitized in filename: %q", b)
+	}
+	if !strings.Contains(b, "v12") && !strings.Contains(b, "evil") {
+		t.Fatalf("expected sanitized hint to be present in name: %q", b)
 	}
 }
 

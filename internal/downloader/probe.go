@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"modfetch/internal/config"
@@ -48,10 +50,12 @@ func ProbeURL(ctx context.Context, cfg *config.Config, rawURL string, headers ma
 			}
 		}
 		if clh := resp.Header.Get("Content-Length"); clh != "" {
-			_, _ = fmt.Sscan(clh, &meta.Size)
+			if n, err := strconv.ParseInt(strings.TrimSpace(clh), 10, 64); err == nil && n >= 0 {
+				meta.Size = n
+			}
 		}
 		meta.AcceptRange = false
-		if ar := resp.Header.Get("Accept-Ranges"); ar != "" {
+		if ar := resp.Header.Get("Accept-Ranges"); strings.EqualFold(strings.TrimSpace(ar), "bytes") {
 			meta.AcceptRange = true
 		}
 	}

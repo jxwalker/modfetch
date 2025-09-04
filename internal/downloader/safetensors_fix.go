@@ -38,11 +38,11 @@ func adjustSafetensors(path string, log *logging.Logger) (bool, error) {
 	if err := binary.Read(f, binary.LittleEndian, &hdrLen); err != nil {
 		return false, err
 	}
-	if hdrLen == 0 || hdrLen > uint64(fi.Size()) {
+	if hdrLen == 0 || hdrLen > uint64(fi.Size()-8) || hdrLen > 64*1024*1024 {
 		return false, fmt.Errorf("safetensors: invalid header len %d", hdrLen)
 	}
 	hdr := make([]byte, hdrLen)
-	if _, err := f.Read(hdr); err != nil {
+	if _, err := io.ReadFull(f, hdr); err != nil {
 		return false, err
 	}
 	var meta map[string]any

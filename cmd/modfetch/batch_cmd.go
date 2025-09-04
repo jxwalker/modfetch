@@ -214,7 +214,8 @@ func handleBatchImport(ctx context.Context, args []string) error {
 						name = util.SafeFileName(name2)
 					}
 				}
-				if p, err := util.UniquePath(root, name, res.VersionID); err == nil {
+				vHint := util.SafeFileName(strings.TrimSpace(res.VersionID))
+				if p, err := util.UniquePath(root, name, vHint); err == nil {
 					jDest = p
 				}
 			}

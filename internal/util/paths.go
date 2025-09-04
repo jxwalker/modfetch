@@ -76,6 +76,10 @@ func URLPathBase(u string) string {
 // " (2)", " (3)", etc., before the extension.
 func UniquePath(dir, base, versionHint string) (string, error) {
 	base = SafeFileName(base)
+	vh := strings.TrimSpace(versionHint)
+	if vh != "" {
+		versionHint = SafeFileName(vh)
+	}
 	ext := filepath.Ext(base)
 	name := strings.TrimSuffix(base, ext)
 	path := filepath.Join(dir, base)

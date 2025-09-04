@@ -494,6 +494,9 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 				if maxb <= 0 {
 					maxb = 30000
 				}
+				if maxb < min {
+					maxb = min
+				}
 				wait = time.Duration(min)*time.Millisecond + time.Duration(rand.Intn(maxb-min+1))*time.Millisecond
 			}
 			// Log and set DB status to hold while sleeping due to rate limiting
@@ -518,6 +521,9 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 		maxb := b.MaxMS
 		if maxb <= 0 {
 			maxb = 30000
+		}
+		if maxb < min {
+			maxb = min
 		}
 		dur := time.Duration(min)*time.Millisecond + time.Duration(rand.Intn(maxb-min+1))*time.Millisecond
 		select {
@@ -680,6 +686,9 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 		maxb := b.MaxMS
 		if maxb <= 0 {
 			maxb = 30000
+		}
+		if maxb < min {
+			maxb = min
 		}
 		dur := time.Duration(min)*time.Millisecond + time.Duration(rand.Intn(maxb-min+1))*time.Millisecond
 		select {
