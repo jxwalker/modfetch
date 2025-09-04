@@ -17,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"database/sql"
+
 	"modfetch/internal/config"
 	"modfetch/internal/logging"
 	"modfetch/internal/state"
@@ -223,17 +225,23 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 			chunkSize = 8 * 1024 * 1024
 		}
 		var idx int
-		for start := int64(0); start < h.size; start += chunkSize {
-			end := start + chunkSize - 1
-			if end >= h.size {
-				end = h.size - 1
+		// Group initial chunk plan into a single transaction for consistency
+		if err := e.st.WithTx(func(tx *sql.Tx) error {
+			for start := int64(0); start < h.size; start += chunkSize {
+				end := start + chunkSize - 1
+				if end >= h.size {
+					end = h.size - 1
+				}
+				sz := end - start + 1
+				cr := state.ChunkRow{URL: url, Dest: destPath, Index: idx, Start: start, End: end, Size: sz, Status: "pending"}
+				if err := e.st.UpsertChunkTx(tx, cr); err != nil {
+					return err
+				}
+				idx++
 			}
-			sz := end - start + 1
-			cr := state.ChunkRow{URL: url, Dest: destPath, Index: idx, Start: start, End: end, Size: sz, Status: "pending"}
-			if err := e.st.UpsertChunk(cr); err != nil {
-				return "", "", err
-			}
-			idx++
+			return nil
+		}); err != nil {
+			return "", "", err
 		}
 		chunks, err = e.st.ListChunks(url, destPath)
 		if err != nil {
@@ -425,17 +433,11 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	}
 	// Recompute SHA after any adjustment
 	{
-		ff, err := os.Open(destPath)
+		sha2, err := util.HashFileSHA256(destPath)
 		if err != nil {
 			return "", "", err
 		}
-		h := sha256.New()
-		if _, err := io.Copy(h, ff); err != nil {
-			_ = ff.Close()
-			return "", "", err
-		}
-		_ = ff.Close()
-		finalSHA = hex.EncodeToString(h.Sum(nil))
+		finalSHA = sha2
 	}
 	if err := writeAndSync(destPath+".sha256", []byte(finalSHA+"  "+filepath.Base(destPath)+"\n")); err != nil {
 		return "", "", err
@@ -477,15 +479,21 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 		if rle, ok := err.(rateLimitedError); ok && e.cfg.Network.RetryOnRateLimit {
 			wait := rle.after
 			capSec := e.cfg.Network.RateLimitMaxDelaySeconds
-			if capSec <= 0 { capSec = 600 }
+			if capSec <= 0 {
+				capSec = 600
+			}
 			capDur := time.Duration(capSec) * time.Second
 			if wait <= 0 || wait > capDur {
 				// fall back to normal backoff if header missing or too large
 				b := e.cfg.Concurrency.Backoff
 				min := b.MinMS
-				if min <= 0 { min = 200 }
+				if min <= 0 {
+					min = 200
+				}
 				maxb := b.MaxMS
-				if maxb <= 0 { maxb = 30000 }
+				if maxb <= 0 {
+					maxb = 30000
+				}
 				wait = time.Duration(min)*time.Millisecond + time.Duration(rand.Intn(maxb-min+1))*time.Millisecond
 			}
 			// Log and set DB status to hold while sleeping due to rate limiting
@@ -543,7 +551,7 @@ func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *
 	defer func() { _ = resp.Body.Close() }()
 	// Require 206 for partial ranges; allow 200 only if the requested range is the entire file
 	if resp.StatusCode == http.StatusOK {
-	if c.Start != 0 || c.End != h.size-1 {
+		if c.Start != 0 || c.End != h.size-1 {
 			return "", fmt.Errorf("chunk %d: server ignored Range; got 200 for partial request", c.Index)
 		}
 	} else if resp.StatusCode != http.StatusPartialContent {
@@ -552,7 +560,9 @@ func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *
 			retry := strings.TrimSpace(resp.Header.Get("Retry-After"))
 			dur := parseRetryAfter(retry)
 			retryMsg := ""
-			if retry != "" { retryMsg = "; retry-after=" + retry }
+			if retry != "" {
+				retryMsg = "; retry-after=" + retry
+			}
 			host := hostFromURL(req.URL.String())
 			return "", rateLimitedError{after: dur, msg: fmt.Sprintf("chunk %d: 429 Too Many Requests: rate limited by %s%s", c.Index, host, retryMsg)}
 		}
@@ -644,7 +654,9 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 		if rle, ok := err.(rateLimitedError); ok && e.cfg.Network.RetryOnRateLimit {
 			wait := rle.after
 			capSec := e.cfg.Network.RateLimitMaxDelaySeconds
-			if capSec <= 0 { capSec = 600 }
+			if capSec <= 0 {
+				capSec = 600
+			}
 			capDur := time.Duration(capSec) * time.Second
 			if wait > 0 && wait <= capDur {
 				secs := int(wait.Seconds() + 0.5)

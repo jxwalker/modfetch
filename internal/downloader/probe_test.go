@@ -50,4 +50,3 @@ func TestCheckReachable_NetworkError(t *testing.T) {
 		t.Fatalf("expected error string, got empty")
 	}
 }
-

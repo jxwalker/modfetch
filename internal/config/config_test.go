@@ -15,4 +15,3 @@ func TestLoadSampleConfig(t *testing.T) {
 		t.Fatalf("expected non-empty general paths")
 	}
 }
-

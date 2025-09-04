@@ -211,6 +211,7 @@ Troubleshooting
 - Resume: Re‑running the same download will resume and verify integrity.
 
 Roadmap
+- See docs/ROADMAP.md for the consolidated, prioritized roadmap
 - Further TUI enhancements
 - Placement/classifier refinements and presets
 - Release packaging for more distros

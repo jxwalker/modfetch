@@ -15,7 +15,9 @@ import (
 // separators. Falls back to "download" when empty after cleaning.
 func SafeFileName(name string) string {
 	name = strings.TrimSpace(name)
-	if name == "" { return "download" }
+	if name == "" {
+		return "download"
+	}
 	// Preserve extension while cleaning base
 	ext := filepath.Ext(name)
 	base := strings.TrimSuffix(name, ext)
@@ -35,7 +37,9 @@ func SafeFileName(name string) string {
 	}
 	clean := b.String()
 	clean = strings.Trim(clean, "-.")
-	if clean == "" { clean = "download" }
+	if clean == "" {
+		clean = "download"
+	}
 	return clean + ext
 }
 
@@ -43,11 +47,15 @@ func SafeFileName(name string) string {
 // If parsing fails or the path is empty, it falls back to a reasonable default ("download").
 func URLPathBase(u string) string {
 	s := strings.TrimSpace(u)
-	if s == "" { return "download" }
+	if s == "" {
+		return "download"
+	}
 	if pu, err := url.Parse(s); err == nil && pu != nil {
 		p := pu.Path
 		b := pathpkg.Base(p)
-		if b != "" && b != "/" && b != "." { return b }
+		if b != "" && b != "/" && b != "." {
+			return b
+		}
 		// URL parsed but had no usable path segment
 		return "download"
 	}
@@ -56,7 +64,9 @@ func URLPathBase(u string) string {
 		s = s[:i]
 	}
 	b := filepath.Base(s)
-	if b == "" || b == "/" || b == "." { return "download" }
+	if b == "" || b == "/" || b == "." {
+		return "download"
+	}
 	return b
 }
 
@@ -70,15 +80,21 @@ func UniquePath(dir, base, versionHint string) (string, error) {
 	name := strings.TrimSuffix(base, ext)
 	path := filepath.Join(dir, base)
 	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) { return path, nil }
+		if os.IsNotExist(err) {
+			return path, nil
+		}
 		return "", err
 	}
 	if strings.TrimSpace(versionHint) != "" {
 		cand := filepath.Join(dir, fmt.Sprintf("%s (v%s)%s", name, versionHint, ext))
-		if _, err := os.Stat(cand); os.IsNotExist(err) { return cand, nil }
+		if _, err := os.Stat(cand); os.IsNotExist(err) {
+			return cand, nil
+		}
 	}
 	for i := 2; ; i++ {
 		cand := filepath.Join(dir, fmt.Sprintf("%s (%d)%s", name, i, ext))
-		if _, err := os.Stat(cand); os.IsNotExist(err) { return cand, nil }
+		if _, err := os.Stat(cand); os.IsNotExist(err) {
+			return cand, nil
+		}
 	}
 }

@@ -24,4 +24,3 @@ func TestExpandPattern(t *testing.T) {
 		t.Fatalf("expected empty for empty pattern")
 	}
 }
-

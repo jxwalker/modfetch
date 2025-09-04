@@ -21,6 +21,28 @@ type DB struct {
 	stmtListDownloads      *sql.Stmt
 }
 
+// WithTx executes fn inside a transaction. If fn returns an error, the transaction is rolled back.
+func (db *DB) WithTx(fn func(tx *sql.Tx) error) error {
+	if db == nil || db.SQL == nil {
+		return errors.New("nil db")
+	}
+	tx, err := db.SQL.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		}
+	}()
+	if err := fn(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
 func Open(cfg *config.Config) (*DB, error) {
 	if cfg == nil {
 		return nil, errors.New("nil config")
@@ -118,7 +140,9 @@ func (db *DB) prepareStatements() error {
 // UpdateDownloadStatus updates only status and last_error, preserving other fields.
 func (db *DB) UpdateDownloadStatus(url, dest, status, lastError string) error {
 	res, err := db.SQL.Exec(`UPDATE downloads SET status=?, last_error=?, updated_at=strftime('%s','now') WHERE url=? AND dest=?`, status, lastError, url, dest)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return sql.ErrNoRows
 	}

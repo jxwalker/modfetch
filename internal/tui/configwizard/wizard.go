@@ -34,9 +34,15 @@ func New(defaults *config.Config) *Wizard {
 	dd := "~/modfetch/downloads"
 	pm := "symlink"
 	if defaults != nil {
-		if defaults.General.DataRoot != "" { dr = defaults.General.DataRoot }
-		if defaults.General.DownloadRoot != "" { dd = defaults.General.DownloadRoot }
-		if defaults.General.PlacementMode != "" { pm = defaults.General.PlacementMode }
+		if defaults.General.DataRoot != "" {
+			dr = defaults.General.DataRoot
+		}
+		if defaults.General.DownloadRoot != "" {
+			dd = defaults.General.DownloadRoot
+		}
+		if defaults.General.PlacementMode != "" {
+			pm = defaults.General.PlacementMode
+		}
 	}
 	fields = append(fields, mk("general.data_root", dr))
 	fields = append(fields, mk("general.download_root", dd))
@@ -48,10 +54,22 @@ func New(defaults *config.Config) *Wizard {
 	cvEn := "true"
 	cvTok := "CIVITAI_TOKEN"
 	if defaults != nil {
-		if defaults.Sources.HuggingFace.Enabled { hfEn = "true" } else { hfEn = "false" }
-		if defaults.Sources.HuggingFace.TokenEnv != "" { hfTok = defaults.Sources.HuggingFace.TokenEnv }
-		if defaults.Sources.CivitAI.Enabled { cvEn = "true" } else { cvEn = "false" }
-		if defaults.Sources.CivitAI.TokenEnv != "" { cvTok = defaults.Sources.CivitAI.TokenEnv }
+		if defaults.Sources.HuggingFace.Enabled {
+			hfEn = "true"
+		} else {
+			hfEn = "false"
+		}
+		if defaults.Sources.HuggingFace.TokenEnv != "" {
+			hfTok = defaults.Sources.HuggingFace.TokenEnv
+		}
+		if defaults.Sources.CivitAI.Enabled {
+			cvEn = "true"
+		} else {
+			cvEn = "false"
+		}
+		if defaults.Sources.CivitAI.TokenEnv != "" {
+			cvTok = defaults.Sources.CivitAI.TokenEnv
+		}
 	}
 	fields = append(fields, mk("sources.huggingface.enabled (true|false)", hfEn))
 	fields = append(fields, mk("sources.huggingface.token_env", hfTok))
@@ -61,8 +79,12 @@ func New(defaults *config.Config) *Wizard {
 	csm := 8
 	pfc := 4
 	if defaults != nil {
-		if defaults.Concurrency.ChunkSizeMB > 0 { csm = defaults.Concurrency.ChunkSizeMB }
-		if defaults.Concurrency.PerFileChunks > 0 { pfc = defaults.Concurrency.PerFileChunks }
+		if defaults.Concurrency.ChunkSizeMB > 0 {
+			csm = defaults.Concurrency.ChunkSizeMB
+		}
+		if defaults.Concurrency.PerFileChunks > 0 {
+			pfc = defaults.Concurrency.PerFileChunks
+		}
 	}
 	fields = append(fields, mk("concurrency.chunk_size_mb", fmt.Sprint(csm)))
 	fields = append(fields, mk("concurrency.per_file_chunks", fmt.Sprint(pfc)))
@@ -92,16 +114,30 @@ func (w *Wizard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			if m.String() == "up" || m.String() == "shift+tab" {
-				w.focus--; if w.focus < 0 { w.focus = 0 }
+				w.focus--
+				if w.focus < 0 {
+					w.focus = 0
+				}
 			} else {
-				w.focus++; if w.focus >= len(w.inputs) { w.focus = len(w.inputs)-1 }
+				w.focus++
+				if w.focus >= len(w.inputs) {
+					w.focus = len(w.inputs) - 1
+				}
 			}
-			for j := range w.inputs { if j == w.focus { w.inputs[j].Focus() } else { w.inputs[j].Blur() } }
+			for j := range w.inputs {
+				if j == w.focus {
+					w.inputs[j].Focus()
+				} else {
+					w.inputs[j].Blur()
+				}
+			}
 		}
 	}
 	// Update all inputs
 	cmds := make([]tea.Cmd, len(w.inputs))
-	for i := range w.inputs { w.inputs[i], cmds[i] = w.inputs[i].Update(msg) }
+	for i := range w.inputs {
+		w.inputs[i], cmds[i] = w.inputs[i].Update(msg)
+	}
 	return w, tea.Batch(cmds...)
 }
 
@@ -122,7 +158,9 @@ func (w *Wizard) View() string {
 	}
 	for i, input := range w.inputs {
 		marker := " "
-		if i == w.focus { marker = ">" }
+		if i == w.focus {
+			marker = ">"
+		}
 		b.WriteString(fmt.Sprintf("%s %-32s %s\n", marker, labels[i]+":", input.View()))
 	}
 	if w.done {
@@ -133,13 +171,22 @@ func (w *Wizard) View() string {
 
 func (w *Wizard) buildConfig() *config.Config {
 	get := func(i int) string { return strings.TrimSpace(w.inputs[i].Value()) }
-	parseBool := func(s string) bool { return strings.EqualFold(s, "true") || s == "1" || strings.EqualFold(s, "y") || strings.EqualFold(s, "yes") }
-	parseInt := func(s string, def int) int { if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && n >= 0 { return n }; return def }
+	parseBool := func(s string) bool {
+		return strings.EqualFold(s, "true") || s == "1" || strings.EqualFold(s, "y") || strings.EqualFold(s, "yes")
+	}
+	parseInt := func(s string, def int) int {
+		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && n >= 0 {
+			return n
+		}
+		return def
+	}
 	o := &config.Config{Version: 1}
 	o.General.DataRoot = get(0)
 	o.General.DownloadRoot = get(1)
 	pm := strings.ToLower(get(2))
-	if pm != "symlink" && pm != "hardlink" && pm != "copy" { pm = "symlink" }
+	if pm != "symlink" && pm != "hardlink" && pm != "copy" {
+		pm = "symlink"
+	}
 	o.General.PlacementMode = pm
 	o.Sources.HuggingFace.Enabled = parseBool(get(3))
 	o.Sources.HuggingFace.TokenEnv = get(4)
@@ -151,4 +198,3 @@ func (w *Wizard) buildConfig() *config.Config {
 }
 
 func (w *Wizard) Config() *config.Config { return w.out }
-

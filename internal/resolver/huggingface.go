@@ -15,12 +15,16 @@ import (
 type HuggingFace struct{}
 
 // Accepts URIs of the form:
-//   hf://{owner}/{repo}/{path}?rev=main
+//
+//	hf://{owner}/{repo}/{path}?rev=main
+//
 // If rev is omitted, defaults to "main".
 func (h *HuggingFace) CanHandle(u string) bool { return strings.HasPrefix(u, "hf://") }
 
 func (h *HuggingFace) Resolve(ctx context.Context, uri string, cfg *config.Config) (*Resolved, error) {
-	if !h.CanHandle(uri) { return nil, errors.New("unsupported scheme") }
+	if !h.CanHandle(uri) {
+		return nil, errors.New("unsupported scheme")
+	}
 	s := strings.TrimPrefix(uri, "hf://")
 	// Split off query
 	var rawPath, rawQuery string
@@ -48,11 +52,15 @@ func (h *HuggingFace) Resolve(ctx context.Context, uri string, cfg *config.Confi
 	rev := "main"
 	if rawQuery != "" {
 		q, _ := url.ParseQuery(rawQuery)
-		if v := q.Get("rev"); v != "" { rev = v }
+		if v := q.Get("rev"); v != "" {
+			rev = v
+		}
 	}
 	// Construct resolve URL
 	repoID := repo
-	if strings.TrimSpace(owner) != "" { repoID = owner + "/" + repo }
+	if strings.TrimSpace(owner) != "" {
+		repoID = owner + "/" + repo
+	}
 	base := "https://huggingface.co/" + repoID
 	resURL := base + "/resolve/" + url.PathEscape(rev) + "/" + strings.ReplaceAll(filePath, "+", "%2B")
 
@@ -78,7 +86,9 @@ func (h *HuggingFace) Resolve(ctx context.Context, uri string, cfg *config.Confi
 			"file_name": fileName,
 		}
 		suggested = util.SafeFileName(util.ExpandPattern(pat, tokens))
-		if strings.TrimSpace(suggested) == "" { suggested = "" }
+		if strings.TrimSpace(suggested) == "" {
+			suggested = ""
+		}
 	}
 	if suggested == "" {
 		suggested = util.SafeFileName(fileName)
@@ -88,4 +98,3 @@ func (h *HuggingFace) Resolve(ctx context.Context, uri string, cfg *config.Confi
 
 // getenv split to enable testing
 var getenv = os.Getenv
-

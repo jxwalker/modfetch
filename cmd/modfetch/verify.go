@@ -73,11 +73,11 @@ func handleVerify(ctx context.Context, args []string) error {
 
 	report := map[string]any{}
 	verifyOne := func(row state.DownloadRow) error {
-	f, err := os.Open(row.Dest)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
+		f, err := os.Open(row.Dest)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = f.Close() }()
 		h := sha256.New()
 		if _, err := io.Copy(h, f); err != nil {
 			return err

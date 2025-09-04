@@ -18,6 +18,7 @@ import (
 	"modfetch/internal/config"
 	"modfetch/internal/logging"
 	"modfetch/internal/state"
+	"modfetch/internal/util"
 )
 
 // local helper to probe size and range via GET bytes=0-0
@@ -200,7 +201,9 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 				retryMsg = "; retry-after=" + retry
 			}
 			host := ""
-			if u, _ := neturl.Parse(url); u != nil { host = strings.ToLower(u.Hostname()) }
+			if u, _ := neturl.Parse(url); u != nil {
+				host = strings.ToLower(u.Hostname())
+			}
 			msg := fmt.Sprintf("429 Too Many Requests: rate limited by %s%s", host, retryMsg)
 			_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "hold", LastError: msg})
 			return "", "", rateLimitedError{after: dur, msg: msg}
@@ -298,17 +301,11 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	}
 	// Recompute SHA after any adjustment
 	{
-		ff, err := os.Open(destPath)
+		sha2, err := util.HashFileSHA256(destPath)
 		if err != nil {
 			return "", "", err
 		}
-		h := sha256.New()
-		if _, err := io.Copy(h, ff); err != nil {
-			_ = ff.Close()
-			return "", "", err
-		}
-		_ = ff.Close()
-		actualSHA = hex.EncodeToString(h.Sum(nil))
+		actualSHA = sha2
 	}
 	// Write checksum file (durable)
 	if err := writeAndSync(destPath+".sha256", []byte(actualSHA+"  "+filepath.Base(destPath)+"\n")); err != nil {

@@ -39,12 +39,18 @@ func TestSingle_429RateLimited_HoldWithRetryAfter(t *testing.T) {
 		"  data_root: \"" + tmp + "/data\"",
 		"  download_root: \"" + tmp + "/dl\"",
 	}, "\n"))
-	if err := os.WriteFile(cfgPath, cfgYaml, 0o644); err != nil { t.Fatal(err) }
+	if err := os.WriteFile(cfgPath, cfgYaml, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	cfg, err := config.Load(cfgPath)
-	if err != nil { t.Fatalf("config: %v", err) }
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
 	log := logging.New("info", false)
 	st, err := state.Open(cfg)
-	if err != nil { t.Fatalf("state: %v", err) }
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
 	defer func() { _ = st.SQL.Close() }()
 
 	dl := NewSingle(cfg, log, st, nil)
@@ -53,7 +59,9 @@ func TestSingle_429RateLimited_HoldWithRetryAfter(t *testing.T) {
 		t.Fatalf("expected error on 429 rate limited")
 	}
 	rows, err := st.ListDownloads()
-	if err != nil { t.Fatalf("list: %v", err) }
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
 	found := false
 	for _, r := range rows {
 		if r.URL == url {
@@ -75,4 +83,3 @@ func TestSingle_429RateLimited_HoldWithRetryAfter(t *testing.T) {
 		t.Fatalf("expected a downloads row for %s", url)
 	}
 }
-

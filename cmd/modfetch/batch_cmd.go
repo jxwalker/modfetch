@@ -210,9 +210,13 @@ func handleBatchImport(ctx context.Context, args []string) error {
 						"rev":          res.Rev,
 					}
 					name2 := util.ExpandPattern(*namingPattern, toks)
-					if strings.TrimSpace(name2) != "" { name = util.SafeFileName(name2) }
+					if strings.TrimSpace(name2) != "" {
+						name = util.SafeFileName(name2)
+					}
 				}
-				if p, err := util.UniquePath(root, name, res.VersionID); err == nil { jDest = p }
+				if p, err := util.UniquePath(root, name, res.VersionID); err == nil {
+					jDest = p
+				}
 			}
 		} else {
 			// Attach auth headers for known hosts (direct URLs)

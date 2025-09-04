@@ -15,7 +15,9 @@ import (
 
 func newHTTPClient(cfg *config.Config) *http.Client {
 	timeout := time.Duration(cfg.Network.TimeoutSeconds) * time.Second
-	if timeout <= 0 { timeout = 60 * time.Second }
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
 	tr := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
@@ -34,14 +36,24 @@ func newHTTPClient(cfg *config.Config) *http.Client {
 	client := &http.Client{Transport: tr, Timeout: timeout}
 	// Preserve important headers across redirects (Range, If-Range, UA). Avoid leaking Authorization across hosts.
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if len(via) == 0 { return nil }
+		if len(via) == 0 {
+			return nil
+		}
 		prev := via[len(via)-1]
-		if ua := prev.Header.Get("User-Agent"); ua != "" { req.Header.Set("User-Agent", ua) }
-		if rng := prev.Header.Get("Range"); rng != "" { req.Header.Set("Range", rng) }
-		if ir := prev.Header.Get("If-Range"); ir != "" { req.Header.Set("If-Range", ir) }
+		if ua := prev.Header.Get("User-Agent"); ua != "" {
+			req.Header.Set("User-Agent", ua)
+		}
+		if rng := prev.Header.Get("Range"); rng != "" {
+			req.Header.Set("Range", rng)
+		}
+		if ir := prev.Header.Get("If-Range"); ir != "" {
+			req.Header.Set("If-Range", ir)
+		}
 		// Only forward Authorization when host is the same
 		if prev.URL != nil && req.URL != nil && strings.EqualFold(prev.URL.Host, req.URL.Host) {
-			if auth := prev.Header.Get("Authorization"); auth != "" { req.Header.Set("Authorization", auth) }
+			if auth := prev.Header.Get("Authorization"); auth != "" {
+				req.Header.Set("Authorization", auth)
+			}
 		}
 		return nil
 	}
@@ -74,20 +86,31 @@ func resolveRedirectURL(baseClient *http.Client, rawURL string, headers map[stri
 	cl.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
 	req, _ := http.NewRequest(http.MethodGet, rawURL, nil)
 	req.Header.Set("User-Agent", ua)
-	for k, v := range headers { req.Header.Set(k, v) }
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := cl.Do(req)
-	if err != nil { return "", false }
+	if err != nil {
+		return "", false
+	}
 	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 300 || resp.StatusCode >= 400 { return "", false }
+	if resp.StatusCode < 300 || resp.StatusCode >= 400 {
+		return "", false
+	}
 	loc := resp.Header.Get("Location")
-	if loc == "" { return "", false }
+	if loc == "" {
+		return "", false
+	}
 	u, err := neturl.Parse(loc)
-	if err != nil { return "", false }
+	if err != nil {
+		return "", false
+	}
 	if !u.IsAbs() {
 		base, err := neturl.Parse(rawURL)
-		if err != nil { return "", false }
+		if err != nil {
+			return "", false
+		}
 		u = base.ResolveReference(u)
 	}
 	return u.String(), true
 }
-

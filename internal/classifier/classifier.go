@@ -77,7 +77,7 @@ func detectMagic(p string) string {
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return ""
 	}
-	if n >= 4 && (buf[0] == 'G' && buf[1] == 'G' && buf[2] == 'U' && buf[3] == 'F' || 
+	if n >= 4 && (buf[0] == 'G' && buf[1] == 'G' && buf[2] == 'U' && buf[3] == 'F' ||
 		strings.EqualFold(string(buf[:4]), "GGUF")) {
 		return "llm.gguf"
 	}
