@@ -15,6 +15,18 @@ Highlights
 
 Status: MVP feature‑complete for resolvers and downloads; ongoing polish in TUI and docs.
 
+What's new in v0.4.0
+- TUI auto-recovery: resume downloads with status running or hold on startup (enable via `ui.auto_recover_on_start` in config)
+- Downloader core: transactional initial chunk planning; robust 429 handling that temporarily sets status=hold with Retry-After; unified final SHA via streaming utilities
+- HTTP probing: stricter Content-Length parsing, Accept-Ranges requires "bytes", and a final-URL HEAD fallback for better filename/size detection
+- Safetensors: stronger header bounds checks, full reads with io.ReadFull, and end<=dataLen validation; truncate trailing bytes safely when present
+- State DB: preserve existing chunk sha256 on upsert unless a non-empty value is provided; WithTx helpers for atomic updates
+- CLI: add `--force` to skip SHA256 verification when you trust the source
+- Batch import/naming: sanitize versionHint used by UniquePath (defense-in-depth)
+- Docs: new WARP.md (developer guide) and docs/ROADMAP.md; config docs updated
+
+See full release notes and binaries: https://github.com/jxwalker/modfetch/releases/tag/v0.4.0
+
 Installation
 - From source
   - Build: `make build` (produces `./bin/modfetch`)
