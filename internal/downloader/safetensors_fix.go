@@ -41,7 +41,7 @@ func adjustSafetensors(path string, log *logging.Logger) (bool, error) {
 	if hdrLen == 0 || hdrLen > uint64(fi.Size()-8) || hdrLen > 64*1024*1024 {
 		return false, fmt.Errorf("safetensors: invalid header len %d", hdrLen)
 	}
-	hdr := make([]byte, hdrLen)
+	hdr := make([]byte, int(hdrLen))
 	if _, err := io.ReadFull(f, hdr); err != nil {
 		return false, err
 	}
@@ -125,7 +125,7 @@ func deepVerifySafetensors(path string) (bool, int64, error) {
 	if hdrLen == 0 || hdrLen > uint64(fi.Size()-8) || hdrLen > 64*1024*1024 {
 		return false, 0, fmt.Errorf("invalid safetensors header length: %d", hdrLen)
 	}
-	hdr := make([]byte, hdrLen)
+	hdr := make([]byte, int(hdrLen))
 	if _, err := io.ReadFull(f, hdr); err != nil {
 		return false, 0, err
 	}
