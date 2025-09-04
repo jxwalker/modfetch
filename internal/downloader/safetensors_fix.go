@@ -49,6 +49,11 @@ func adjustSafetensors(path string, log *logging.Logger) (bool, error) {
 	if err := json.Unmarshal(hdr, &meta); err != nil {
 		return false, fmt.Errorf("safetensors: header json: %w", err)
 	}
+	// Compute data segment length and validate against offsets
+	dataLen := fi.Size() - 8 - int64(hdrLen)
+	if dataLen < 0 {
+		return false, fmt.Errorf("safetensors: negative data length")
+	}
 	// Compute max data end from top-level tensor entries
 	var maxEnd int64 = 0
 	for k, v := range meta {
@@ -68,6 +73,9 @@ func adjustSafetensors(path string, log *logging.Logger) (bool, error) {
 		end, ok2 := toInt64(off[1])
 		if !ok1 || !ok2 {
 			continue
+		}
+		if end > dataLen {
+			return false, fmt.Errorf("safetensors: data end %d beyond data length %d", end, dataLen)
 		}
 		if end > maxEnd {
 			maxEnd = end

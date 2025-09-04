@@ -103,7 +103,9 @@ func ProbeURL(ctx context.Context, cfg *config.Config, rawURL string, headers ma
 			if resp3, err3 := cl.Do(req3); err3 == nil {
 				defer func() { _ = resp3.Body.Close() }()
 				if clh := resp3.Header.Get("Content-Length"); clh != "" && meta.Size <= 0 {
-					_, _ = fmt.Sscan(clh, &meta.Size)
+					if n, err := strconv.ParseInt(strings.TrimSpace(clh), 10, 64); err == nil && n >= 0 {
+						meta.Size = n
+					}
 				}
 				if cd := resp3.Header.Get("Content-Disposition"); cd != "" && meta.Filename == "" {
 					if fn := parseDispositionFilename(cd); fn != "" {
