@@ -1,4 +1,4 @@
-module modfetch
+module github.com/jxwalker/modfetch
 
 go 1.22
 
