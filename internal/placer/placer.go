@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"modfetch/internal/classifier"
-	"modfetch/internal/config"
-	"modfetch/internal/util"
+	"github.com/jxwalker/modfetch/internal/classifier"
+	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/util"
 )
 
 // ComputeTargets returns absolute destination directories for an artifact type

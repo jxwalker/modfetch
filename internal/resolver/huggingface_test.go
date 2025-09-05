@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/config"
 )
 
 func TestHFResolveBasic(t *testing.T) {

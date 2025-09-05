@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/config"
 )
 
 type Resolved struct {

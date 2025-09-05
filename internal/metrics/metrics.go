@@ -8,7 +8,7 @@ import (
 
 	"go.uber.org/atomic"
 
-	"modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/config"
 )
 
 type Manager struct {

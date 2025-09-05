@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"modfetch/internal/config"
-	"modfetch/internal/logging"
-	"modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/logging"
+	"github.com/jxwalker/modfetch/internal/state"
 )
 
 // Ensure Single.Download marks job as hold with a clear retry-after message on 429.

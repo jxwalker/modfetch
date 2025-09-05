@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"modfetch/internal/config"
-	"modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/state"
 )
 
 func handleHostCaps(ctx context.Context, args []string) error {

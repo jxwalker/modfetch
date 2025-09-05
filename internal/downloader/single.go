@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"modfetch/internal/config"
-	"modfetch/internal/logging"
-	"modfetch/internal/state"
-	"modfetch/internal/util"
+	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/logging"
+	"github.com/jxwalker/modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/util"
 )
 
 // local helper to probe size and range via GET bytes=0-0

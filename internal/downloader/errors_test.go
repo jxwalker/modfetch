@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/config"
 )
 
 func TestFriendlyStatus_429_RateLimited(t *testing.T) {

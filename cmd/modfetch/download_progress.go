@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
-	"modfetch/internal/config"
-	"modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/state"
 )
 
 // startProgressLoop prints a single-line progress bar with throughput and ETA while a download is running.

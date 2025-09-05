@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/config"
 )
 
 type cacheEntry struct {

@@ -3,9 +3,9 @@ package downloader
 import (
 	"context"
 
-	"modfetch/internal/config"
-	"modfetch/internal/logging"
-	"modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/logging"
+	"github.com/jxwalker/modfetch/internal/state"
 )
 
 // Interface is the common downloader interface used across implementations.

@@ -8,8 +8,8 @@ import (
 	"path"
 	"strings"
 
-	"modfetch/internal/config"
-	"modfetch/internal/util"
+	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/util"
 )
 
 type HuggingFace struct{}
