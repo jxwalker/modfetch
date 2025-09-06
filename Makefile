@@ -18,12 +18,19 @@ test:
 	go test ./...
 
 fmt:
-	go fmt ./...
+	# Format only module packages (ignore caches like .tmp)
+	gofmt -s -w $(shell go list -f '{{.Dir}}' ./...)
 
 # Fails if files need formatting
 fmt-check:
 	@echo "Checking gofmt..."
-	@diff -u <(echo -n) <(gofmt -s -l .) || (echo "Run 'make fmt' to format the above files" && exit 1)
+	@files="$$(gofmt -s -l $$(go list -f '{{.Dir}}' ./...))"; \
+	if [ -n "$$files" ]; then \
+	  echo "$$files" | sed 's/^/ - /'; \
+	  echo "Run 'make fmt' to format the above files"; \
+	  exit 1; \
+	fi; \
+	echo "gofmt OK"
 
 vet:
 	go vet ./...
