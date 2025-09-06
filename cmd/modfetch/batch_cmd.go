@@ -13,12 +13,12 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"modfetch/internal/batch"
-	"modfetch/internal/config"
-	"modfetch/internal/downloader"
-	"modfetch/internal/logging"
-	"modfetch/internal/resolver"
-	"modfetch/internal/util"
+	"github.com/jxwalker/modfetch/internal/batch"
+	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/downloader"
+	"github.com/jxwalker/modfetch/internal/logging"
+	"github.com/jxwalker/modfetch/internal/resolver"
+	"github.com/jxwalker/modfetch/internal/util"
 )
 
 func handleBatch(ctx context.Context, args []string) error {

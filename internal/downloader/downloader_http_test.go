@@ -14,9 +14,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"modfetch/internal/config"
-	"modfetch/internal/logging"
-	"modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/logging"
+	"github.com/jxwalker/modfetch/internal/state"
 )
 
 // Test a Range-capable server that returns 429 once per chunk then succeeds.

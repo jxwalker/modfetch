@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"modfetch/internal/config"
-	"modfetch/internal/logging"
-	"modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/logging"
+	"github.com/jxwalker/modfetch/internal/state"
 )
 
 // 5xx backoff: first attempt(s) for each chunk return 503, then success

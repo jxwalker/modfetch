@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"modfetch/internal/batch"
+	"github.com/jxwalker/modfetch/internal/batch"
 )
 
 func TestBatchImport_FromTextURLs_NoNetworkRequired(t *testing.T) {

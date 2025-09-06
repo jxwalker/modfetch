@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/config"
 )
 
 func TestCivitAIResolve_ModelLatestAndHeaders(t *testing.T) {

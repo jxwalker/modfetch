@@ -9,7 +9,7 @@ import (
 	"time"
 
 	_ "github.com/glebarez/sqlite"
-	"modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/config"
 )
 
 type DB struct {

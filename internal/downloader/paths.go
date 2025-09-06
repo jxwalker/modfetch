@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/config"
 )
 
 // stagePartPath returns a staging .part path under download_root/.parts or partials_root if set, unique to (url,dest).

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/config"
 )
 
 func TestDetectMagicGGUF(t *testing.T) {

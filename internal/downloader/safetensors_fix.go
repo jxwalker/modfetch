@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"modfetch/internal/logging"
+	"github.com/jxwalker/modfetch/internal/logging"
 )
 
 // adjustSafetensors trims any trailing bytes beyond what the safetensors header declares.

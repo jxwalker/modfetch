@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/config"
 )
 
 func newHTTPClient(cfg *config.Config) *http.Client {
@@ -61,12 +61,12 @@ func newHTTPClient(cfg *config.Config) *http.Client {
 }
 
 // userAgent returns the configured User-Agent, or a sensible default
-// like "modfetch/<version> (<goos>/<goarch>)" when not set.
+// like "github.com/jxwalker/modfetch/<version> (<goos>/<goarch>)" when not set.
 func userAgent(cfg *config.Config) string {
 	if cfg != nil && cfg.Network.UserAgent != "" {
 		return cfg.Network.UserAgent
 	}
-	return fmt.Sprintf("modfetch/%s (%s/%s)", versionString(), runtime.GOOS, runtime.GOARCH)
+	return fmt.Sprintf("github.com/jxwalker/modfetch/%s (%s/%s)", versionString(), runtime.GOOS, runtime.GOARCH)
 }
 
 // versionString fetches main.version via linker -X if available.

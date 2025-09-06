@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/config"
 )
 
 // friendlyHTTPStatusMessage creates a host-aware error message for common auth-related statuses.

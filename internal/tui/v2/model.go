@@ -20,13 +20,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/dustin/go-humanize"
-	"modfetch/internal/config"
-	"modfetch/internal/downloader"
-	"modfetch/internal/logging"
-	"modfetch/internal/placer"
-	"modfetch/internal/resolver"
-	"modfetch/internal/state"
-	"modfetch/internal/util"
+	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/downloader"
+	"github.com/jxwalker/modfetch/internal/logging"
+	"github.com/jxwalker/modfetch/internal/placer"
+	"github.com/jxwalker/modfetch/internal/resolver"
+	"github.com/jxwalker/modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/util"
 )
 
 type Theme struct {

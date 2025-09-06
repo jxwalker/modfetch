@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"modfetch/internal/config"
-	"modfetch/internal/logging"
-	"modfetch/internal/resolver"
-	"modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/logging"
+	"github.com/jxwalker/modfetch/internal/resolver"
+	"github.com/jxwalker/modfetch/internal/state"
 )
 
 func TestCivitAIResolveAndDownload_WithAuthAndChunks(t *testing.T) {

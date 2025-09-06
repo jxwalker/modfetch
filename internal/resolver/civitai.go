@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"modfetch/internal/config"
-	"modfetch/internal/util"
+	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/util"
 )
 
 type CivitAI struct{}
