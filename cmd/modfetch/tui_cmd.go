@@ -9,13 +9,13 @@ import (
 	"path/filepath"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"gopkg.in/yaml.v3"
 	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/logging"
 	"github.com/jxwalker/modfetch/internal/state"
 	ui "github.com/jxwalker/modfetch/internal/tui"
 	cw "github.com/jxwalker/modfetch/internal/tui/configwizard"
 	uiv2 "github.com/jxwalker/modfetch/internal/tui/v2"
+	"gopkg.in/yaml.v3"
 )
 
 func handleTUI(ctx context.Context, args []string) error {

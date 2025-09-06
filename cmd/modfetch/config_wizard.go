@@ -8,9 +8,9 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"gopkg.in/yaml.v3"
 	"github.com/jxwalker/modfetch/internal/config"
 	cw "github.com/jxwalker/modfetch/internal/tui/configwizard"
+	"gopkg.in/yaml.v3"
 )
 
 func handleConfigWizard(ctx context.Context, args []string) error {
