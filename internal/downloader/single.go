@@ -219,17 +219,10 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 			if _, err := adjustSafetensors(destPath, s.log); err != nil {
 				return "", "", err
 			}
-			ff, err := os.Open(destPath)
+			actualSHA, err := util.HashFileSHA256(destPath)
 			if err != nil {
 				return "", "", err
 			}
-			h := sha256.New()
-			if _, err := io.Copy(h, ff); err != nil {
-				_ = ff.Close()
-				return "", "", err
-			}
-			_ = ff.Close()
-			actualSHA := hex.EncodeToString(h.Sum(nil))
 			if err := writeAndSync(destPath+".sha256", []byte(actualSHA+"  "+filepath.Base(destPath)+"\n")); err != nil {
 				return "", "", err
 			}

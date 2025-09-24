@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -17,6 +15,7 @@ import (
 	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/logging"
 	"github.com/jxwalker/modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/util"
 )
 
 // handleVerify verifies downloaded files.
@@ -73,16 +72,10 @@ func handleVerify(ctx context.Context, args []string) error {
 
 	report := map[string]any{}
 	verifyOne := func(row state.DownloadRow) error {
-		f, err := os.Open(row.Dest)
+		actual, err := util.HashFileSHA256(row.Dest)
 		if err != nil {
 			return err
 		}
-		defer func() { _ = f.Close() }()
-		h := sha256.New()
-		if _, err := io.Copy(h, f); err != nil {
-			return err
-		}
-		actual := hex.EncodeToString(h.Sum(nil))
 		status := "verified"
 		if row.ExpectedSHA256 != "" && !equalFoldHex(row.ExpectedSHA256, actual) {
 			status = "checksum_mismatch"

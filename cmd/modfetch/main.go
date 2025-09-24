@@ -217,6 +217,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	batchParallel := fs.Int("batch-parallel", 0, "max parallel downloads when using --batch (default: config concurrency per_host_requests)")
 	dryRun := fs.Bool("dry-run", false, "plan only: resolve URL/URI and compute default destination; no download")
 	forceSkip := fs.Bool("force", false, "skip SHA256 verification even if --sha256/--sha256-file is provided")
+	noAuthPreflight := fs.Bool("no-auth-preflight", false, "skip auth preflight probe")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -542,6 +543,37 @@ func handleDownload(ctx context.Context, args []string) error {
 		fmt.Printf("  Resolved URL: %s\n", logging.SanitizeURL(resolvedURL))
 		fmt.Printf("  Default dest: %s\n", candDest)
 		return nil
+	}
+	if !*noAuthPreflight && !c.Network.DisableAuthPreflight {
+		reach, info := downloader.CheckReachable(ctx, c, resolvedURL, headers)
+		if !reach {
+			return fmt.Errorf("preflight failed: unreachable (%s)", info)
+		}
+		code := 0
+		if sp := strings.Fields(info); len(sp) > 0 {
+			_, _ = fmt.Sscanf(sp[0], "%d", &code)
+		}
+		if code == 401 || code == 403 {
+			host := ""
+			if u, _ := neturl.Parse(resolvedURL); u != nil {
+				host = strings.ToLower(u.Hostname())
+			}
+			msg := info
+			if strings.HasSuffix(host, "huggingface.co") {
+				env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv)
+				if env == "" {
+					env = "HF_TOKEN"
+				}
+				msg = fmt.Sprintf("%s — set %s and ensure repo access/license accepted", info, env)
+			} else if strings.HasSuffix(host, "civitai.com") {
+				env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv)
+				if env == "" {
+					env = "CIVITAI_TOKEN"
+				}
+				msg = fmt.Sprintf("%s — set %s and ensure content is accessible", info, env)
+			}
+			return fmt.Errorf("preflight auth failed: %s", msg)
+		}
 	}
 	// Prefer chunked downloader; it will fall back to single when needed
 	// Progress display (disabled for JSON or quiet)
