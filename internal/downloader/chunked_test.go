@@ -2,15 +2,13 @@ package downloader
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"io"
 	"os"
 	"testing"
 
 	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/logging"
 	"github.com/jxwalker/modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/util"
 )
 
 // Integration: chunked download of a 1MB test file with multiple chunks.
@@ -125,11 +123,7 @@ func TestChunkedCorruptAndRepair(t *testing.T) {
 	}
 	if fixedSHA != goodSHA {
 		// confirm by local recompute
-		f2, _ := os.Open(dest)
-		defer func() { _ = f2.Close() }()
-		h := sha256.New()
-		_, _ = io.Copy(h, f2)
-		s := hex.EncodeToString(h.Sum(nil))
+		s, _ := util.HashFileSHA256(dest)
 		if s != goodSHA {
 			t.Fatalf("sha not repaired: got=%s want=%s", s, goodSHA)
 		}

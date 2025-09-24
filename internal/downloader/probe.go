@@ -2,16 +2,14 @@ package downloader
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/util"
 )
 
 type ProbeMeta struct {
@@ -139,11 +137,7 @@ func ComputeRemoteSHA256(ctx context.Context, cfg *config.Config, rawURL string,
 	if resp.StatusCode/100 != 2 {
 		return "", fmt.Errorf("GET status: %s", resp.Status)
 	}
-	h := sha256.New()
-	if _, err := io.Copy(h, resp.Body); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return util.HashReaderSHA256(resp.Body)
 }
 
 // CheckReachable performs a quick HEAD to determine network reachability to the resource.
