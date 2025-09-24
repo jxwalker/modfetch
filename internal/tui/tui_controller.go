@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"net/url"
 	"strings"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/jxwalker/modfetch/internal/resolver"
 )
 
+// TUIController manages user interaction state and event handling for the TUI.
 type TUIController struct {
 	model        *TUIModel
 	view         *TUIView
@@ -32,6 +32,7 @@ type TUIController struct {
 	newDest      string
 }
 
+// NewTUIController creates a new TUIController instance with the given model and view.
 func NewTUIController(model *TUIModel, view *TUIView) *TUIController {
 	filterInput := textinput.New()
 	filterInput.Placeholder = "Filter downloads..."
@@ -44,19 +45,20 @@ func NewTUIController(model *TUIModel, view *TUIView) *TUIController {
 		view:         view,
 		filterInput:  filterInput,
 		newInput:     newInput,
-		statusFilter: []string{"pending", "downloading", "completed", "failed"},
+		statusFilter: []string{"pending", "downloading", "running", "hold", "completed", "failed"},
 	}
 }
 
+// SetModel sets the reference to the main tea.Model instance for proper orchestration.
 func (c *TUIController) SetModel(m tea.Model) {
 	c.teaModel = m
 }
 
 func (c *TUIController) wrapModel() tea.Model {
-	fmt.Printf("DEBUG: wrapModel called, newStep=%d, newDL=%t\n", c.newStep, c.newDL)
 	return c.teaModel
 }
 
+// Init initializes the controller by loading download rows and starting the tick command.
 func (c *TUIController) Init() tea.Cmd {
 	if err := c.model.LoadRows(); err != nil {
 		return func() tea.Msg { return errMsg{err} }
@@ -64,15 +66,14 @@ func (c *TUIController) Init() tea.Cmd {
 	return tickCmd()
 }
 
+// Update handles incoming messages and updates the controller state accordingly. (important-comment)
 func (c *TUIController) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	fmt.Printf("DEBUG: TUIController.Update received message type: %T\n", msg)
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		c.view.SetSize(msg.Width, msg.Height)
 		return c.wrapModel(), nil
 
 	case tea.KeyMsg:
-		fmt.Printf("DEBUG: Processing KeyMsg: %s\n", msg.String())
 		return c.handleKeyMsg(msg)
 
 	case tickMsg:
@@ -88,7 +89,6 @@ func (c *TUIController) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return c.wrapModel(), nil
 
 	case metaMsg:
-		fmt.Printf("DEBUG: Processing metaMsg: %+v, newDL=%t, newStep=%d\n", msg, c.newDL, c.newStep)
 		if c.newDL && c.newStep == 2 {
 			if msg.suggested != "" {
 				c.newInput.SetValue(msg.suggested)
@@ -99,11 +99,9 @@ func (c *TUIController) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return c.wrapModel(), nil
 
 	case errMsg:
-		fmt.Printf("DEBUG: Processing errMsg: %v\n", msg.err)
 		return c.wrapModel(), nil
 	}
 
-	fmt.Printf("DEBUG: Unhandled message type: %T\n", msg)
 	return c.wrapModel(), nil
 }
 
@@ -274,7 +272,7 @@ func (c *TUIController) handleFilterKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		c.filterInput.Blur()
 		filter := strings.TrimSpace(c.filterInput.Value())
 		if filter == "" {
-			c.statusFilter = []string{"pending", "downloading", "completed", "failed"}
+			c.statusFilter = []string{"pending", "downloading", "running", "hold", "completed", "failed"}
 		} else {
 			c.statusFilter = []string{filter}
 		}

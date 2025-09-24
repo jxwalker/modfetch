@@ -10,6 +10,7 @@ import (
 	"github.com/jxwalker/modfetch/internal/state"
 )
 
+// TUIView handles all rendering logic and UI presentation for the TUI.
 type TUIView struct {
 	styles uiStyles
 	prog   progress.Model
@@ -23,6 +24,7 @@ type uiStyles struct {
 	sel    lipgloss.Style
 }
 
+// NewTUIView creates a new TUIView instance with default styling and progress bar.
 func NewTUIView() *TUIView {
 	p := progress.New(progress.WithDefaultGradient())
 	styles := uiStyles{
@@ -36,11 +38,13 @@ func NewTUIView() *TUIView {
 	}
 }
 
+// SetSize updates the view dimensions for responsive rendering.
 func (v *TUIView) SetSize(width, height int) {
 	v.width = width
 	v.height = height
 }
 
+// View renders the complete TUI interface based on the current model and controller state.
 func (v *TUIView) View(model *TUIModel, controller *TUIController) string {
 	if v.width == 0 {
 		return "Loading..."

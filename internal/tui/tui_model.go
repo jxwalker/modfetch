@@ -16,6 +16,7 @@ import (
 	"github.com/jxwalker/modfetch/internal/state"
 )
 
+// TUIModel manages core data and business logic for the TUI application.
 type TUIModel struct {
 	cfg       *config.Config
 	st        *state.DB
@@ -43,6 +44,7 @@ func (n *noopMetrics) IncDownloadsSuccess()           {}
 func (n *noopMetrics) ObserveDownloadSeconds(float64) {}
 func (n *noopMetrics) Write() error                   { return nil }
 
+// NewTUIModel creates a new TUIModel instance with the given configuration and state database.
 func NewTUIModel(cfg *config.Config, st *state.DB) *TUIModel {
 	return &TUIModel{
 		cfg:     cfg,
@@ -53,6 +55,7 @@ func NewTUIModel(cfg *config.Config, st *state.DB) *TUIModel {
 	}
 }
 
+// LoadRows loads download rows from the state database.
 func (m *TUIModel) LoadRows() error {
 	rows, err := m.st.ListDownloads()
 	if err != nil {
@@ -62,10 +65,12 @@ func (m *TUIModel) LoadRows() error {
 	return nil
 }
 
+// GetRows returns the current download rows.
 func (m *TUIModel) GetRows() []state.DownloadRow {
 	return m.rows
 }
 
+// GetRunning returns a snapshot of currently running downloads with their cancel functions.
 func (m *TUIModel) GetRunning() map[string]context.CancelFunc {
 	m.runningMu.RLock()
 	defer m.runningMu.RUnlock()
@@ -77,18 +82,22 @@ func (m *TUIModel) GetRunning() map[string]context.CancelFunc {
 	return snapshot
 }
 
+// GetEphems returns the ephemeral download states.
 func (m *TUIModel) GetEphems() map[string]ephemeral {
 	return m.ephems
 }
 
+// GetPrev returns the previous observation states.
 func (m *TUIModel) GetPrev() map[string]obs {
 	return m.prev
 }
 
+// AddEphemeral adds an ephemeral download state for the given URL and destination.
 func (m *TUIModel) AddEphemeral(url, dest string, headers map[string]string, sha string) {
 	m.ephems[url+"|"+dest] = ephemeral{url: url, dest: dest, headers: headers, sha: sha}
 }
 
+// ProgressFor returns the progress information for a specific download.
 func (m *TUIModel) ProgressFor(url, dest string) (int64, int64, string) {
 	for _, row := range m.rows {
 		if row.URL == url && row.Dest == dest {
@@ -98,6 +107,7 @@ func (m *TUIModel) ProgressFor(url, dest string) (int64, int64, string) {
 	return 0, 0, "unknown"
 }
 
+// FilteredRows returns download rows filtered by the given status list.
 func (m *TUIModel) FilteredRows(statuses []string) []state.DownloadRow {
 	if len(statuses) == 0 {
 		return m.rows
@@ -114,6 +124,7 @@ func (m *TUIModel) FilteredRows(statuses []string) []state.DownloadRow {
 	return filtered
 }
 
+// DestGuess generates a suggested destination path for the given URL.
 func (m *TUIModel) DestGuess(url string) string {
 	if url == "" {
 		return ""
@@ -130,6 +141,7 @@ func (m *TUIModel) DestGuess(url string) string {
 	return filepath.Join(m.cfg.General.DownloadRoot, "download")
 }
 
+// PreflightForDownload performs preflight checks before starting a download.
 func (m *TUIModel) PreflightForDownload(url, dest string) error {
 	if url == "" {
 		return fmt.Errorf("url required")
@@ -166,6 +178,7 @@ func (m *TUIModel) PreflightForDownload(url, dest string) error {
 	return nil
 }
 
+// StartDownload initiates a new download with URL resolution and authentication.
 func (m *TUIModel) StartDownload(ctx context.Context, urlStr, dest, sha string, headers map[string]string) error {
 	if err := m.PreflightForDownload(urlStr, dest); err != nil {
 		return err

@@ -29,6 +29,8 @@ type metaMsg struct {
 	civType   string
 }
 
+// New creates a new TUI model that implements the tea.Model interface.
+// It orchestrates the MVC components: TUIModel, TUIView, and TUIController.
 func New(cfg *config.Config, st *state.DB) tea.Model {
 	tuiModel := NewTUIModel(cfg, st)
 	tuiView := NewTUIView()
