@@ -176,18 +176,21 @@ func (v *TUIView) renderNewDownloadModal(controller *TUIController) string {
 	var b strings.Builder
 	b.WriteString("New Download\n\n")
 
+	steps := []string{"1) URL/URI", "2) Artifact Type", "3) Auto Place", "4) Destination"}
+	b.WriteString(strings.Join(steps, " • ") + "\n\n")
+
 	switch controller.newStep {
-	case 0:
-		b.WriteString("Enter URL:\n")
-		b.WriteString(controller.newURLInput.View())
 	case 1:
-		b.WriteString("Enter destination:\n")
-		b.WriteString(controller.newDestInput.View())
+		b.WriteString("Enter URL or resolver URI:\n")
 	case 2:
-		b.WriteString("Enter SHA256 (optional):\n")
-		b.WriteString(controller.newSHAInput.View())
+		b.WriteString("Enter artifact type (optional):\n")
+	case 3:
+		b.WriteString("Auto place after download? y/n (default n):\n")
+	case 4:
+		b.WriteString("Enter destination path:\n")
 	}
 
+	b.WriteString(controller.newInput.View())
 	b.WriteString("\n\nPress Esc to cancel, Enter to continue")
 	return b.String()
 }

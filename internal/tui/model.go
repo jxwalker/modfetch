@@ -22,16 +22,27 @@ type dlDoneMsg struct {
 
 type errMsg struct{ err error }
 
+type metaMsg struct {
+	url       string
+	fileName  string
+	suggested string
+	civType   string
+}
+
 func New(cfg *config.Config, st *state.DB) tea.Model {
 	tuiModel := NewTUIModel(cfg, st)
 	tuiView := NewTUIView()
 	tuiController := NewTUIController(tuiModel, tuiView)
 
-	return &model{
+	m := &model{
 		tuiModel:      tuiModel,
 		tuiView:       tuiView,
 		tuiController: tuiController,
 	}
+
+	tuiController.SetModel(m)
+
+	return m
 }
 
 func (m *model) Init() tea.Cmd {

@@ -283,7 +283,3 @@ func (m *TUIModel) StartDownload(ctx context.Context, urlStr, dest, sha string, 
 
 	return nil
 }
-
-func hostIs(hostname, target string) bool {
-	return strings.EqualFold(hostname, target) || strings.HasSuffix(strings.ToLower(hostname), "."+strings.ToLower(target))
-}

@@ -87,11 +87,11 @@ func handleTUI(ctx context.Context, args []string) error {
 	}
 	defer func() { _ = st.SQL.Close() }()
 	var m tea.Model
-	// Default to v2 unless legacy v1 explicitly requested
+	// Default to refactored TUI unless legacy v1 explicitly requested
 	if *useV1 {
-		m = ui.New(c, st)
-	} else {
 		m = uiv2.New(c, st, version)
+	} else {
+		m = ui.New(c, st)
 	}
 	p := tea.NewProgram(m, tea.WithMouseCellMotion())
 	_, err = p.Run()
