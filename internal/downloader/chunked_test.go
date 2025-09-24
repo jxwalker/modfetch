@@ -123,7 +123,10 @@ func TestChunkedCorruptAndRepair(t *testing.T) {
 	}
 	if fixedSHA != goodSHA {
 		// confirm by local recompute
-		s, _ := util.HashFileSHA256(dest)
+		s, err := util.HashFileSHA256(dest)
+		if err != nil {
+			t.Fatalf("hash file: %v", err)
+		}
 		if s != goodSHA {
 			t.Fatalf("sha not repaired: got=%s want=%s", s, goodSHA)
 		}
