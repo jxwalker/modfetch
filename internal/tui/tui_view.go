@@ -68,9 +68,10 @@ func (v *TUIView) View(model *TUIModel, controller *TUIController) string {
 
 	b.WriteString(v.renderTable(model, controller))
 
-	if controller.showInfo && controller.selected < len(model.rows) {
+	rows := model.FilteredRows(controller.statusFilter)
+	if controller.showInfo && controller.selected < len(rows) {
 		b.WriteString("\n")
-		b.WriteString(v.renderDetails(model.rows[controller.selected]))
+		b.WriteString(v.renderDetails(rows[controller.selected]))
 	}
 
 	return b.String()
@@ -98,9 +99,9 @@ func (v *TUIView) renderTable(model *TUIModel, controller *TUIController) string
 			truncate(row.URL, 40),
 			row.Status)
 
-		if row.Status == "downloading" {
+		if row.Status == "downloading" || row.Status == "running" || row.Status == "pending" {
 			current, total, _ := model.ProgressFor(row.URL, row.Dest)
-			if total > 0 {
+			if total > 0 && current > 0 {
 				pct := float64(current) / float64(total)
 				line += fmt.Sprintf(" %s/%s (%.1f%%)",
 					humanize.Bytes(uint64(current)),
@@ -157,7 +158,6 @@ func (v *TUIView) menuView(controller *TUIController) string {
 		"r - Refresh downloads",
 		"c - Clear completed",
 		"x - Cancel selected download",
-		"esc - Back",
 	}
 
 	for i, opt := range options {

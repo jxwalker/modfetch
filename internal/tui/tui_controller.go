@@ -180,7 +180,7 @@ func (c *TUIController) handleMenuKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "down", "j":
-		if c.menuSelected < 3 {
+		if c.menuSelected < 2 {
 			c.menuSelected++
 		}
 
