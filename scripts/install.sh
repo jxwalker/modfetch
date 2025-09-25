@@ -8,6 +8,7 @@ INSTALL_DIR=${INSTALL_DIR:-/usr/local/bin}
 CONFIG_DIR=${CONFIG_DIR:-"${XDG_CONFIG_HOME:-$HOME/.config}/modfetch"}
 DATA_DIR=${DATA_DIR:-"$HOME/modfetch-data"}
 DOWNLOAD_DIR=${DOWNLOAD_DIR:-"$HOME/Downloads/modfetch"}
+SKIP_CONFIG_WIZARD=${SKIP_CONFIG_WIZARD:-false}
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
