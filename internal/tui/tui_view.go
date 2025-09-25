@@ -71,14 +71,14 @@ func (v *TUIView) View(model *TUIModel, controller *TUIController) string {
 
 	var parts []string
 
-	title := v.styles.title.Render("ModFetch Downloads • TUI v1 (refactored MVC)")
-	titleBar := v.styles.border.Width(v.width - 2).Render(title)
-	parts = append(parts, titleBar)
-
 	if controller.showHelp {
 		help := v.styles.border.Width(v.width - 2).Render(v.helpView())
 		return help
 	}
+
+	title := v.styles.title.Render("ModFetch Downloads • TUI v1 (refactored MVC)")
+	titleBar := v.styles.border.Width(v.width - 2).Render(title)
+	parts = append(parts, titleBar)
 
 	if controller.menuOn {
 		menu := v.styles.border.Width(v.width - 2).Render(v.menuView(controller))
