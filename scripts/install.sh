@@ -128,7 +128,7 @@ download_binary() {
     fi
     
     success "Downloaded modfetch binary"
-    echo "$temp_file"
+    printf "%s" "$temp_file"
 }
 
 install_binary() {
