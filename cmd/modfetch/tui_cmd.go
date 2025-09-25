@@ -23,9 +23,9 @@ func handleTUI(ctx context.Context, args []string) error {
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
 	jsonOut := fs.Bool("json", false, "json logs (not used in TUI)")
-	// --v2 kept for compatibility but unused since v2 is default
+	// --v2 kept for compatibility, v2 is now default
 	_ = fs.Bool("v2", false, "Use TUI v2 (default)")
-	useV1 := fs.Bool("v1", false, "Use legacy TUI v1 (fallback)")
+	useV1 := fs.Bool("v1", false, "Use refactored TUI v1 (experimental)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -87,11 +87,11 @@ func handleTUI(ctx context.Context, args []string) error {
 	}
 	defer func() { _ = st.SQL.Close() }()
 	var m tea.Model
-	// Default to refactored TUI unless legacy v1 explicitly requested
+	// Default to TUI v2 (which works) unless legacy v1 explicitly requested
 	if *useV1 {
-		m = uiv2.New(c, st, version)
+		m = ui.New(c, st)  // Use refactored TUI v1
 	} else {
-		m = ui.New(c, st)
+		m = uiv2.New(c, st, version)  // Use working TUI v2 as default
 	}
 	p := tea.NewProgram(m, tea.WithMouseCellMotion())
 	_, err = p.Run()
