@@ -12,14 +12,14 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-log() { printf "${GREEN}[modfetch-uninstall]${NC} %s\n" "$*"; }
-warn() { printf "${YELLOW}[modfetch-uninstall]${NC} %s\n" "$*"; }
-error() { printf "${RED}[modfetch-uninstall]${NC} %s\n" "$*"; }
-info() { printf "${BLUE}[modfetch-uninstall]${NC} %s\n" "$*"; }
+log() { printf "${GREEN}[modfetch-uninstall]${NC} %s\n" "$*" >&2; }
+warn() { printf "${YELLOW}[modfetch-uninstall]${NC} %s\n" "$*" >&2; }
+error() { printf "${RED}[modfetch-uninstall]${NC} %s\n" "$*" >&2; }
+info() { printf "${BLUE}[modfetch-uninstall]${NC} %s\n" "$*" >&2; }
 
 print_banner() {
-    printf "${RED}"
-    cat << 'EOF'
+    printf "${RED}" >&2
+    cat << 'EOF' >&2
     ╔══════════════════════════════════════════════════════════════╗
     ║                                                              ║
     ║                     ModFetch Uninstaller                    ║
@@ -28,18 +28,18 @@ print_banner() {
     ║                                                              ║
     ╚══════════════════════════════════════════════════════════════╝
 EOF
-    printf "${NC}\n"
+    printf "${NC}\n" >&2
 }
 
 confirm_uninstall() {
-    printf "${YELLOW}This will remove modfetch from your system.${NC}\n"
-    printf "The following will be removed:\n"
-    printf "  - Binary: $INSTALL_DIR/modfetch\n"
-    printf "  - Configuration: $CONFIG_DIR\n"
-    printf "\nOptionally remove:\n"
-    printf "  - Data directory: $DATA_DIR\n"
-    printf "  - Shell completions\n"
-    printf "\nContinue? [y/N]: "
+    printf "${YELLOW}This will remove modfetch from your system.${NC}\n" >&2
+    printf "The following will be removed:\n" >&2
+    printf "  - Binary: $INSTALL_DIR/modfetch\n" >&2
+    printf "  - Configuration: $CONFIG_DIR\n" >&2
+    printf "\nOptionally remove:\n" >&2
+    printf "  - Data directory: $DATA_DIR\n" >&2
+    printf "  - Shell completions\n" >&2
+    printf "\nContinue? [y/N]: " >&2
     read -r confirm
     
     if [[ ! "$confirm" =~ ^[Yy] ]]; then
@@ -82,7 +82,7 @@ remove_config() {
 
 remove_data() {
     if [[ -d "$DATA_DIR" ]]; then
-        printf "${YELLOW}Remove data directory $DATA_DIR? This includes all download history and databases. [y/N]: ${NC}"
+        printf "${YELLOW}Remove data directory $DATA_DIR? This includes all download history and databases. [y/N]: ${NC}" >&2
         read -r remove_data_dir
         remove_data_dir=${remove_data_dir:-n}
         
@@ -146,7 +146,7 @@ main() {
         cleanup_path
     fi
     
-    printf "\n${GREEN}✓ Uninstallation completed${NC}\n"
+    printf "\n${GREEN}✓ Uninstallation completed${NC}\n" >&2
     info "Thank you for using modfetch!"
 }
 

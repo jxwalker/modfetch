@@ -10,15 +10,15 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-log() { printf "${GREEN}[dev-setup]${NC} %s\n" "$*"; }
-warn() { printf "${YELLOW}[dev-setup]${NC} %s\n" "$*"; }
-info() { printf "${BLUE}[dev-setup]${NC} %s\n" "$*"; }
+log() { printf "${GREEN}[dev-setup]${NC} %s\n" "$*" >&2; }
+warn() { printf "${YELLOW}[dev-setup]${NC} %s\n" "$*" >&2; }
+info() { printf "${BLUE}[dev-setup]${NC} %s\n" "$*" >&2; }
 
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 
 print_banner() {
-    printf "${BLUE}"
-    cat << 'EOF'
+    printf "${BLUE}" >&2
+    cat << 'EOF' >&2
     ╔══════════════════════════════════════════════════════════════╗
     ║                                                              ║
     ║                ModFetch Development Setup                    ║
@@ -27,7 +27,7 @@ print_banner() {
     ║                                                              ║
     ╚══════════════════════════════════════════════════════════════╝
 EOF
-    printf "${NC}\n"
+    printf "${NC}\n" >&2
 }
 
 check_go() {
@@ -159,28 +159,28 @@ run_initial_build() {
 }
 
 print_next_steps() {
-    printf "\n${GREEN}🎉 Development environment setup completed!${NC}\n\n"
+    printf "\n${GREEN}🎉 Development environment setup completed!${NC}\n\n" >&2
     
-    printf "${BLUE}Next Steps:${NC}\n"
-    printf "1. ${GREEN}Build and test:${NC}\n"
-    printf "   make build && make test\n\n"
+    printf "${BLUE}Next Steps:${NC}\n" >&2
+    printf "1. ${GREEN}Build and test:${NC}\n" >&2
+    printf "   make build && make test\n\n" >&2
     
-    printf "2. ${GREEN}Run the application:${NC}\n"
-    printf "   ./bin/modfetch --help\n\n"
+    printf "2. ${GREEN}Run the application:${NC}\n" >&2
+    printf "   ./bin/modfetch --help\n\n" >&2
     
-    printf "3. ${GREEN}Development workflow:${NC}\n"
-    printf "   make fmt      # Format code\n"
-    printf "   make lint     # Run linter\n"
-    printf "   make test     # Run tests\n"
-    printf "   make build    # Build binary\n\n"
+    printf "3. ${GREEN}Development workflow:${NC}\n" >&2
+    printf "   make fmt      # Format code\n" >&2
+    printf "   make lint     # Run linter\n" >&2
+    printf "   make test     # Run tests\n" >&2
+    printf "   make build    # Build binary\n\n" >&2
     
-    printf "4. ${GREEN}Release workflow:${NC}\n"
-    printf "   make release-dist  # Build cross-platform binaries\n\n"
+    printf "4. ${GREEN}Release workflow:${NC}\n" >&2
+    printf "   make release-dist  # Build cross-platform binaries\n\n" >&2
     
-    printf "${BLUE}Git hooks are installed and will run checks before each commit.${NC}\n"
-    printf "${BLUE}VS Code configuration is set up for optimal Go development.${NC}\n\n"
+    printf "${BLUE}Git hooks are installed and will run checks before each commit.${NC}\n" >&2
+    printf "${BLUE}VS Code configuration is set up for optimal Go development.${NC}\n\n" >&2
     
-    printf "Happy coding! 🚀\n"
+    printf "Happy coding! 🚀\n" >&2
 }
 
 main() {
