@@ -66,8 +66,8 @@ func (v *TUIView) SetSize(width, height int) {
 // View renders the complete TUI interface based on the current model and controller state.
 func (v *TUIView) View(model *TUIModel, controller *TUIController) string {
 	if v.width == 0 {
-		v.width = 120  // Default width to prevent loading screen
-		v.height = 30  // Default height
+		v.width = 120 // Default width to prevent loading screen
+		v.height = 30 // Default height
 	}
 
 	var parts []string
