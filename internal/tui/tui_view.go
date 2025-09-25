@@ -96,9 +96,6 @@ func (v *TUIView) View(model *TUIModel, controller *TUIController) string {
 	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
-func (v *TUIView) renderHeader() string {
-	return v.styles.header.Render("ModFetch Downloads")
-}
 
 func (v *TUIView) renderTable(model *TUIModel, controller *TUIController) string {
 	var b strings.Builder
