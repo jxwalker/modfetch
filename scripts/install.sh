@@ -71,19 +71,16 @@ check_prerequisites() {
         missing+=("curl or wget")
     fi
     
-    if ! have_cmd tar; then
-        missing+=("tar")
-    fi
     
     if [[ ${#missing[@]} -gt 0 ]]; then
         error "Missing required tools: ${missing[*]}"
         info "Please install the missing tools and run the installer again."
         
         if [[ "$(detect_os)" == "linux" ]]; then
-            info "On Ubuntu/Debian: sudo apt-get update && sudo apt-get install -y curl tar"
-            info "On CentOS/RHEL: sudo yum install -y curl tar"
+            info "On Ubuntu/Debian: sudo apt-get update && sudo apt-get install -y curl"
+            info "On CentOS/RHEL: sudo yum install -y curl"
         elif [[ "$(detect_os)" == "darwin" ]]; then
-            info "On macOS: brew install curl (tar is usually pre-installed)"
+            info "On macOS: curl is usually pre-installed"
         fi
         exit 1
     fi
@@ -114,8 +111,8 @@ download_binary() {
     os=$(detect_os)
     arch=$(detect_arch)
     binary_name="modfetch_${os}_${arch}"
-    download_url="https://github.com/jxwalker/modfetch/releases/download/${VERSION}/${binary_name}.tar.gz"
-    temp_file="/tmp/modfetch_${VERSION}_${os}_${arch}.tar.gz"
+    download_url="https://github.com/jxwalker/modfetch/releases/download/${VERSION}/${binary_name}"
+    temp_file="/tmp/modfetch_${VERSION}_${os}_${arch}"
     
     log "Downloading modfetch binary from $download_url"
     
@@ -136,31 +133,28 @@ download_binary() {
 
 install_binary() {
     local temp_file="$1"
-    local temp_dir="/tmp/modfetch_install_$$"
     
     log "Installing modfetch to $INSTALL_DIR"
     
-    mkdir -p "$temp_dir"
-    tar -xzf "$temp_file" -C "$temp_dir"
-    
-    local binary_path
-    binary_path=$(find "$temp_dir" -name "modfetch" -type f | head -1)
-    
-    if [[ -z "$binary_path" ]]; then
-        error "Could not find modfetch binary in downloaded archive"
-        exit 1
+    if [[ ! -d "$INSTALL_DIR" ]]; then
+        if [[ -w "$(dirname "$INSTALL_DIR")" ]]; then
+            mkdir -p "$INSTALL_DIR"
+        else
+            info "Creating $INSTALL_DIR requires sudo privileges"
+            sudo mkdir -p "$INSTALL_DIR"
+        fi
     fi
     
     if [[ -w "$INSTALL_DIR" ]]; then
-        cp "$binary_path" "$INSTALL_DIR/modfetch"
+        cp "$temp_file" "$INSTALL_DIR/modfetch"
         chmod +x "$INSTALL_DIR/modfetch"
     else
         info "Installing to $INSTALL_DIR requires sudo privileges"
-        sudo cp "$binary_path" "$INSTALL_DIR/modfetch"
+        sudo cp "$temp_file" "$INSTALL_DIR/modfetch"
         sudo chmod +x "$INSTALL_DIR/modfetch"
     fi
     
-    rm -rf "$temp_dir" "$temp_file"
+    rm -f "$temp_file"
     
     success "Installed modfetch to $INSTALL_DIR/modfetch"
 }
