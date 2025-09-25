@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v0.5.1 — 2025-09-25
+
+Fixes
+- **Installer**: Fix 404 error when downloading binaries - handle raw binaries instead of tar archives
+- **Installer**: Initialize SKIP_CONFIG_WIZARD variable to prevent unbound variable error
+- **TUI Navigation**: Fix backwards version selection logic - default to working TUI v2, use --v1 for refactored version
+- **TUI Navigation**: Restore proper arrow key navigation and help system functionality
+
 ## v0.5.0 — 2025-01-24
 
 Installation & Deployment
