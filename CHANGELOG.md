@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
-## v0.5.1 — 2025-01-24
+## v0.5.1 — 2025-09-25
 
 Fixes
 - **Installer**: Fix 404 error when downloading binaries - handle raw binaries instead of tar archives
