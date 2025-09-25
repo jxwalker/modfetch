@@ -47,8 +47,8 @@ detect_arch() {
 }
 
 print_banner() {
-    printf "${PURPLE}"
-    cat << 'EOF'
+    printf "${PURPLE}" >&2
+    cat << 'EOF' >&2
     ╔══════════════════════════════════════════════════════════════╗
     ║                                                              ║
     ║                        ModFetch Installer                   ║
@@ -59,7 +59,7 @@ print_banner() {
     ║                                                              ║
     ╚══════════════════════════════════════════════════════════════╝
 EOF
-    printf "${NC}\n"
+    printf "${NC}\n" >&2
 }
 
 check_prerequisites() {
@@ -187,10 +187,10 @@ interactive_config() {
     fi
     
     if [[ -f "$config_file" ]]; then
-        printf "${YELLOW}Configuration file already exists at $config_file${NC}\n"
-        printf "Do you want to:\n"
-        printf "  1) Keep existing configuration\n"
-        printf "  2) Create new configuration (backup existing)\n"
+        printf "${YELLOW}Configuration file already exists at $config_file${NC}\n" >&2
+        printf "Do you want to:\n" >&2
+        printf "  1) Keep existing configuration\n" >&2
+        printf "  2) Create new configuration (backup existing)\n" >&2
         printf "  3) Run configuration wizard\n"
         printf "Choice [1]: "
         read -r choice
@@ -255,8 +255,8 @@ create_minimal_config() {
     local require_sha256="n"
     
     if [[ "$SKIP_CONFIG_WIZARD" != "true" ]]; then
-        printf "${CYAN}Configuration Setup${NC}\n"
-        printf "Press Enter to use default values shown in [brackets]\n\n"
+        printf "${CYAN}Configuration Setup${NC}\n" >&2
+        printf "Press Enter to use default values shown in [brackets]\n\n" >&2
         
         printf "Download directory [$DOWNLOAD_DIR]: "
         read -r user_download_dir
@@ -420,7 +420,7 @@ run_smoke_test() {
     fi
     success "Configuration validation passed"
     
-    printf "${CYAN}Run a test download? This will download a small 1MB test file. [Y/n]: ${NC}"
+    printf "${CYAN}Run a test download? This will download a small 1MB test file. [Y/n]: ${NC}" >&2
     read -r run_test_download
     run_test_download=${run_test_download:-y}
     
@@ -437,20 +437,20 @@ run_smoke_test() {
 print_next_steps() {
     local config_file="$CONFIG_DIR/config.yml"
     
-    printf "\n${GREEN}🎉 Installation completed successfully!${NC}\n\n"
+    printf "\n${GREEN}🎉 Installation completed successfully!${NC}\n\n" >&2
     
-    printf "${WHITE}Next Steps:${NC}\n"
-    printf "1. ${CYAN}Verify installation:${NC}\n"
-    printf "   modfetch version\n\n"
+    printf "${WHITE}Next Steps:${NC}\n" >&2
+    printf "1. ${CYAN}Verify installation:${NC}\n" >&2
+    printf "   modfetch version\n\n" >&2
     
-    printf "2. ${CYAN}Configure tokens (if needed):${NC}\n"
-    printf "   export HF_TOKEN='your_huggingface_token'     # For HuggingFace\n"
-    printf "   export CIVITAI_TOKEN='your_civitai_token'    # For CivitAI\n\n"
+    printf "2. ${CYAN}Configure tokens (if needed):${NC}\n" >&2
+    printf "   export HF_TOKEN='your_huggingface_token'     # For HuggingFace\n" >&2
+    printf "   export CIVITAI_TOKEN='your_civitai_token'    # For CivitAI\n\n" >&2
     
-    printf "3. ${CYAN}Try some downloads:${NC}\n"
-    printf "   # Direct HTTP download\n"
-    printf "   modfetch download --url 'https://proof.ovh.net/files/1Mb.dat'\n\n"
-    printf "   # HuggingFace model\n"
+    printf "3. ${CYAN}Try some downloads:${NC}\n" >&2
+    printf "   # Direct HTTP download\n" >&2
+    printf "   modfetch download --url 'https://proof.ovh.net/files/1Mb.dat'\n\n" >&2
+    printf "   # HuggingFace model\n" >&2
     printf "   modfetch download --url 'hf://gpt2/README.md?rev=main'\n\n"
     printf "   # CivitAI model (requires token)\n"
     printf "   modfetch download --url 'civitai://model/123456'\n\n"
