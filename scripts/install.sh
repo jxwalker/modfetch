@@ -114,8 +114,6 @@ download_binary() {
     download_url="https://github.com/jxwalker/modfetch/releases/download/${VERSION}/${binary_name}"
     temp_file="/tmp/modfetch_${VERSION}_${os}_${arch}"
     
-    echo "DEBUG: temp_file path will be: $temp_file" >&2
-    
     log "Downloading modfetch binary from $download_url"
     
     if have_cmd curl; then
@@ -131,9 +129,7 @@ download_binary() {
     
     success "Downloaded modfetch binary"
     
-    echo "DEBUG: File exists check: $(ls -la "$temp_file" 2>/dev/null || echo 'FILE NOT FOUND')" >&2
-    
-    echo "$temp_file"
+    printf "%s" "$temp_file"
 }
 
 install_binary() {
@@ -495,10 +491,7 @@ main() {
     get_latest_version
     
     local temp_file
-    echo "DEBUG: About to call download_binary" >&2
     temp_file=$(download_binary)
-    echo "DEBUG: download_binary returned: '$temp_file'" >&2
-    echo "DEBUG: Length of temp_file: ${#temp_file}" >&2
     install_binary "$temp_file"
     
     create_directories
