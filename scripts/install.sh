@@ -18,11 +18,11 @@ CYAN='\033[0;36m'
 WHITE='\033[1;37m'
 NC='\033[0m' # No Color
 
-log() { printf "${GREEN}[modfetch-install]${NC} %s\n" "$*"; }
-warn() { printf "${YELLOW}[modfetch-install]${NC} %s\n" "$*"; }
-error() { printf "${RED}[modfetch-install]${NC} %s\n" "$*"; }
-info() { printf "${BLUE}[modfetch-install]${NC} %s\n" "$*"; }
-success() { printf "${GREEN}✓${NC} %s\n" "$*"; }
+log() { printf "${GREEN}[modfetch-install]${NC} %s\n" "$*" >&2; }
+warn() { printf "${YELLOW}[modfetch-install]${NC} %s\n" "$*" >&2; }
+error() { printf "${RED}[modfetch-install]${NC} %s\n" "$*" >&2; }
+info() { printf "${BLUE}[modfetch-install]${NC} %s\n" "$*" >&2; }
+success() { printf "${GREEN}✓${NC} %s\n" "$*" >&2; }
 
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 is_root() { [[ $EUID -eq 0 ]]; }
@@ -116,7 +116,7 @@ download_binary() {
     
     echo "DEBUG: temp_file path will be: $temp_file" >&2
     
-    log "Downloading modfetch binary from $download_url" >&2
+    log "Downloading modfetch binary from $download_url"
     
     if have_cmd curl; then
         curl -fsSL "$download_url" -o "$temp_file"
@@ -125,11 +125,11 @@ download_binary() {
     fi
     
     if [[ ! -f "$temp_file" ]]; then
-        error "Failed to download modfetch binary" >&2
+        error "Failed to download modfetch binary"
         exit 1
     fi
     
-    success "Downloaded modfetch binary" >&2
+    success "Downloaded modfetch binary"
     
     echo "DEBUG: File exists check: $(ls -la "$temp_file" 2>/dev/null || echo 'FILE NOT FOUND')" >&2
     
