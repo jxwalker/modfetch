@@ -58,11 +58,8 @@ func (c *TUIController) wrapModel() tea.Model {
 	return c.teaModel
 }
 
-// Init initializes the controller by loading download rows and starting the tick command.
+// Init initializes the controller by starting the tick command without blocking on row loading.
 func (c *TUIController) Init() tea.Cmd {
-	if err := c.model.LoadRows(); err != nil {
-		return func() tea.Msg { return errMsg{err} }
-	}
 	return tickCmd()
 }
 
