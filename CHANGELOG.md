@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v0.5.0 — 2025-01-24
+
+Installation & Deployment
+- **Comprehensive installation package**: One-liner curl installer with guided setup experience
+- **Cross-platform support**: Automated Linux/macOS binary detection and installation
+- **Config wizard integration**: Interactive setup with existing `modfetch config wizard`
+- **Uninstaller**: Clean removal script with optional data preservation
+- **Developer setup**: Enhanced `scripts/setup-dev.sh` with git hooks and VS Code configuration
+
 Improvements
 - CLI: `status` supports `--only-errors` (filter) and `--summary` (totals and error count). JSON includes `{ total, errors, rows }` when `--summary` is set.
 - CLI: `download` accepts `--sha256-file` to read an expected hash from a file (supports .sha256 "hash  filename" format).
