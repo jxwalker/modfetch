@@ -114,7 +114,7 @@ download_binary() {
     download_url="https://github.com/jxwalker/modfetch/releases/download/${VERSION}/${binary_name}"
     temp_file="/tmp/modfetch_${VERSION}_${os}_${arch}"
     
-    log "Downloading modfetch binary from $download_url"
+    log "Downloading modfetch binary from $download_url" >&2
     
     if have_cmd curl; then
         curl -fsSL "$download_url" -o "$temp_file"
@@ -123,11 +123,11 @@ download_binary() {
     fi
     
     if [[ ! -f "$temp_file" ]]; then
-        error "Failed to download modfetch binary"
+        error "Failed to download modfetch binary" >&2
         exit 1
     fi
     
-    success "Downloaded modfetch binary"
+    success "Downloaded modfetch binary" >&2
     printf "%s" "$temp_file"
 }
 
