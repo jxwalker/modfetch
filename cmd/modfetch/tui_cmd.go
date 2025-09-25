@@ -89,9 +89,9 @@ func handleTUI(ctx context.Context, args []string) error {
 	var m tea.Model
 	// Default to TUI v2 (which works) unless legacy v1 explicitly requested
 	if *useV1 {
-		m = ui.New(c, st)  // Use refactored TUI v1
+		m = ui.New(c, st) // Use refactored TUI v1
 	} else {
-		m = uiv2.New(c, st, version)  // Use working TUI v2 as default
+		m = uiv2.New(c, st, version) // Use working TUI v2 as default
 	}
 	p := tea.NewProgram(m, tea.WithMouseCellMotion())
 	_, err = p.Run()
