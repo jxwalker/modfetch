@@ -19,18 +19,37 @@ type TUIView struct {
 }
 
 type uiStyles struct {
-	header lipgloss.Style
-	row    lipgloss.Style
-	sel    lipgloss.Style
+	header      lipgloss.Style
+	row         lipgloss.Style
+	sel         lipgloss.Style
+	border      lipgloss.Style
+	title       lipgloss.Style
+	footer      lipgloss.Style
+	tabActive   lipgloss.Style
+	tabInactive lipgloss.Style
+	head        lipgloss.Style
+	ok          lipgloss.Style
+	bad         lipgloss.Style
+	label       lipgloss.Style
 }
 
 // NewTUIView creates a new TUIView instance with default styling and progress bar.
 func NewTUIView() *TUIView {
 	p := progress.New(progress.WithDefaultGradient())
+	border := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1).BorderForeground(lipgloss.Color("63"))
 	styles := uiStyles{
-		header: lipgloss.NewStyle().Bold(true),
-		row:    lipgloss.NewStyle(),
-		sel:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205")),
+		header:      lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("81")),
+		row:         lipgloss.NewStyle(),
+		sel:         lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205")),
+		border:      border,
+		title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("81")),
+		footer:      lipgloss.NewStyle().Faint(true),
+		tabActive:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("219")),
+		tabInactive: lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
+		head:        lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true),
+		ok:          lipgloss.NewStyle().Foreground(lipgloss.Color("42")),
+		bad:         lipgloss.NewStyle().Foreground(lipgloss.Color("196")),
+		label:       lipgloss.NewStyle().Faint(true),
 	}
 	return &TUIView{
 		styles: styles,
@@ -47,42 +66,46 @@ func (v *TUIView) SetSize(width, height int) {
 // View renders the complete TUI interface based on the current model and controller state.
 func (v *TUIView) View(model *TUIModel, controller *TUIController) string {
 	if v.width == 0 {
-		return "Loading..."
+		v.width = 120 // Default width to prevent loading screen
+		v.height = 30 // Default height
 	}
 
-	var b strings.Builder
-
-	b.WriteString(v.renderHeader())
-	b.WriteString("\n")
+	var parts []string
 
 	if controller.showHelp {
-		b.WriteString(v.helpView())
-		return b.String()
+		help := v.styles.border.Width(v.width - 2).Render(v.helpView())
+		return help
 	}
 
+	title := v.styles.title.Render("ModFetch Downloads • TUI v1 (refactored MVC)")
+	titleBar := v.styles.border.Width(v.width - 2).Render(title)
+	parts = append(parts, titleBar)
+
 	if controller.menuOn {
-		b.WriteString(v.menuView(controller))
-		return b.String()
+		menu := v.styles.border.Width(v.width - 2).Render(v.menuView(controller))
+		parts = append(parts, menu)
+		return lipgloss.JoinVertical(lipgloss.Left, parts...)
 	}
 
 	if controller.newDL {
-		b.WriteString(v.renderNewDownloadModal(controller))
-		return b.String()
+		modal := v.styles.border.Width(v.width - 4).Render(v.renderNewDownloadModal(controller))
+		parts = append(parts, modal)
+		return lipgloss.JoinVertical(lipgloss.Left, parts...)
 	}
 
-	b.WriteString(v.renderTable(model, controller))
+	table := v.styles.border.Width(v.width - 2).Render(v.renderTable(model, controller))
+	parts = append(parts, table)
 
 	rows := model.FilteredRows(controller.statusFilter)
 	if controller.showInfo && controller.selected < len(rows) {
-		b.WriteString("\n")
-		b.WriteString(v.renderDetails(rows[controller.selected]))
+		details := v.styles.border.Width(v.width - 2).Render(v.renderDetails(rows[controller.selected]))
+		parts = append(parts, details)
 	}
 
-	return b.String()
-}
+	commands := v.styles.border.Width(v.width - 2).Render(v.renderCommandsBar())
+	parts = append(parts, commands)
 
-func (v *TUIView) renderHeader() string {
-	return v.styles.header.Render("ModFetch Downloads")
+	return lipgloss.JoinVertical(lipgloss.Left, parts...)
 }
 
 func (v *TUIView) renderTable(model *TUIModel, controller *TUIController) string {
@@ -99,18 +122,31 @@ func (v *TUIView) renderTable(model *TUIModel, controller *TUIController) string
 			style = v.styles.sel
 		}
 
+		statusStyle := v.styles.label
+		switch row.Status {
+		case "completed":
+			statusStyle = v.styles.ok
+		case "failed", "error":
+			statusStyle = v.styles.bad
+		case "downloading", "running":
+			statusStyle = v.styles.tabActive
+		case "pending":
+			statusStyle = v.styles.tabInactive
+		}
+
 		line := fmt.Sprintf("%-40s %s",
 			truncate(row.URL, 40),
-			row.Status)
+			statusStyle.Render(row.Status))
 
 		if row.Status == "downloading" || row.Status == "running" || row.Status == "pending" {
 			current, total, _ := model.ProgressFor(row.URL, row.Dest)
 			if total > 0 && current > 0 {
 				pct := float64(current) / float64(total)
-				line += fmt.Sprintf(" %s/%s (%.1f%%)",
+				progressText := fmt.Sprintf(" %s/%s (%.1f%%)",
 					humanize.Bytes(uint64(current)),
 					humanize.Bytes(uint64(total)),
 					pct*100)
+				line += v.styles.head.Render(progressText)
 			}
 		}
 
@@ -134,29 +170,31 @@ func (v *TUIView) renderDetails(row state.DownloadRow) string {
 }
 
 func (v *TUIView) helpView() string {
-	help := `
-ModFetch TUI Help
+	title := v.styles.title.Render("ModFetch TUI Help (v1 - Refactored MVC)")
 
-Navigation:
-  ↑/k       Move up
+	navigation := v.styles.head.Render("Navigation:")
+	navItems := `  ↑/k       Move up
   ↓/j       Move down
   enter     Toggle details
   n         New download
   m         Menu
-  q         Quit
-  ?         Toggle help
-
-Menu Options:
+  /         Filter
   r         Refresh
+  q         Quit
+  ?         Toggle help`
+
+	menu := v.styles.head.Render("Menu Options:")
+	menuItems := `  r         Refresh downloads
   c         Clear completed
-  x         Cancel selected
-`
-	return help
+  x         Cancel selected download`
+
+	return fmt.Sprintf("%s\n\n%s\n%s\n\n%s\n%s", title, navigation, navItems, menu, menuItems)
 }
 
 func (v *TUIView) menuView(controller *TUIController) string {
 	var b strings.Builder
-	b.WriteString("Menu:\n")
+	title := v.styles.title.Render("Menu:")
+	b.WriteString(title + "\n\n")
 
 	options := []string{
 		"r - Refresh downloads",
@@ -197,6 +235,10 @@ func (v *TUIView) renderNewDownloadModal(controller *TUIController) string {
 	b.WriteString(controller.newInput.View())
 	b.WriteString("\n\nPress Esc to cancel, Enter to continue")
 	return b.String()
+}
+
+func (v *TUIView) renderCommandsBar() string {
+	return "↑/↓/j/k nav • enter details • n new • m menu • / filter • r refresh • ? help • q quit"
 }
 
 func truncate(s string, max int) string {

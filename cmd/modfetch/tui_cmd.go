@@ -50,7 +50,7 @@ func handleTUI(ctx context.Context, args []string) error {
 			_ = os.MkdirAll(filepath.Dir(*cfgPath), 0o755)
 			defaults := &config.Config{Version: 1, General: config.General{DataRoot: "~/modfetch/data", DownloadRoot: "~/modfetch/downloads", PlacementMode: "symlink"}, Concurrency: config.Concurrency{ChunkSizeMB: 8, PerFileChunks: 4}}
 			wiz := cw.New(defaults)
-			p := tea.NewProgram(wiz, tea.WithMouseCellMotion())
+			p := tea.NewProgram(wiz)
 			m, werr := p.Run()
 			if werr != nil {
 				return werr
@@ -89,11 +89,11 @@ func handleTUI(ctx context.Context, args []string) error {
 	var m tea.Model
 	// Default to TUI v2 (which works) unless legacy v1 explicitly requested
 	if *useV1 {
-		m = ui.New(c, st)  // Use refactored TUI v1
+		m = ui.New(c, st) // Use refactored TUI v1
 	} else {
-		m = uiv2.New(c, st, version)  // Use working TUI v2 as default
+		m = uiv2.New(c, st, version) // Use working TUI v2 as default
 	}
-	p := tea.NewProgram(m, tea.WithMouseCellMotion())
+	p := tea.NewProgram(m)
 	_, err = p.Run()
 	return err
 }
