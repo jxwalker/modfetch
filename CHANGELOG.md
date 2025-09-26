@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v0.5.2 — 2025-09-26
+
+Fixes
+- **TUI v1**: Restore rich UI elements, vibrant colors, and proper borders to TUI v1 (refactored MVC)
+- **TUI v1**: Fix critical startup issue where TUI was stuck at "Loading..." due to uninitialized window dimensions
+- **TUI v1**: Eliminate terminal escape sequences "10;?11;?" by removing problematic tea.WithMouseCellMotion()
+- **TUI v1**: Enhance visual feedback with colorful status indicators (green for completed, red for failed, pink for active)
+- **TUI v1**: Improve help system overlay rendering and navigation experience
+- **TUI v1**: Add comprehensive color scheme matching TUI v2's visual appeal
+
 ## v0.5.1 — 2025-09-25
 
 Fixes

@@ -15,16 +15,18 @@ Highlights
 
 Status: MVP feature‑complete for resolvers and downloads; ongoing polish in TUI and docs.
 
-What's new in v0.5.0
-- **Comprehensive installation package**: One-liner curl installer with guided setup experience
-- **Cross-platform deployment**: Automated Linux/macOS binary detection and installation  
-- **Enhanced config wizard integration**: Seamless setup with interactive configuration
-- **Developer tooling**: Enhanced setup scripts with git hooks and IDE configuration
-- TUI auto-recovery: resume downloads with status running or hold on startup (enable via `ui.auto_recover_on_start` in config)
-- Downloader core: transactional initial chunk planning; robust 429 handling that temporarily sets status=hold with Retry-After; unified final SHA via streaming utilities
-- HTTP probing: stricter Content-Length parsing, Accept-Ranges requires "bytes", and a final-URL HEAD fallback for better filename/size detection
+What's new in v0.5.2
+- **TUI v1 Enhanced**: Restored rich UI elements, vibrant colors, and proper borders to TUI v1 (refactored MVC)
+- **TUI Stability**: Fixed critical startup issues and eliminated terminal escape sequences
+- **Visual Feedback**: Enhanced colorful status indicators and comprehensive theming
+- **Installation Improvements**: Fixed installer 404 errors and unbound variable issues
+- **Navigation**: Restored proper arrow key navigation and help system functionality
 
-See full release notes and binaries: https://github.com/jxwalker/modfetch/releases/tag/v0.5.0
+Previous releases:
+- v0.5.1: Critical installer and TUI navigation fixes
+- v0.5.0: Comprehensive installation package with guided setup experience
+
+See full release notes and binaries: https://github.com/jxwalker/modfetch/releases
 
 Installation
 - **One-liner install** (recommended):
@@ -131,20 +133,25 @@ Usage (see docs/USER_GUIDE.md for details)
   
   modfetch tui --config /path/to/config.yml
   
-  - Keys:
-    - Navigation: j/k (select), / (filter), m (menu), h/? (help)
+  - **TUI v2 (default)**: Feature-rich interface with extensive UX upgrades
+    - Keys: j/k (select), / (filter), m (menu), h/? (help)
     - Sorting: s (sort by speed), e (sort by ETA), R (remaining bytes), o (clear sort)
     - Actions: n (new), r (refresh), d (details), g (group by status), t (toggle columns)
     - Per‑row actions: p (pause/cancel), y (retry), C (copy path), U (copy URL), O (open/reveal), D (delete staged), X (clear row)
+    - Live speed and ETA with throughput sparklines and comprehensive status indicators
+  - **TUI v1 (refactored)**: Enhanced MVC architecture with vibrant colors and rich theming
+    
+    modfetch tui --config /path/to/config.yml --v1
+    
+    - Colorful status indicators (green for completed, red for failed, pink for active)
+    - Clean borders and enhanced visual feedback
+    - Full navigation support with discoverable help system
   - Behavior:
     - Resolving spinner appears immediately, then planning → running
     - Live speed and ETA for both chunked and single‑stream fallback downloads
     - Accepts CivitAI model page URLs (https://civitai.com/models/ID) and rewrites them internally to the correct direct download URL
     - The header marks the active sort (SPEED*/ETA*/[sort: remaining]); the Stats panel shows View indicators (Sort/Group/Column/Theme)
   - See the full TUI guide: docs/TUI_GUIDE.md
-  - Preview the next‑gen TUI v2 (experimental):
-    
-    modfetch tui --config /path/to/config.yml --v2
 - Verify checksums in state:
   
   modfetch verify --config /path/to/config.yml --all
