@@ -1,0 +1,252 @@
+================================================================================
+                    MODFETCH TUI ARCHITECTURE ANALYSIS
+                           EXECUTIVE SUMMARY
+================================================================================
+
+PROJECT: modfetch - CLI+TUI for downloading LLM/Stable Diffusion models
+VERSION: v0.5.2 (Sept 2025)
+ANALYSIS DATE: Nov 9, 2025
+
+================================================================================
+1. QUICK OVERVIEW
+================================================================================
+
+modfetch provides two Terminal User Interface implementations:
+
+TUI v1 (Experimental):
+  - Architecture: Clean MVC pattern
+  - Files: ~930 lines across 5 files (model, view, controller, utils, orchestrator)
+  - Status: Recently refactored (Sept 24, 2025)
+  - Invocation: --v1 flag (not default)
+  
+TUI v2 (Default):
+  - Architecture: Single monolithic model
+  - Files: 2658 lines in internal/tui/v2/model.go
+  - Status: Working, feature-complete
+  - Invocation: Default (no flag needed)
+
+================================================================================
+2. KEY FINDINGS - ISSUES FOUND
+================================================================================
+
+CRITICAL ISSUES (High Priority):
+  [1] TUI v1 Progress Display: Shows 0 bytes for in-progress downloads
+      Location: internal/tui/tui_model.go, line 104 (ProgressFor method)
+      Impact: Users cannot see intermediate download progress in v1
+      
+  [2] Potential Enter Key Issue in TUI v2
+      Details: v2 only handles "enter" key, not "ctrl+j"
+      v1 was fixed to handle both (commit 7ce5afa)
+      Risk: v2 modal input might fail on systems where Bubble Tea sends ctrl+j
+
+DESIGN ISSUES (Medium Priority):
+  [3] TUI v2 Monolithic Architecture (2658 lines)
+      Makes it hard to: test, maintain, code review, extend
+      Recommendation: Apply MVC pattern like v1, or deprecate one version
+      
+  [4] URL Resolution Logic Duplicated
+      CivitAI URL normalization appears in multiple places:
+      - tui_controller.go (lines 338-354)
+      - tui_model.go (lines 194-212)
+      - v2/model.go (multiple locations)
+      Recommendation: Create shared utility function
+
+MINOR ISSUES (Low Priority):
+  [5] Ephemeral State Keying
+      Could be more robust when multiple jobs use same URL
+      
+  [6] Inconsistent Error Handling
+      Some async operations don't fully bubble errors to UI
+
+================================================================================
+3. RECENT FIXES VERIFIED (v0.5.2)
+================================================================================
+
+All recent fixes are working correctly:
+  ✅ TUI Version Selection (Commit 491e6dc)
+     - Fixed backwards --v1 logic
+     - v2 is now properly the default
+     
+  ✅ TUI v1 Loading Screen Hang (Commit a435afc)
+     - Fixed by setting default window dimensions (120x30)
+     - See: tui_view.go lines 68-71
+     
+  ✅ Enter Key Handling (Commit 7ce5afa)
+     - v1 now handles both "enter" and "ctrl+j"
+     - See: tui_controller.go line 211
+     - Note: v2 might need same fix
+     
+  ✅ Missing UI Elements (Commit a435afc)
+     - Restored rich colors, borders, styling
+     - Added comprehensive theming
+
+================================================================================
+4. ARCHITECTURE PATTERNS
+================================================================================
+
+TUI v1: MODEL-VIEW-CONTROLLER (Recommended for Maintenance)
+  - TUIModel: Database access, business logic (298 lines)
+  - TUIView: Pure rendering with Lipgloss (249 lines)
+  - TUIController: Event handling & state transitions (367 lines)
+  - Orchestrator: Ties components via tea.Model interface (65 lines)
+  
+  Benefits: Testable, maintainable, follows SRP
+  Trade-off: Slightly more complex to understand
+
+TUI v2: MONOLITHIC (Pragmatic but Hard to Maintain)
+  - Single Model struct with 40+ fields
+  - All logic in one file (2658 lines)
+  - Rendering, events, state all mixed
+  
+  Benefits: Quick to add features, all state visible
+  Trade-off: Hard to test, review, maintain
+
+================================================================================
+5. FRAMEWORKS & DEPENDENCIES
+================================================================================
+
+Terminal UI Stack:
+  - github.com/charmbracelet/bubbletea  → Event loop & model framework
+  - github.com/charmbracelet/bubbles    → Components (textinput, progress)
+  - github.com/charmbracelet/lipgloss   → Terminal styling (colors, borders)
+  - github.com/dustin/go-humanize       → Human-readable sizes
+
+Persistence:
+  - SQLite (internal/state)              → Download state storage
+  - YAML (internal/config)               → Configuration
+
+Integration:
+  - Internal resolver (hf:// civitai://) → URL resolution
+  - Internal downloader                  → Chunk management
+  - Internal placer                      → Model placement
+
+================================================================================
+6. STATE MANAGEMENT ANALYSIS
+================================================================================
+
+TUI v1 (Separated):
+  Model State:
+    - cfg: Configuration
+    - st: SQLite database connection
+    - rows: Current downloads
+    - running: Active downloads with cancel functions
+    - ephems: Resolving/preflight state
+    - prev: Speed calculation state (per-download)
+    
+  Controller State (UI):
+    - selected: Current row selection
+    - showInfo, showHelp, menuOn, filterOn: Visibility flags
+    - newDL, newStep: Modal wizard progress
+    - filterInput, newInput: Text input models
+    
+  Thread Safety: RWMutex protecting running map ✅
+
+TUI v2 (Unified):
+  Single Model with ~40+ fields:
+    - Rows, filters, modals (new job, batch)
+    - Caches: rate, ETA, total bytes, current bytes, history, hostnames
+    - Theme state, authentication status
+    - Running downloads, selected keys, toast queue
+    - UI preferences (theme, columns, sort mode)
+    
+  Thread Safety: Needs verification (no explicit mutex seen in tested code)
+
+================================================================================
+7. RECENT GIT HISTORY (Key Changes)
+================================================================================
+
+Sept 26: Commit a435afc - "restore rich UI elements and borders to TUI v1"
+         Added colors, borders, fixed loading hang, enhanced theming
+
+Sept 25: Commit 491e6dc - "correct TUI version selection logic"
+         Fixed --v1 flag logic, made v2 default
+
+Sept 24: Commit 7ce5afa - "split monolithic TUI model into MVC components"
+         Refactored v1 into MVC, fixed ctrl+j key handling
+
+Earlier: Commit 5bc613b - "auto-recover running/hold downloads on startup"
+         Downloads persist across TUI restarts
+
+================================================================================
+8. FEATURE COMPARISON
+================================================================================
+
+                        TUI v1          TUI v2
+Architecture            MVC             Monolithic
+Size (lines)            ~930            2658
+Pattern                 Good            Pragmatic
+Testing                 Component       Integration
+Default                 --v1 flag       Default
+Progress Display        Shows 0 bytes   Real-time
+Themes                  1               4 presets
+Tabs                    Implicit        Explicit
+Sorting                 Basic           Speed/ETA/Remaining
+Filtering               Yes             Yes + Search
+Grouping                Menu            Toggle key
+Inspector               No              Yes (key: i)
+Toasts                  Implicit        Explicit queue
+Theme Switch            No              Runtime (T key)
+Rate Limiting           Implicit        Explicit status
+Auth Status             No              Yes (ribbon)
+
+================================================================================
+9. TODO & RECOMMENDATIONS
+================================================================================
+
+HIGH PRIORITY (Fix First):
+  [ ] Add ctrl+j key handling to TUI v2 (for Bubble Tea compatibility)
+  [ ] Fix TUI v1 progress reporting to show actual bytes downloaded
+  [ ] Create shared utility for URL resolution logic
+  [ ] Add mutex protection verification to TUI v2
+
+MEDIUM PRIORITY (Improve):
+  [ ] Refactor TUI v2 with MVC pattern (or deprecate v1)
+  [ ] Improve ephemeral state keying with URL|Dest composite keys
+  [ ] Add more unit tests for both TUI versions
+  [ ] Improve error message propagation to UI
+  [ ] Verify thread safety in TUI v2
+
+FUTURE (Nice to Have):
+  [ ] Add mouse support
+  [ ] Better theme documentation
+  [ ] More comprehensive error handling
+  [ ] Performance profiling and optimization
+
+================================================================================
+10. DOCUMENTATION
+================================================================================
+
+Created two new analysis documents:
+  1. /home/user/modfetch/docs/TUI_ARCHITECTURE_ANALYSIS.md (15KB)
+     Comprehensive technical analysis with code references
+     
+  2. /home/user/modfetch/docs/TUI_QUICK_REFERENCE.md
+     Quick lookup for files, architecture, keybindings, issues
+
+Existing Documentation:
+  - docs/TUI_GUIDE.md - User guide for TUI features
+  - docs/TODO_NEXT.md - Prioritized feature requests
+  - docs/TODO.md - Backlog items
+  - README.md - Feature list and usage
+
+================================================================================
+                              CONCLUSION
+================================================================================
+
+The modfetch TUI is well-designed with two implementations:
+  
+  TUI v1: Clean MVC pattern, good for maintenance, has progress reporting issue
+  TUI v2: Feature-rich monolithic model, harder to maintain but working well
+
+Recent fixes (v0.5.2) resolved critical startup and navigation issues.
+
+Recommended Next Steps:
+  1. Verify TUI v2 Enter key handling with ctrl+j
+  2. Fix TUI v1 progress display (quick win)
+  3. Centralize URL resolution logic (code quality)
+  4. Consider long-term strategy: MVC refactor or v1 deprecation
+
+Overall Assessment: GOOD - Well-architected with recent improvements,
+                         minor issues identified and documented for improvement.
+
+================================================================================
