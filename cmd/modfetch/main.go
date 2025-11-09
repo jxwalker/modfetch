@@ -218,6 +218,8 @@ func handleDownload(ctx context.Context, args []string) error {
 	dryRun := fs.Bool("dry-run", false, "plan only: resolve URL/URI and compute default destination; no download")
 	forceSkip := fs.Bool("force", false, "skip SHA256 verification even if --sha256/--sha256-file is provided")
 	noAuthPreflight := fs.Bool("no-auth-preflight", false, "skip auth preflight probe")
+	quant := fs.String("quant", "", "HuggingFace quantization to download (e.g., Q4_K_M, fp16)")
+	listQuants := fs.Bool("list-quants", false, "list available quantizations for HuggingFace URI and exit")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -473,12 +475,53 @@ func handleDownload(ctx context.Context, args []string) error {
 					rev := parts[3]
 					filePath := strings.Join(parts[4:], "/")
 					hf := "hf://" + owner + "/" + repo + "/" + filePath + "?rev=" + rev
+					// Add quant parameter if specified
+					if strings.TrimSpace(*quant) != "" {
+						hf += "&quant=" + neturl.QueryEscape(*quant)
+					}
 					log.Infof("normalized HF blob -> %s", hf)
 					resolvedURL = hf
 				}
 			}
 		}
 	}
+	// Add quant parameter to hf:// URI if specified and not already present
+	if strings.HasPrefix(resolvedURL, "hf://") && strings.TrimSpace(*quant) != "" {
+		if !strings.Contains(resolvedURL, "quant=") {
+			separator := "?"
+			if strings.Contains(resolvedURL, "?") {
+				separator = "&"
+			}
+			resolvedURL += separator + "quant=" + neturl.QueryEscape(*quant)
+		}
+	}
+
+	// Handle --list-quants: resolve and display available quantizations
+	if *listQuants {
+		if !strings.HasPrefix(resolvedURL, "hf://") {
+			return fmt.Errorf("--list-quants only supported for HuggingFace URIs (hf://owner/repo[/path])")
+		}
+		res, err := resolver.Resolve(ctx, resolvedURL, c)
+		if err != nil {
+			return fmt.Errorf("resolve quantizations: %w", err)
+		}
+		if len(res.AvailableQuantizations) == 0 {
+			fmt.Println("No quantizations detected for this repository")
+			return nil
+		}
+		fmt.Printf("Available quantizations for %s:\n\n", resolvedURL)
+		for i, q := range res.AvailableQuantizations {
+			selected := ""
+			if q.Name == res.SelectedQuantization {
+				selected = " (recommended)"
+			}
+			fmt.Printf("  [%2d] %-12s  %10s  %-12s%s\n",
+				i+1, q.Name, humanize.Bytes(uint64(q.Size)), q.FileType, selected)
+		}
+		fmt.Printf("\nUse --quant=<name> to download a specific quantization\n")
+		return nil
+	}
+
 	if strings.HasPrefix(resolvedURL, "hf://") || strings.HasPrefix(resolvedURL, "civitai://") {
 		res, err := resolver.Resolve(ctx, resolvedURL, c)
 		if err != nil {
