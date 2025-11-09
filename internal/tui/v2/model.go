@@ -26,6 +26,7 @@ import (
 	"github.com/jxwalker/modfetch/internal/placer"
 	"github.com/jxwalker/modfetch/internal/resolver"
 	"github.com/jxwalker/modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/tui"
 	"github.com/jxwalker/modfetch/internal/util"
 )
 
@@ -430,6 +431,15 @@ func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Confirm quantization selection and update URL with selected file
 			if m.newSelectedQuant >= 0 && m.newSelectedQuant < len(m.newAvailableQuants) {
 				selected := m.newAvailableQuants[m.newSelectedQuant]
+
+				// Validate and sanitize FilePath
+				filePath := strings.TrimSpace(selected.FilePath)
+				filePath = strings.TrimPrefix(filePath, "/")
+				if filePath == "" {
+					m.addToast("error: invalid quantization file path")
+					return m, nil
+				}
+
 				// Update URL to point to the selected file
 				// Parse the current hf:// URL and update the path
 				if strings.HasPrefix(m.newURL, "hf://") {
@@ -455,7 +465,7 @@ func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 						owner := pathSegments[0]
 						repo := pathSegments[1]
 						// Rebuild with selected file path (no quant param needed)
-						m.newURL = "hf://" + owner + "/" + repo + "/" + selected.FilePath + revParam
+						m.newURL = "hf://" + owner + "/" + repo + "/" + filePath + revParam
 					}
 				}
 			}

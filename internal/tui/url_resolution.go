@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/jxwalker/modfetch/internal/config"
@@ -50,7 +51,7 @@ func NormalizeHuggingFaceURL(raw string) string {
 	filePath := strings.Join(parts[4:], "/")
 
 	// Build hf:// URI
-	normalized := "hf://" + owner + "/" + repo + "/" + filePath + "?rev=" + rev
+	normalized := "hf://" + owner + "/" + repo + "/" + filePath + "?rev=" + url.QueryEscape(rev)
 	return normalized
 }
 
@@ -226,15 +227,19 @@ func AttachAuthHeaders(urlStr string, cfg *config.Config, headers map[string]str
 
 	// Attach Hugging Face token if configured and targeting HF domain
 	if hostIs(hostname, "huggingface.co") && cfg.Sources.HuggingFace.Enabled {
-		if token := cfg.Sources.HuggingFace.Token(); token != "" {
-			headers["Authorization"] = "Bearer " + token
+		if env := strings.TrimSpace(cfg.Sources.HuggingFace.TokenEnv); env != "" {
+			if token := strings.TrimSpace(os.Getenv(env)); token != "" {
+				headers["Authorization"] = "Bearer " + token
+			}
 		}
 	}
 
 	// Attach CivitAI token if configured and targeting CivitAI domain
 	if hostIs(hostname, "civitai.com") && cfg.Sources.CivitAI.Enabled {
-		if token := cfg.Sources.CivitAI.Token(); token != "" {
-			headers["Authorization"] = "Bearer " + token
+		if env := strings.TrimSpace(cfg.Sources.CivitAI.TokenEnv); env != "" {
+			if token := strings.TrimSpace(os.Getenv(env)); token != "" {
+				headers["Authorization"] = "Bearer " + token
+			}
 		}
 	}
 
