@@ -65,6 +65,12 @@ type tickMsg time.Time
 type dlDoneMsg struct {
 	url, dest, path string
 	err             error
+	// Placement metadata to avoid concurrent map access
+	origKey       string
+	resKey        string
+	autoPlace     bool
+	placeType     string
+	needsPlaceMap bool // true if placement metadata should be applied
 }
 
 type recoverRowsMsg struct{ rows []state.DownloadRow }
@@ -129,7 +135,6 @@ type Model struct {
 	newStep          int
 	newInput         textinput.Model
 	newURL           string
-	newDest          string //nolint:unused
 	newType          string
 	newAutoPlace     bool
 	newAutoSuggested string // latest auto-suggested dest (to avoid overriding manual edits)
@@ -346,6 +351,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.refresh()
 	case dlDoneMsg:
+		// Apply placement metadata if needed (safe concurrent map access from Update thread)
+		if msg.needsPlaceMap && msg.origKey != msg.resKey {
+			if msg.autoPlace {
+				m.autoPlace[msg.resKey] = true
+			}
+			if strings.TrimSpace(msg.placeType) != "" {
+				m.placeType[msg.resKey] = msg.placeType
+			}
+			// Clean up old keys
+			delete(m.autoPlace, msg.origKey)
+			delete(m.placeType, msg.origKey)
+		}
 		if msg.err != nil {
 			m.err = msg.err
 			m.addToast("failed: " + msg.err.Error())
@@ -2264,13 +2281,6 @@ func (m *Model) updateTokenEnvStatus() {
 	}
 }
 
-// hostIs returns true if h equals root or is a subdomain of root.
-func hostIs(h, root string) bool {
-	h = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(h)), ".")
-	root = strings.ToLower(strings.TrimSpace(root))
-	return h == root || strings.HasSuffix(h, "."+root)
-}
-
 func (m *Model) renderAuthStatus() string {
 	// derive statuses with precedence: disabled > rejected > set > unset
 	envHF := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv)
@@ -2540,7 +2550,7 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 		if strings.HasPrefix(resolved, "hf://") || strings.HasPrefix(resolved, "civitai://") {
 			res, err := resolver.Resolve(ctx, resolved, m.cfg)
 			if err != nil {
-				return dlDoneMsg{url: urlStr, dest: dest, path: "", err: err}
+				return dlDoneMsg{url: urlStr, dest: dest, path: "", err: err, needsPlaceMap: false}
 			}
 			resolved = res.URL
 			headers = res.Headers
@@ -2570,16 +2580,15 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 		// Merge any pre-inserted row under the original URL into the resolved URL key to avoid duplicates
 		origKey := urlStr + "|" + dest
 		resKey := resolved + "|" + dest
+		// Store placement metadata for safe handling in Update()
+		needsMap := false
+		autoPlaceVal := false
+		placeTypeVal := ""
 		if origKey != resKey {
-			// Mirror placement overrides
-			if m.autoPlace[origKey] {
-				m.autoPlace[resKey] = true
-				delete(m.autoPlace, origKey)
-			}
-			if t := m.placeType[origKey]; strings.TrimSpace(t) != "" {
-				m.placeType[resKey] = t
-				delete(m.placeType, origKey)
-			}
+			// Capture placement overrides to pass back via message (avoid concurrent map access)
+			needsMap = true
+			autoPlaceVal = m.autoPlace[origKey]
+			placeTypeVal = m.placeType[origKey]
 			// Remove the old pending row and create/refresh the resolved one as pending
 			_ = m.st.DeleteDownload(urlStr, dest)
 			_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "pending"})
@@ -2590,17 +2599,12 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 				reach, info := downloader.CheckReachable(ctx, m.cfg, resolved, headers)
 				if !reach {
 					_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold", LastError: info})
-					// mirror autoplace/type mappings to resolved key so future retries work
-					origKey := urlStr + "|" + dest
-					resKey := resolved + "|" + dest
-					if m.autoPlace[origKey] {
-						m.autoPlace[resKey] = true
-					}
-					if t := m.placeType[origKey]; t != "" {
-						m.placeType[resKey] = t
-					}
+					// Return placement data to Update() for safe map handling
 					m.addToast("probe failed: unreachable; job on hold (" + info + ")")
-					return dlDoneMsg{url: resolved, dest: dest, path: "", err: fmt.Errorf("hold: unreachable")}
+					return dlDoneMsg{
+						url: resolved, dest: dest, path: "", err: fmt.Errorf("hold: unreachable"),
+						origKey: origKey, resKey: resKey, autoPlace: autoPlaceVal, placeType: placeTypeVal, needsPlaceMap: needsMap,
+					}
 				}
 				// If reachable, parse status code for early auth guidance
 				code := 0
@@ -2625,13 +2629,19 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 					}
 					_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "hold", LastError: msg})
 					m.addToast("preflight auth: job on hold (" + msg + ")")
-					return dlDoneMsg{url: resolved, dest: dest, path: "", err: fmt.Errorf("hold: unauthorized")}
+					return dlDoneMsg{
+						url: resolved, dest: dest, path: "", err: fmt.Errorf("hold: unauthorized"),
+						origKey: origKey, resKey: resKey, autoPlace: autoPlaceVal, placeType: placeTypeVal, needsPlaceMap: needsMap,
+					}
 				}
 			}
 			log := logging.New("error", false)
 			dl := downloader.NewAuto(m.cfg, log, m.st, nil)
 			final, _, err := dl.Download(ctx, resolved, dest, "", headers, m.cfg.General.AlwaysNoResume)
-			return dlDoneMsg{url: urlStr, dest: dest, path: final, err: err}
+			return dlDoneMsg{
+				url: urlStr, dest: dest, path: final, err: err,
+				origKey: origKey, resKey: resKey, autoPlace: autoPlaceVal, placeType: placeTypeVal, needsPlaceMap: needsMap,
+			}
 		} else {
 			// Probe-only path
 			reach, info := downloader.CheckReachable(ctx, m.cfg, resolved, headers)
