@@ -280,10 +280,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if _, ok := m.running[key]; ok {
 				continue
 			}
+			// Capture placement data before spawning goroutine (avoid concurrent map access)
+			autoPlace := m.autoPlace[key]
+			placeType := m.placeType[key]
 			ctx, cancel := context.WithCancel(context.Background())
 			m.running[key] = cancel
 			m.retrying[key] = now
-			cmds = append(cmds, m.startDownloadCmdCtx(ctx, r.URL, r.Dest))
+			cmds = append(cmds, m.startDownloadCmdCtx(ctx, r.URL, r.Dest, autoPlace, placeType))
 		}
 		m.addToast(fmt.Sprintf("auto-recover: resumed %d", len(cmds)))
 		return m, tea.Batch(cmds...)
@@ -585,7 +588,7 @@ func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			_ = m.st.UpsertDownload(state.DownloadRow{URL: urlStr, Dest: dest, Status: "pending"})
-			cmd := m.startDownloadCmd(urlStr, dest)
+			// Set placement data before spawning goroutine
 			key := urlStr + "|" + dest
 			if strings.TrimSpace(m.newType) != "" {
 				m.placeType[key] = m.newType
@@ -593,6 +596,10 @@ func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.newAutoPlace {
 				m.autoPlace[key] = true
 			}
+			// Capture placement data to pass (avoid concurrent map access)
+			autoPlace := m.autoPlace[key]
+			placeType := m.placeType[key]
+			cmd := m.startDownloadCmd(urlStr, dest, autoPlace, placeType)
 			m.addToast("started: " + truncateMiddle(dest, 40))
 			m.newJob = false
 			return m, cmd
@@ -778,10 +785,14 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		cmds := make([]tea.Cmd, 0, len(targets))
 		now := time.Now()
 		for _, r := range targets {
+			// Capture placement data before spawning goroutine (avoid concurrent map access)
+			key := keyFor(r)
+			autoPlace := m.autoPlace[key]
+			placeType := m.placeType[key]
 			ctx, cancel := context.WithCancel(context.Background())
-			m.running[keyFor(r)] = cancel
-			m.retrying[keyFor(r)] = now
-			cmds = append(cmds, m.startDownloadCmdCtx(ctx, r.URL, r.Dest))
+			m.running[key] = cancel
+			m.retrying[key] = now
+			cmds = append(cmds, m.startDownloadCmdCtx(ctx, r.URL, r.Dest, autoPlace, placeType))
 		}
 		m.addToast(fmt.Sprintf("retrying %d item(s)…", len(targets)))
 		return m, tea.Batch(cmds...)
@@ -2430,7 +2441,7 @@ func (m *Model) importBatchFile(path string) tea.Cmd {
 		if dest == "" {
 			dest = m.computeDefaultDest(u)
 		}
-		cmds = append(cmds, m.startDownloadCmd(u, dest))
+		// Set placement data before spawning goroutine
 		key := u + "|" + dest
 		if strings.TrimSpace(typeOv) != "" {
 			m.placeType[key] = typeOv
@@ -2438,6 +2449,10 @@ func (m *Model) importBatchFile(path string) tea.Cmd {
 		if place {
 			m.autoPlace[key] = true
 		}
+		// Capture placement data to pass (avoid concurrent map access)
+		autoPlace := m.autoPlace[key]
+		placeType := m.placeType[key]
+		cmds = append(cmds, m.startDownloadCmd(u, dest, autoPlace, placeType))
 		count++
 	}
 	if err := sc.Err(); err != nil {
@@ -2447,10 +2462,10 @@ func (m *Model) importBatchFile(path string) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m *Model) startDownloadCmd(urlStr, dest string) tea.Cmd {
+func (m *Model) startDownloadCmd(urlStr, dest string, autoPlace bool, placeType string) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.running[urlStr+"|"+dest] = cancel
-	return m.downloadOrHoldCmd(ctx, urlStr, dest, true)
+	return m.downloadOrHoldCmd(ctx, urlStr, dest, true, autoPlace, placeType)
 }
 
 // probeSelectedCmd: probe reachability for rows without starting
@@ -2492,12 +2507,12 @@ func (m *Model) probeSelectedCmd(rows []state.DownloadRow) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m *Model) startDownloadCmdCtx(ctx context.Context, urlStr, dest string) tea.Cmd {
-	return m.downloadOrHoldCmd(ctx, urlStr, dest, true)
+func (m *Model) startDownloadCmdCtx(ctx context.Context, urlStr, dest string, autoPlace bool, placeType string) tea.Cmd {
+	return m.downloadOrHoldCmd(ctx, urlStr, dest, true, autoPlace, placeType)
 }
 
 // downloadOrHoldCmd optionally starts download; when start=false it only probes and updates hold status
-func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, start bool) tea.Cmd {
+func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, start bool, autoPlace bool, placeType string) tea.Cmd {
 	return func() tea.Msg {
 		resolved := urlStr
 		headers := map[string]string{}
@@ -2580,15 +2595,13 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 		// Merge any pre-inserted row under the original URL into the resolved URL key to avoid duplicates
 		origKey := urlStr + "|" + dest
 		resKey := resolved + "|" + dest
-		// Store placement metadata for safe handling in Update()
+		// Use placement metadata passed as parameters (safe - no concurrent map access)
 		needsMap := false
-		autoPlaceVal := false
-		placeTypeVal := ""
+		autoPlaceVal := autoPlace
+		placeTypeVal := placeType
 		if origKey != resKey {
-			// Capture placement overrides to pass back via message (avoid concurrent map access)
+			// Mark that placement data needs to be remapped in Update()
 			needsMap = true
-			autoPlaceVal = m.autoPlace[origKey]
-			placeTypeVal = m.placeType[origKey]
 			// Remove the old pending row and create/refresh the resolved one as pending
 			_ = m.st.DeleteDownload(urlStr, dest)
 			_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "pending"})
