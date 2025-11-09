@@ -101,10 +101,44 @@ func (m *TUIModel) AddEphemeral(url, dest string, headers map[string]string, sha
 func (m *TUIModel) ProgressFor(url, dest string) (int64, int64, string) {
 	for _, row := range m.rows {
 		if row.URL == url && row.Dest == dest {
-			return 0, row.Size, row.Status
+			cur, total := m.computeCurAndTotal(row)
+			return cur, total, row.Status
 		}
 	}
 	return 0, 0, "unknown"
+}
+
+// computeCurAndTotal calculates current and total bytes for a download.
+// It queries chunk states from the database and sums completed chunk sizes.
+// Falls back to checking the partial file size if no chunks are tracked.
+func (m *TUIModel) computeCurAndTotal(r state.DownloadRow) (cur int64, total int64) {
+	total = r.Size
+
+	// Query chunks from database to get accurate progress
+	chunks, err := m.st.ListChunks(r.URL, r.Dest)
+	if err == nil && len(chunks) > 0 {
+		// Sum up completed chunks
+		for _, c := range chunks {
+			if strings.EqualFold(c.Status, "complete") {
+				cur += c.Size
+			}
+		}
+		return cur, total
+	}
+
+	// Fallback: check partial file size on disk
+	if r.Dest != "" {
+		// Try partial file first
+		partPath := downloader.StagePartPath(m.cfg, r.URL, r.Dest)
+		if st, err := os.Stat(partPath); err == nil {
+			cur = st.Size()
+		} else if st, err := os.Stat(r.Dest); err == nil {
+			// Check final destination if partial doesn't exist
+			cur = st.Size()
+		}
+	}
+
+	return cur, total
 }
 
 // FilteredRows returns download rows filtered by the given status list.
@@ -184,79 +218,10 @@ func (m *TUIModel) StartDownload(ctx context.Context, urlStr, dest, sha string, 
 		return err
 	}
 
-	resolved := urlStr
-	if headers == nil {
-		headers = map[string]string{}
-	}
-
-	if strings.HasPrefix(resolved, "http://") || strings.HasPrefix(resolved, "https://") {
-		if u, err := neturl.Parse(resolved); err == nil {
-			h := strings.ToLower(u.Hostname())
-			if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
-				parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-				if len(parts) >= 2 {
-					modelID := parts[1]
-					q := u.Query()
-					ver := q.Get("modelVersionId")
-					if ver == "" {
-						ver = q.Get("version")
-					}
-					civ := "civitai://model/" + modelID
-					if strings.TrimSpace(ver) != "" {
-						civ += "?version=" + neturl.QueryEscape(ver)
-					}
-					if res, err := resolver.Resolve(ctx, civ, m.cfg); err == nil {
-						resolved = res.URL
-						headers = res.Headers
-					}
-				}
-			}
-			if hostIs(h, "huggingface.co") {
-				parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-				if len(parts) >= 5 && parts[2] == "blob" {
-					owner := parts[0]
-					repo := parts[1]
-					rev := parts[3]
-					filePath := strings.Join(parts[4:], "/")
-					hf := "hf://" + owner + "/" + repo + "/" + filePath + "?rev=" + rev
-					if res, err := resolver.Resolve(ctx, hf, m.cfg); err == nil {
-						resolved = res.URL
-						headers = res.Headers
-					}
-				}
-			}
-		}
-	}
-
-	if strings.HasPrefix(resolved, "hf://") || strings.HasPrefix(resolved, "civitai://") {
-		res, err := resolver.Resolve(ctx, resolved, m.cfg)
-		if err != nil {
-			return err
-		}
-		resolved = res.URL
-		headers = res.Headers
-	} else {
-		if u, err := neturl.Parse(resolved); err == nil {
-			h := strings.ToLower(u.Hostname())
-			if hostIs(h, "huggingface.co") && m.cfg.Sources.HuggingFace.Enabled {
-				env := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv)
-				if env == "" {
-					env = "HF_TOKEN"
-				}
-				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-					headers["Authorization"] = "Bearer " + tok
-				}
-			}
-			if hostIs(h, "civitai.com") && m.cfg.Sources.CivitAI.Enabled {
-				env := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv)
-				if env == "" {
-					env = "CIVITAI_TOKEN"
-				}
-				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-					headers["Authorization"] = "Bearer " + tok
-				}
-			}
-		}
+	// Use centralized URL resolution and auth attachment
+	resolved, headers, err := ResolveAndAttachAuth(ctx, urlStr, m.cfg, headers)
+	if err != nil {
+		return err
 	}
 
 	key := resolved + "|" + dest

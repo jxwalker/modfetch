@@ -26,6 +26,7 @@ import (
 	"github.com/jxwalker/modfetch/internal/placer"
 	"github.com/jxwalker/modfetch/internal/resolver"
 	"github.com/jxwalker/modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/tui"
 	"github.com/jxwalker/modfetch/internal/util"
 )
 
@@ -75,10 +76,12 @@ type destSuggestMsg struct {
 }
 
 type metaMsg struct {
-	url       string
-	fileName  string
-	suggested string
-	civType   string
+	url           string
+	fileName      string
+	suggested     string
+	civType       string
+	quants        []resolver.Quantization // Available quantizations (HuggingFace)
+	selectedQuant string                  // Pre-selected quantization if any
 }
 
 type probeMsg struct {
@@ -136,6 +139,11 @@ type Model struct {
 	newDetectedName  string // suggested filename/name from resolver (for display)
 	// Extension suggestion when filename lacks suffix (e.g., .safetensors, .gguf)
 	newSuggestExt string
+	// Quantization selection state (HuggingFace)
+	newAvailableQuants []resolver.Quantization // Available quantization variants
+	newSelectedQuant   int                     // Index into newAvailableQuants
+	newQuantsDetected  bool                    // Whether quantizations were detected
+	newQuantSelecting  bool                    // Currently in quantization selection mode
 	// Batch import modal state
 	batchMode  bool
 	batchInput textinput.Model
@@ -297,7 +305,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			t := mapCivitFileType(msg.civType, msg.fileName)
 			m.newTypeDetected = t
 			m.newTypeSource = "civitai"
-			if m.newStep == 2 {
+
+			// Store quantization data if detected
+			if len(msg.quants) > 0 {
+				m.newAvailableQuants = msg.quants
+				m.newQuantsDetected = true
+				// Find index of selected quantization
+				for i, q := range msg.quants {
+					if q.Name == msg.selectedQuant {
+						m.newSelectedQuant = i
+						break
+					}
+				}
+				// Enter quantization selection mode if we're at step 2
+				if m.newStep == 2 {
+					m.newQuantSelecting = true
+				}
+			} else {
+				m.newAvailableQuants = nil
+				m.newQuantsDetected = false
+				m.newSelectedQuant = 0
+				m.newQuantSelecting = false
+			}
+
+			// Pre-fill type field if no quantization selection needed
+			if m.newStep == 2 && !m.newQuantSelecting {
 				cur := strings.TrimSpace(m.newInput.Value())
 				if cur == "" {
 					m.newInput.SetValue(t)
@@ -375,6 +407,78 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s := msg.String()
+
+	// Handle quantization selection mode separately
+	if m.newQuantSelecting {
+		switch s {
+		case "esc":
+			// Cancel quantization selection, go back to type selection
+			m.newQuantSelecting = false
+			return m, nil
+		case "j", "down":
+			// Navigate down in quantization list
+			if m.newSelectedQuant < len(m.newAvailableQuants)-1 {
+				m.newSelectedQuant++
+			}
+			return m, nil
+		case "k", "up":
+			// Navigate up in quantization list
+			if m.newSelectedQuant > 0 {
+				m.newSelectedQuant--
+			}
+			return m, nil
+		case "enter", "ctrl+j":
+			// Confirm quantization selection and update URL with selected file
+			if m.newSelectedQuant >= 0 && m.newSelectedQuant < len(m.newAvailableQuants) {
+				selected := m.newAvailableQuants[m.newSelectedQuant]
+
+				// Validate and sanitize FilePath
+				filePath := strings.TrimSpace(selected.FilePath)
+				filePath = strings.TrimPrefix(filePath, "/")
+				if filePath == "" {
+					m.addToast("error: invalid quantization file path")
+					return m, nil
+				}
+
+				// Update URL to point to the selected file
+				// Parse the current hf:// URL and update the path
+				if strings.HasPrefix(m.newURL, "hf://") {
+					// Format: hf://owner/repo[/path]?rev=...&quant=...
+					// We need to update it to hf://owner/repo/selected.FilePath?rev=...
+					// Note: We strip out quant= parameter since we're specifying the exact file
+					parts := strings.Split(strings.TrimPrefix(m.newURL, "hf://"), "?")
+					pathPart := parts[0]
+
+					// Preserve only rev parameter, drop quant parameter
+					revParam := ""
+					if len(parts) > 1 {
+						if q, err := neturl.ParseQuery(parts[1]); err == nil {
+							if rev := q.Get("rev"); rev != "" {
+								revParam = "?rev=" + neturl.QueryEscape(rev)
+							}
+						}
+					}
+
+					// Split path into owner/repo[/oldpath]
+					pathSegments := strings.Split(pathPart, "/")
+					if len(pathSegments) >= 2 {
+						owner := pathSegments[0]
+						repo := pathSegments[1]
+						// Rebuild with selected file path (no quant param needed)
+						m.newURL = "hf://" + owner + "/" + repo + "/" + filePath + revParam
+					}
+				}
+			}
+
+			m.newQuantSelecting = false
+			m.newInput.SetValue("")
+			m.newInput.Placeholder = "Artifact type (optional, e.g. sd.checkpoint)"
+			m.newStep = 2
+			return m, nil
+		}
+		return m, nil
+	}
+
 	switch s {
 	case "esc":
 		m.newJob = false
@@ -399,7 +503,7 @@ func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case "enter":
+	case "enter", "ctrl+j":
 		val := strings.TrimSpace(m.newInput.Value())
 		switch m.newStep {
 		case 1:
@@ -489,7 +593,7 @@ func (m *Model) updateBatchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.batchMode = false
 		return m, nil
-	case "enter":
+	case "enter", "ctrl+j":
 		path := strings.TrimSpace(m.batchInput.Value())
 		var cmd tea.Cmd
 		if path != "" {
@@ -506,7 +610,7 @@ func (m *Model) updateBatchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s := msg.String()
 	switch s {
-	case "enter":
+	case "enter", "ctrl+j":
 		m.filterOn = false
 		m.filterInput.Blur()
 		return m, nil
@@ -762,7 +866,12 @@ func (m *Model) View() string {
 	}
 	modal := ""
 	if m.newJob {
-		modal = m.th.border.Width(m.w - 4).Render(m.renderNewJobModal())
+		// Show quantization selection UI if in that mode
+		if m.newQuantSelecting {
+			modal = m.th.border.Width(m.w - 4).Render(m.renderQuantizationSelection())
+		} else {
+			modal = m.th.border.Width(m.w - 4).Render(m.renderNewJobModal())
+		}
 	}
 	if m.batchMode {
 		modal = m.th.border.Width(m.w - 4).Render(m.renderBatchModal())
@@ -991,6 +1100,53 @@ func (m *Model) renderNewJobModal() string {
 		sb.WriteString(m.th.label.Render(fmt.Sprintf("Detected: %s (%s)", m.newTypeDetected, from)) + "\n")
 	}
 	sb.WriteString(m.newInput.View())
+	return sb.String()
+}
+
+// renderQuantizationSelection renders the quantization selection UI
+func (m *Model) renderQuantizationSelection() string {
+	var sb strings.Builder
+	sb.WriteString(m.th.head.Render("Select Quantization") + "\n\n")
+
+	// Extract repo info from URL if available
+	repoInfo := ""
+	if strings.HasPrefix(m.newURL, "hf://") {
+		parts := strings.Split(strings.TrimPrefix(m.newURL, "hf://"), "/")
+		if len(parts) >= 2 {
+			repoInfo = parts[0] + "/" + parts[1]
+		}
+	}
+	if repoInfo != "" {
+		sb.WriteString(m.th.label.Render("Repository: "+repoInfo) + "\n\n")
+	}
+
+	sb.WriteString(m.th.label.Render("Available quantizations (j/k to navigate, Enter to select):") + "\n\n")
+
+	// Render each quantization option
+	for i, q := range m.newAvailableQuants {
+		prefix := "  "
+
+		// Highlight selected item
+		if i == m.newSelectedQuant {
+			prefix = "▸ "
+		}
+
+		// Format size
+		sizeStr := humanize.Bytes(uint64(q.Size))
+
+		// Build line: "  Q4_K_M  (4.1 GB)  - gguf"
+		line := fmt.Sprintf("%s%-10s  (%7s)  - %s", prefix, q.Name, sizeStr, q.FileType)
+
+		if i == m.newSelectedQuant {
+			sb.WriteString(m.th.ok.Render(line) + "\n")
+		} else {
+			sb.WriteString(m.th.label.Render(line) + "\n")
+		}
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(m.th.label.Render("j/k: navigate  •  Enter: select  •  Esc: cancel") + "\n")
+
 	return sb.String()
 }
 
@@ -1805,38 +1961,29 @@ func (m *Model) suggestPlacementCmd(urlStr, atype string) tea.Cmd {
 	}
 }
 
-// Resolve metadata (suggested filename and civitai file type) in background
+// Resolve metadata (suggested filename, civitai file type, and quantizations) in background
 func (m *Model) resolveMetaCmd(raw string) tea.Cmd {
 	return func() tea.Msg {
 		s := strings.TrimSpace(raw)
 		if s == "" {
 			return metaMsg{url: raw}
 		}
-		// Normalize civitai page URLs to civitai://
-		if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
-			if u, err := neturl.Parse(s); err == nil {
-				h := strings.ToLower(u.Hostname())
-				if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
-					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-					if len(parts) >= 2 {
-						modelID := parts[1]
-						q := u.Query()
-						ver := q.Get("modelVersionId")
-						if ver == "" {
-							ver = q.Get("version")
-						}
-						civ := "civitai://model/" + modelID
-						if strings.TrimSpace(ver) != "" {
-							civ += "?version=" + neturl.QueryEscape(ver)
-						}
-						s = civ
-					}
+
+		// Use centralized URL normalization and resolution
+		normalized := tui.NormalizeURL(s)
+
+		// Only resolve URIs (hf:// or civitai://)
+		if strings.HasPrefix(normalized, "hf://") || strings.HasPrefix(normalized, "civitai://") {
+			res, err := resolver.Resolve(context.Background(), normalized, m.cfg)
+			if err == nil {
+				return metaMsg{
+					url:           raw,
+					fileName:      res.FileName,
+					suggested:     res.SuggestedFilename,
+					civType:       res.FileType,
+					quants:        res.AvailableQuantizations,
+					selectedQuant: res.SelectedQuantization,
 				}
-			}
-		}
-		if strings.HasPrefix(s, "hf://") || strings.HasPrefix(s, "civitai://") {
-			if res, err := resolver.Resolve(context.Background(), s, m.cfg); err == nil {
-				return metaMsg{url: raw, fileName: res.FileName, suggested: res.SuggestedFilename, civType: res.FileType}
 			}
 		}
 		return metaMsg{url: raw}
