@@ -72,6 +72,9 @@ func Open(cfg *config.Config) (*DB, error) {
 	if err := db.InitHostCapsTable(); err != nil {
 		return nil, err
 	}
+	if err := db.InitMetadataTable(); err != nil {
+		return nil, err
+	}
 	return db, nil
 }
 

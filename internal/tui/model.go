@@ -23,6 +23,7 @@ import (
 	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/downloader"
 	"github.com/jxwalker/modfetch/internal/logging"
+	"github.com/jxwalker/modfetch/internal/metadata"
 	"github.com/jxwalker/modfetch/internal/placer"
 	"github.com/jxwalker/modfetch/internal/resolver"
 	"github.com/jxwalker/modfetch/internal/state"
@@ -403,6 +404,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.civRejected = false
 			m.civRateLimited = false
 		}
+		// Fetch and store metadata asynchronously
+		go m.fetchAndStoreMetadata(msg.url, msg.dest, msg.path)
 		// Auto place if configured
 		key := msg.url + "|" + msg.dest
 		if m.autoPlace[key] {
@@ -2660,6 +2663,53 @@ func themeIndexByName(name string) int {
 		return 3
 	default:
 		return -1
+	}
+}
+
+// fetchAndStoreMetadata asynchronously fetches metadata for a downloaded file and stores it in the database.
+// This is fire-and-forget - errors are logged but don't affect the UI.
+func (m *Model) fetchAndStoreMetadata(url, dest, path string) {
+	if m.st == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Create metadata registry
+	registry := metadata.NewRegistry()
+
+	// Fetch metadata from appropriate source
+	meta, err := registry.FetchMetadata(ctx, url)
+	if err != nil {
+		// Log error but don't fail - metadata is optional
+		if m.log != nil {
+			m.log.Debugf("metadata fetch failed for %s: %v", url, err)
+		}
+		return
+	}
+
+	// Set destination path
+	meta.DownloadURL = url
+	meta.Dest = dest
+
+	// Get file size if available
+	if path != "" {
+		if info, err := os.Stat(path); err == nil {
+			meta.FileSize = info.Size()
+		}
+	}
+
+	// Store metadata in database
+	if err := m.st.UpsertMetadata(meta); err != nil {
+		if m.log != nil {
+			m.log.Debugf("metadata storage failed for %s: %v", url, err)
+		}
+		return
+	}
+
+	if m.log != nil {
+		m.log.Debugf("stored metadata for %s (%s)", meta.ModelName, url)
 	}
 }
 
