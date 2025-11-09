@@ -399,7 +399,7 @@ func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case "enter":
+	case "enter", "ctrl+j":
 		val := strings.TrimSpace(m.newInput.Value())
 		switch m.newStep {
 		case 1:
@@ -489,7 +489,7 @@ func (m *Model) updateBatchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.batchMode = false
 		return m, nil
-	case "enter":
+	case "enter", "ctrl+j":
 		path := strings.TrimSpace(m.batchInput.Value())
 		var cmd tea.Cmd
 		if path != "" {
@@ -506,7 +506,7 @@ func (m *Model) updateBatchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s := msg.String()
 	switch s {
-	case "enter":
+	case "enter", "ctrl+j":
 		m.filterOn = false
 		m.filterInput.Blur()
 		return m, nil
