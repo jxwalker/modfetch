@@ -435,11 +435,18 @@ func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				if strings.HasPrefix(m.newURL, "hf://") {
 					// Format: hf://owner/repo[/path]?rev=...&quant=...
 					// We need to update it to hf://owner/repo/selected.FilePath?rev=...
+					// Note: We strip out quant= parameter since we're specifying the exact file
 					parts := strings.Split(strings.TrimPrefix(m.newURL, "hf://"), "?")
 					pathPart := parts[0]
-					queryPart := ""
+
+					// Preserve only rev parameter, drop quant parameter
+					revParam := ""
 					if len(parts) > 1 {
-						queryPart = "?" + parts[1]
+						if q, err := neturl.ParseQuery(parts[1]); err == nil {
+							if rev := q.Get("rev"); rev != "" {
+								revParam = "?rev=" + neturl.QueryEscape(rev)
+							}
+						}
 					}
 
 					// Split path into owner/repo[/oldpath]
@@ -447,8 +454,8 @@ func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					if len(pathSegments) >= 2 {
 						owner := pathSegments[0]
 						repo := pathSegments[1]
-						// Rebuild with selected file path
-						m.newURL = "hf://" + owner + "/" + repo + "/" + selected.FilePath + queryPart
+						// Rebuild with selected file path (no quant param needed)
+						m.newURL = "hf://" + owner + "/" + repo + "/" + selected.FilePath + revParam
 					}
 				}
 			}
@@ -1108,12 +1115,10 @@ func (m *Model) renderQuantizationSelection() string {
 	// Render each quantization option
 	for i, q := range m.newAvailableQuants {
 		prefix := "  "
-		suffix := ""
 
 		// Highlight selected item
 		if i == m.newSelectedQuant {
 			prefix = "▸ "
-			suffix = " ⭐" // Mark recommended/selected
 		}
 
 		// Format size
