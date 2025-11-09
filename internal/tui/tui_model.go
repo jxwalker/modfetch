@@ -101,10 +101,44 @@ func (m *TUIModel) AddEphemeral(url, dest string, headers map[string]string, sha
 func (m *TUIModel) ProgressFor(url, dest string) (int64, int64, string) {
 	for _, row := range m.rows {
 		if row.URL == url && row.Dest == dest {
-			return 0, row.Size, row.Status
+			cur, total := m.computeCurAndTotal(row)
+			return cur, total, row.Status
 		}
 	}
 	return 0, 0, "unknown"
+}
+
+// computeCurAndTotal calculates current and total bytes for a download.
+// It queries chunk states from the database and sums completed chunk sizes.
+// Falls back to checking the partial file size if no chunks are tracked.
+func (m *TUIModel) computeCurAndTotal(r state.DownloadRow) (cur int64, total int64) {
+	total = r.Size
+
+	// Query chunks from database to get accurate progress
+	chunks, err := m.st.ListChunks(r.URL, r.Dest)
+	if err == nil && len(chunks) > 0 {
+		// Sum up completed chunks
+		for _, c := range chunks {
+			if strings.EqualFold(c.Status, "complete") {
+				cur += c.Size
+			}
+		}
+		return cur, total
+	}
+
+	// Fallback: check partial file size on disk
+	if r.Dest != "" {
+		// Try partial file first
+		partPath := downloader.StagePartPath(m.cfg, r.URL, r.Dest)
+		if st, err := os.Stat(partPath); err == nil {
+			cur = st.Size()
+		} else if st, err := os.Stat(r.Dest); err == nil {
+			// Check final destination if partial doesn't exist
+			cur = st.Size()
+		}
+	}
+
+	return cur, total
 }
 
 // FilteredRows returns download rows filtered by the given status list.
