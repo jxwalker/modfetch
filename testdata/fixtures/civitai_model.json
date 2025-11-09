@@ -1,0 +1,63 @@
+{
+  "id": 12345,
+  "name": "Realistic Vision V5.1",
+  "description": "Realistic Vision is a model designed to create photorealistic images. This version includes improvements to skin tones, lighting, and overall realism.\n\n## Features\n- Improved skin tones\n- Better lighting\n- Enhanced details\n\n## Recommended Settings\n- Steps: 20-30\n- CFG Scale: 7-9\n- Sampler: DPM++ 2M Karras",
+  "type": "Checkpoint",
+  "poi": false,
+  "nsfw": false,
+  "tags": ["realistic", "photorealistic", "portrait", "photography", "sdxl"],
+  "creator": {
+    "username": "SG_161222",
+    "image": "https://civitai.com/user/SG_161222/avatar.png"
+  },
+  "stats": {
+    "downloadCount": 250000,
+    "favoriteCount": 5400,
+    "commentCount": 1200,
+    "rating": 4.8,
+    "ratingCount": 3200
+  },
+  "modelVersions": [
+    {
+      "id": 67890,
+      "modelId": 12345,
+      "name": "v5.1",
+      "description": "Latest version with improved quality",
+      "createdAt": "2024-01-20T14:30:00.000Z",
+      "downloadUrl": "https://civitai.com/api/download/models/67890",
+      "trainedWords": ["realistic", "photorealistic"],
+      "baseModel": "SD 1.5",
+      "baseModelType": "Standard",
+      "files": [
+        {
+          "name": "realisticVisionV51.safetensors",
+          "id": 111222,
+          "sizeKB": 2082642,
+          "type": "Model",
+          "format": "SafeTensor",
+          "metadata": {
+            "format": "SafeTensor",
+            "fp": "fp16",
+            "size": "pruned"
+          }
+        }
+      ],
+      "images": [
+        {
+          "url": "https://civitai.com/images/example1.jpg",
+          "nsfw": "None",
+          "width": 1024,
+          "height": 1536,
+          "hash": "abc123"
+        },
+        {
+          "url": "https://civitai.com/images/example2.jpg",
+          "nsfw": "None",
+          "width": 1024,
+          "height": 1536,
+          "hash": "def456"
+        }
+      ]
+    }
+  ]
+}
