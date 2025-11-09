@@ -12,9 +12,8 @@ import (
 	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/logging"
 	"github.com/jxwalker/modfetch/internal/state"
-	ui "github.com/jxwalker/modfetch/internal/tui"
+	"github.com/jxwalker/modfetch/internal/tui"
 	cw "github.com/jxwalker/modfetch/internal/tui/configwizard"
-	uiv2 "github.com/jxwalker/modfetch/internal/tui/v2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -23,9 +22,6 @@ func handleTUI(ctx context.Context, args []string) error {
 	cfgPath := fs.String("config", "", "Path to YAML config file")
 	logLevel := fs.String("log-level", "info", "log level")
 	jsonOut := fs.Bool("json", false, "json logs (not used in TUI)")
-	// --v2 kept for compatibility, v2 is now default
-	_ = fs.Bool("v2", false, "Use TUI v2 (default)")
-	useV1 := fs.Bool("v1", false, "Use refactored TUI v1 (experimental)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -86,13 +82,8 @@ func handleTUI(ctx context.Context, args []string) error {
 		return err
 	}
 	defer func() { _ = st.SQL.Close() }()
-	var m tea.Model
-	// Default to TUI v2 (which works) unless legacy v1 explicitly requested
-	if *useV1 {
-		m = ui.New(c, st) // Use refactored TUI v1
-	} else {
-		m = uiv2.New(c, st, version) // Use working TUI v2 as default
-	}
+
+	m := tui.New(c, st, version)
 	p := tea.NewProgram(m)
 	_, err = p.Run()
 	return err
