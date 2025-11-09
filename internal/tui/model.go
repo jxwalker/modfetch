@@ -866,7 +866,7 @@ func (m *Model) View() string {
 	if ver == "" {
 		ver = "dev"
 	}
-	title := m.th.title.Render(fmt.Sprintf("modfetch • TUI v2 (build %s)", ver))
+	title := m.th.title.Render(fmt.Sprintf("modfetch • TUI (build %s)", ver))
 	toastStr := m.renderToasts()
 	titleBar := m.th.border.Width(m.w - 2).Render(lipgloss.JoinHorizontal(lipgloss.Top, title, "  ", toastStr))
 
@@ -1020,46 +1020,6 @@ func (m *Model) refresh() tea.Cmd {
 	return tea.Tick(m.tickEvery, func(t time.Time) tea.Msg { return tickMsg(t) })
 }
 
-//nolint:unused,deadcode
-func (m *Model) renderStats() string {
-	var pending, active, done, failed int
-	var gRate float64
-	for _, r := range m.rows {
-		ls := strings.ToLower(r.Status)
-		switch ls {
-		case "pending", "planning":
-			pending++
-		case "running":
-			active++
-		case "complete":
-			done++
-		case "error", "checksum_mismatch", "verify_failed":
-			failed++
-		}
-		rate := m.rateCache[keyFor(r)]
-		gRate += rate
-	}
-	return fmt.Sprintf("Pending:%d Active:%d Completed:%d Failed:%d • Rate:%s/s", pending, active, done, failed, humanize.Bytes(uint64(gRate)))
-}
-
-// renderTopLeftHints shows compact key hints in a fixed-size box
-//
-//nolint:unused,deadcode
-func (m *Model) renderTopLeftHints() string {
-	lines := []string{
-		m.th.head.Render("Hints"),
-		"Tabs: 0 All • 1 Pending • 2 Active • 3 Completed • 4 Failed",
-		"New: n new download • b batch import (txt file)",
-		"Nav: j/k up/down",
-		"Filter: / enter • Enter apply • Esc clear",
-		"Sort: s speed • e ETA • R remaining • o clear | Group: g host",
-		"Select: Space toggle • A all • X clear",
-		"Actions: y/r start • p cancel • D delete | Open: O • Copy: C/U | Probe: P",
-		"View: t column • v compact • i inspector • T theme • H toasts • ? help • q quit",
-	}
-	return strings.Join(lines, "\n")
-}
-
 func (m *Model) renderNewJobModal() string {
 	var sb strings.Builder
 	sb.WriteString(m.th.head.Render("New Download") + "\n")
@@ -1183,41 +1143,6 @@ func (m *Model) renderBatchModal() string {
 	sb.WriteString(m.th.label.Render("Enter path to text file with one URL per line (tokens: dest=..., type=..., place=true, mode=copy|symlink|hardlink)") + "\n\n")
 	sb.WriteString(m.batchInput.View())
 	return sb.String()
-}
-
-// renderTopRightStats shows aggregate metrics and recent toasts summary
-//
-//nolint:unused,deadcode
-func (m *Model) renderTopRightStats() string {
-	var pending, active, done, failed int
-	var gRate float64
-	for _, r := range m.rows {
-		ls := strings.ToLower(r.Status)
-		switch ls {
-		case "pending", "planning":
-			pending++
-		case "running":
-			active++
-		case "complete":
-			done++
-		case "error", "checksum_mismatch", "verify_failed":
-			failed++
-		}
-		gRate += m.rateCache[keyFor(r)]
-	}
-	lines := []string{
-		m.th.head.Render("Stats"),
-		fmt.Sprintf("Pending:   %d", pending),
-		fmt.Sprintf("Active:    %d", active),
-		fmt.Sprintf("Completed: %d", done),
-		fmt.Sprintf("Failed:    %d", failed),
-		fmt.Sprintf("Global Rate: %s/s", humanize.Bytes(uint64(gRate))),
-	}
-	// View indicators
-	lines = append(lines, fmt.Sprintf("View: Sort:%s • Group:%s • Column:%s • Theme:%s", m.sortModeLabel(), m.groupByLabel(), m.columnMode, themeNameByIndex(m.themeIndex)))
-	// Auth status
-	lines = append(lines, m.renderAuthStatus())
-	return strings.Join(lines, "\n")
 }
 
 func (m *Model) renderTabs() string {
@@ -2198,7 +2123,7 @@ func (m *Model) renderCommandsBar() string {
 
 func (m *Model) renderHelp() string {
 	var sb strings.Builder
-	sb.WriteString(m.th.head.Render("Help (TUI v2)") + "\n")
+	sb.WriteString(m.th.head.Render("Help (TUI)") + "\n")
 	sb.WriteString("Tabs: 1 Pending • 2 Active • 3 Completed • 4 Failed\n")
 	sb.WriteString("Nav: j/k up/down\n")
 	sb.WriteString("Filter: / to enter; Enter to apply; Esc to clear\n")
@@ -2736,44 +2661,6 @@ func themeIndexByName(name string) int {
 	default:
 		return -1
 	}
-}
-
-//nolint:unused,deadcode
-func themeNameByIndex(idx int) string {
-	switch idx {
-	case 0:
-		return "default"
-	case 1:
-		return "neon"
-	case 2:
-		return "drac"
-	case 3:
-		return "solar"
-	default:
-		return "default"
-	}
-}
-
-//nolint:unused,deadcode
-func (m *Model) sortModeLabel() string {
-	switch strings.ToLower(strings.TrimSpace(m.sortMode)) {
-	case "speed":
-		return "speed"
-	case "eta":
-		return "eta"
-	case "rem":
-		return "remaining"
-	default:
-		return "none"
-	}
-}
-
-//nolint:unused,deadcode
-func (m *Model) groupByLabel() string {
-	if strings.TrimSpace(m.groupBy) == "" {
-		return "none"
-	}
-	return m.groupBy
 }
 
 func copyToClipboard(s string) error {
