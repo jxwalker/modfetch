@@ -26,7 +26,6 @@ import (
 	"github.com/jxwalker/modfetch/internal/placer"
 	"github.com/jxwalker/modfetch/internal/resolver"
 	"github.com/jxwalker/modfetch/internal/state"
-	"github.com/jxwalker/modfetch/internal/tui"
 	"github.com/jxwalker/modfetch/internal/util"
 )
 
@@ -1970,7 +1969,7 @@ func (m *Model) resolveMetaCmd(raw string) tea.Cmd {
 		}
 
 		// Use centralized URL normalization and resolution
-		normalized := tui.NormalizeURL(s)
+		normalized := NormalizeURL(s)
 
 		// Only resolve URIs (hf:// or civitai://)
 		if strings.HasPrefix(normalized, "hf://") || strings.HasPrefix(normalized, "civitai://") {
