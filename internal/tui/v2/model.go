@@ -75,10 +75,12 @@ type destSuggestMsg struct {
 }
 
 type metaMsg struct {
-	url       string
-	fileName  string
-	suggested string
-	civType   string
+	url         string
+	fileName    string
+	suggested   string
+	civType     string
+	quants      []resolver.Quantization // Available quantizations (HuggingFace)
+	selectedQua string                  // Pre-selected quantization if any
 }
 
 type probeMsg struct {
@@ -136,6 +138,10 @@ type Model struct {
 	newDetectedName  string // suggested filename/name from resolver (for display)
 	// Extension suggestion when filename lacks suffix (e.g., .safetensors, .gguf)
 	newSuggestExt string
+	// Quantization selection state (HuggingFace)
+	newAvailableQuants []resolver.Quantization // Available quantization variants
+	newSelectedQuant   int                     // Index into newAvailableQuants
+	newQuantsDetected  bool                    // Whether quantizations were detected
 	// Batch import modal state
 	batchMode  bool
 	batchInput textinput.Model
@@ -297,6 +303,24 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			t := mapCivitFileType(msg.civType, msg.fileName)
 			m.newTypeDetected = t
 			m.newTypeSource = "civitai"
+
+			// Store quantization data if detected
+			if len(msg.quants) > 0 {
+				m.newAvailableQuants = msg.quants
+				m.newQuantsDetected = true
+				// Find index of selected quantization
+				for i, q := range msg.quants {
+					if q.Name == msg.selectedQua {
+						m.newSelectedQuant = i
+						break
+					}
+				}
+			} else {
+				m.newAvailableQuants = nil
+				m.newQuantsDetected = false
+				m.newSelectedQuant = 0
+			}
+
 			if m.newStep == 2 {
 				cur := strings.TrimSpace(m.newInput.Value())
 				if cur == "" {
@@ -1805,38 +1829,29 @@ func (m *Model) suggestPlacementCmd(urlStr, atype string) tea.Cmd {
 	}
 }
 
-// Resolve metadata (suggested filename and civitai file type) in background
+// Resolve metadata (suggested filename, civitai file type, and quantizations) in background
 func (m *Model) resolveMetaCmd(raw string) tea.Cmd {
 	return func() tea.Msg {
 		s := strings.TrimSpace(raw)
 		if s == "" {
 			return metaMsg{url: raw}
 		}
-		// Normalize civitai page URLs to civitai://
-		if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
-			if u, err := neturl.Parse(s); err == nil {
-				h := strings.ToLower(u.Hostname())
-				if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
-					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-					if len(parts) >= 2 {
-						modelID := parts[1]
-						q := u.Query()
-						ver := q.Get("modelVersionId")
-						if ver == "" {
-							ver = q.Get("version")
-						}
-						civ := "civitai://model/" + modelID
-						if strings.TrimSpace(ver) != "" {
-							civ += "?version=" + neturl.QueryEscape(ver)
-						}
-						s = civ
-					}
+
+		// Use centralized URL normalization and resolution
+		normalized := tui.NormalizeURL(s)
+
+		// Only resolve URIs (hf:// or civitai://)
+		if strings.HasPrefix(normalized, "hf://") || strings.HasPrefix(normalized, "civitai://") {
+			res, err := resolver.Resolve(context.Background(), normalized, m.cfg)
+			if err == nil {
+				return metaMsg{
+					url:         raw,
+					fileName:    res.FileName,
+					suggested:   res.SuggestedFilename,
+					civType:     res.FileType,
+					quants:      res.AvailableQuantizations,
+					selectedQua: res.SelectedQuantization,
 				}
-			}
-		}
-		if strings.HasPrefix(s, "hf://") || strings.HasPrefix(s, "civitai://") {
-			if res, err := resolver.Resolve(context.Background(), s, m.cfg); err == nil {
-				return metaMsg{url: raw, fileName: res.FileName, suggested: res.SuggestedFilename, civType: res.FileType}
 			}
 		}
 		return metaMsg{url: raw}

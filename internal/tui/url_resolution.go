@@ -132,6 +132,7 @@ func NormalizeURL(raw string) string {
 // ResolveWithMeta resolves a URL/URI using the resolver and returns metadata.
 // Handles hf://, civitai://, and direct HTTP(S) URLs.
 // For CivitAI model page URLs and HF blob URLs, normalizes them first.
+// Returns full Resolved struct for HF quantization support.
 func ResolveWithMeta(ctx context.Context, raw string, cfg *config.Config) (resolvedURL, fileName, suggested, civType string, err error) {
 	s := NormalizeURL(raw)
 
@@ -146,6 +147,22 @@ func ResolveWithMeta(ctx context.Context, raw string, cfg *config.Config) (resol
 
 	// For direct URLs, return as-is
 	return s, "", "", "", nil
+}
+
+// ResolveWithMetaFull resolves a URL/URI and returns the full Resolved struct.
+// This is needed for quantization support where we need AvailableQuantizations.
+func ResolveWithMetaFull(ctx context.Context, raw string, cfg *config.Config) (*resolver.Resolved, error) {
+	s := NormalizeURL(raw)
+
+	// If it's a resolvable URI (hf:// or civitai://), use the resolver
+	if strings.HasPrefix(s, "hf://") || strings.HasPrefix(s, "civitai://") {
+		return resolver.Resolve(ctx, s, cfg)
+	}
+
+	// For direct URLs, return minimal Resolved struct
+	return &resolver.Resolved{
+		URL: s,
+	}, nil
 }
 
 // ResolveAndAttachAuth resolves a URL/URI and attaches authentication headers.
