@@ -332,36 +332,13 @@ func (c *TUIController) resolveMetaCmd(raw string) tea.Cmd {
 		if s == "" {
 			return metaMsg{url: raw}
 		}
-		if strings.HasPrefix(s, "http://") || strings.HasPrefix(s, "https://") {
-			if u, err := url.Parse(s); err == nil {
-				h := strings.ToLower(u.Hostname())
-				if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
-					parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-					if len(parts) >= 2 {
-						modelID := parts[1]
-						q := u.Query()
-						ver := q.Get("modelVersionId")
-						if ver == "" {
-							ver = q.Get("version")
-						}
-						civ := "civitai://model/" + modelID
-						if strings.TrimSpace(ver) != "" {
-							civ += "?version=" + url.QueryEscape(ver)
-						}
-						s = civ
-					}
-				}
-			}
+
+		// Use centralized URL resolution
+		_, fileName, suggested, civType, err := ResolveWithMeta(context.Background(), s, c.model.cfg)
+		if err == nil && (fileName != "" || suggested != "" || civType != "") {
+			return metaMsg{url: raw, fileName: fileName, suggested: suggested, civType: civType}
 		}
-		if strings.HasPrefix(s, "hf://") || strings.HasPrefix(s, "civitai://") {
-			if res, err := resolver.Resolve(context.Background(), s, c.model.cfg); err == nil {
-				return metaMsg{url: raw, fileName: res.FileName, suggested: res.SuggestedFilename, civType: res.FileType}
-			}
-		}
+
 		return metaMsg{url: raw}
 	}
-}
-
-func hostIs(hostname, target string) bool {
-	return hostname == target || strings.HasSuffix(hostname, "."+target)
 }

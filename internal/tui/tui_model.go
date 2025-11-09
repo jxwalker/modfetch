@@ -218,79 +218,10 @@ func (m *TUIModel) StartDownload(ctx context.Context, urlStr, dest, sha string, 
 		return err
 	}
 
-	resolved := urlStr
-	if headers == nil {
-		headers = map[string]string{}
-	}
-
-	if strings.HasPrefix(resolved, "http://") || strings.HasPrefix(resolved, "https://") {
-		if u, err := neturl.Parse(resolved); err == nil {
-			h := strings.ToLower(u.Hostname())
-			if hostIs(h, "civitai.com") && strings.HasPrefix(u.Path, "/models/") {
-				parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-				if len(parts) >= 2 {
-					modelID := parts[1]
-					q := u.Query()
-					ver := q.Get("modelVersionId")
-					if ver == "" {
-						ver = q.Get("version")
-					}
-					civ := "civitai://model/" + modelID
-					if strings.TrimSpace(ver) != "" {
-						civ += "?version=" + neturl.QueryEscape(ver)
-					}
-					if res, err := resolver.Resolve(ctx, civ, m.cfg); err == nil {
-						resolved = res.URL
-						headers = res.Headers
-					}
-				}
-			}
-			if hostIs(h, "huggingface.co") {
-				parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-				if len(parts) >= 5 && parts[2] == "blob" {
-					owner := parts[0]
-					repo := parts[1]
-					rev := parts[3]
-					filePath := strings.Join(parts[4:], "/")
-					hf := "hf://" + owner + "/" + repo + "/" + filePath + "?rev=" + rev
-					if res, err := resolver.Resolve(ctx, hf, m.cfg); err == nil {
-						resolved = res.URL
-						headers = res.Headers
-					}
-				}
-			}
-		}
-	}
-
-	if strings.HasPrefix(resolved, "hf://") || strings.HasPrefix(resolved, "civitai://") {
-		res, err := resolver.Resolve(ctx, resolved, m.cfg)
-		if err != nil {
-			return err
-		}
-		resolved = res.URL
-		headers = res.Headers
-	} else {
-		if u, err := neturl.Parse(resolved); err == nil {
-			h := strings.ToLower(u.Hostname())
-			if hostIs(h, "huggingface.co") && m.cfg.Sources.HuggingFace.Enabled {
-				env := strings.TrimSpace(m.cfg.Sources.HuggingFace.TokenEnv)
-				if env == "" {
-					env = "HF_TOKEN"
-				}
-				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-					headers["Authorization"] = "Bearer " + tok
-				}
-			}
-			if hostIs(h, "civitai.com") && m.cfg.Sources.CivitAI.Enabled {
-				env := strings.TrimSpace(m.cfg.Sources.CivitAI.TokenEnv)
-				if env == "" {
-					env = "CIVITAI_TOKEN"
-				}
-				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-					headers["Authorization"] = "Bearer " + tok
-				}
-			}
-		}
+	// Use centralized URL resolution and auth attachment
+	resolved, headers, err := ResolveAndAttachAuth(ctx, urlStr, m.cfg, headers)
+	if err != nil {
+		return err
 	}
 
 	key := resolved + "|" + dest
