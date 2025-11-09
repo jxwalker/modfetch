@@ -8,6 +8,14 @@ import (
 	"github.com/jxwalker/modfetch/internal/config"
 )
 
+// Quantization represents a specific quantization variant of a model file.
+type Quantization struct {
+	Name     string // Detected quantization (e.g., "Q4_K_M", "fp16", "Q5_0")
+	FilePath string // Path in repository
+	Size     int64  // File size in bytes
+	FileType string // File extension type (e.g., "gguf", "safetensors", "bin")
+}
+
 type Resolved struct {
 	URL     string
 	Headers map[string]string
@@ -23,6 +31,9 @@ type Resolved struct {
 	RepoName  string
 	RepoPath  string
 	Rev       string
+	// Quantization support (HuggingFace)
+	AvailableQuantizations []Quantization // List of detected quantization variants
+	SelectedQuantization   string         // Which quantization was selected (if any)
 }
 
 type Resolver interface {
