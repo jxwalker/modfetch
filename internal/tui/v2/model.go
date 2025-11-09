@@ -75,12 +75,12 @@ type destSuggestMsg struct {
 }
 
 type metaMsg struct {
-	url         string
-	fileName    string
-	suggested   string
-	civType     string
-	quants      []resolver.Quantization // Available quantizations (HuggingFace)
-	selectedQua string                  // Pre-selected quantization if any
+	url           string
+	fileName      string
+	suggested     string
+	civType       string
+	quants        []resolver.Quantization // Available quantizations (HuggingFace)
+	selectedQuant string                  // Pre-selected quantization if any
 }
 
 type probeMsg struct {
@@ -310,7 +310,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.newQuantsDetected = true
 				// Find index of selected quantization
 				for i, q := range msg.quants {
-					if q.Name == msg.selectedQua {
+					if q.Name == msg.selectedQuant {
 						m.newSelectedQuant = i
 						break
 					}
@@ -1845,12 +1845,12 @@ func (m *Model) resolveMetaCmd(raw string) tea.Cmd {
 			res, err := resolver.Resolve(context.Background(), normalized, m.cfg)
 			if err == nil {
 				return metaMsg{
-					url:         raw,
-					fileName:    res.FileName,
-					suggested:   res.SuggestedFilename,
-					civType:     res.FileType,
-					quants:      res.AvailableQuantizations,
-					selectedQua: res.SelectedQuantization,
+					url:           raw,
+					fileName:      res.FileName,
+					suggested:     res.SuggestedFilename,
+					civType:       res.FileType,
+					quants:        res.AvailableQuantizations,
+					selectedQuant: res.SelectedQuantization,
 				}
 			}
 		}
