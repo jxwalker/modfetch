@@ -142,6 +142,7 @@ type Model struct {
 	newAvailableQuants []resolver.Quantization // Available quantization variants
 	newSelectedQuant   int                     // Index into newAvailableQuants
 	newQuantsDetected  bool                    // Whether quantizations were detected
+	newQuantSelecting  bool                    // Currently in quantization selection mode
 	// Batch import modal state
 	batchMode  bool
 	batchInput textinput.Model
@@ -315,13 +316,19 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						break
 					}
 				}
+				// Enter quantization selection mode if we're at step 2
+				if m.newStep == 2 {
+					m.newQuantSelecting = true
+				}
 			} else {
 				m.newAvailableQuants = nil
 				m.newQuantsDetected = false
 				m.newSelectedQuant = 0
+				m.newQuantSelecting = false
 			}
 
-			if m.newStep == 2 {
+			// Pre-fill type field if no quantization selection needed
+			if m.newStep == 2 && !m.newQuantSelecting {
 				cur := strings.TrimSpace(m.newInput.Value())
 				if cur == "" {
 					m.newInput.SetValue(t)
@@ -399,6 +406,62 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) updateNewJob(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s := msg.String()
+
+	// Handle quantization selection mode separately
+	if m.newQuantSelecting {
+		switch s {
+		case "esc":
+			// Cancel quantization selection, go back to type selection
+			m.newQuantSelecting = false
+			return m, nil
+		case "j", "down":
+			// Navigate down in quantization list
+			if m.newSelectedQuant < len(m.newAvailableQuants)-1 {
+				m.newSelectedQuant++
+			}
+			return m, nil
+		case "k", "up":
+			// Navigate up in quantization list
+			if m.newSelectedQuant > 0 {
+				m.newSelectedQuant--
+			}
+			return m, nil
+		case "enter", "ctrl+j":
+			// Confirm quantization selection and update URL with selected file
+			if m.newSelectedQuant >= 0 && m.newSelectedQuant < len(m.newAvailableQuants) {
+				selected := m.newAvailableQuants[m.newSelectedQuant]
+				// Update URL to point to the selected file
+				// Parse the current hf:// URL and update the path
+				if strings.HasPrefix(m.newURL, "hf://") {
+					// Format: hf://owner/repo[/path]?rev=...&quant=...
+					// We need to update it to hf://owner/repo/selected.FilePath?rev=...
+					parts := strings.Split(strings.TrimPrefix(m.newURL, "hf://"), "?")
+					pathPart := parts[0]
+					queryPart := ""
+					if len(parts) > 1 {
+						queryPart = "?" + parts[1]
+					}
+
+					// Split path into owner/repo[/oldpath]
+					pathSegments := strings.Split(pathPart, "/")
+					if len(pathSegments) >= 2 {
+						owner := pathSegments[0]
+						repo := pathSegments[1]
+						// Rebuild with selected file path
+						m.newURL = "hf://" + owner + "/" + repo + "/" + selected.FilePath + queryPart
+					}
+				}
+			}
+
+			m.newQuantSelecting = false
+			m.newInput.SetValue("")
+			m.newInput.Placeholder = "Artifact type (optional, e.g. sd.checkpoint)"
+			m.newStep = 2
+			return m, nil
+		}
+		return m, nil
+	}
+
 	switch s {
 	case "esc":
 		m.newJob = false
@@ -786,7 +849,12 @@ func (m *Model) View() string {
 	}
 	modal := ""
 	if m.newJob {
-		modal = m.th.border.Width(m.w - 4).Render(m.renderNewJobModal())
+		// Show quantization selection UI if in that mode
+		if m.newQuantSelecting {
+			modal = m.th.border.Width(m.w - 4).Render(m.renderQuantizationSelection())
+		} else {
+			modal = m.th.border.Width(m.w - 4).Render(m.renderNewJobModal())
+		}
 	}
 	if m.batchMode {
 		modal = m.th.border.Width(m.w - 4).Render(m.renderBatchModal())
@@ -1015,6 +1083,55 @@ func (m *Model) renderNewJobModal() string {
 		sb.WriteString(m.th.label.Render(fmt.Sprintf("Detected: %s (%s)", m.newTypeDetected, from)) + "\n")
 	}
 	sb.WriteString(m.newInput.View())
+	return sb.String()
+}
+
+// renderQuantizationSelection renders the quantization selection UI
+func (m *Model) renderQuantizationSelection() string {
+	var sb strings.Builder
+	sb.WriteString(m.th.head.Render("Select Quantization") + "\n\n")
+
+	// Extract repo info from URL if available
+	repoInfo := ""
+	if strings.HasPrefix(m.newURL, "hf://") {
+		parts := strings.Split(strings.TrimPrefix(m.newURL, "hf://"), "/")
+		if len(parts) >= 2 {
+			repoInfo = parts[0] + "/" + parts[1]
+		}
+	}
+	if repoInfo != "" {
+		sb.WriteString(m.th.label.Render("Repository: "+repoInfo) + "\n\n")
+	}
+
+	sb.WriteString(m.th.label.Render("Available quantizations (j/k to navigate, Enter to select):") + "\n\n")
+
+	// Render each quantization option
+	for i, q := range m.newAvailableQuants {
+		prefix := "  "
+		suffix := ""
+
+		// Highlight selected item
+		if i == m.newSelectedQuant {
+			prefix = "▸ "
+			suffix = " ⭐" // Mark recommended/selected
+		}
+
+		// Format size
+		sizeStr := humanize.Bytes(uint64(q.Size))
+
+		// Build line: "  Q4_K_M  (4.1 GB)  - gguf"
+		line := fmt.Sprintf("%s%-10s  (%7s)  - %s", prefix, q.Name, sizeStr, q.FileType)
+
+		if i == m.newSelectedQuant {
+			sb.WriteString(m.th.ok.Render(line) + "\n")
+		} else {
+			sb.WriteString(m.th.label.Render(line) + "\n")
+		}
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString(m.th.label.Render("j/k: navigate  •  Enter: select  •  Esc: cancel") + "\n")
+
 	return sb.String()
 }
 
