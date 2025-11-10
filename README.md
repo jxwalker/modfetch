@@ -19,7 +19,8 @@
 📊 **Visual Learner?** See: **[TUI Wireframes](docs/TUI_WIREFRAMES.md)** ← Screenshots and navigation flows
 
 📚 **Documentation:**
-- [TUI Guide](docs/TUI_GUIDE.md) - Complete TUI documentation
+- [CLI Reference](docs/CLI_GUIDE.md) - Complete command-line reference
+- [TUI Guide](docs/TUI_GUIDE.md) - Interactive terminal interface
 - [Library Guide](docs/LIBRARY.md) - Browse and organize your models
 - [User Guide](docs/USER_GUIDE.md) - Full feature reference
 - [Configuration](docs/CONFIG.md) - Config file options
@@ -131,7 +132,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 - **Documentation**: Complete user guides for Library (docs/LIBRARY.md) and Scanner (docs/SCANNER.md)
 
 Previous releases:
-- v0.5.2: TUI v1 Enhanced with rich UI elements and vibrant colors
+- v0.5.2: Enhanced TUI with rich UI elements and vibrant colors
 - v0.5.1: Critical installer and TUI navigation fixes
 - v0.5.0: Comprehensive installation package with guided setup experience
 
@@ -269,7 +270,7 @@ Configuration
 
 ## Usage
 
-> 📚 **Full details:** See [User Guide](docs/USER_GUIDE.md) | [TUI Guide](docs/TUI_GUIDE.md) | [TUI Wireframes](docs/TUI_WIREFRAMES.md)
+> 📚 **Full details:** See [CLI Reference](docs/CLI_GUIDE.md) | [TUI Guide](docs/TUI_GUIDE.md) | [User Guide](docs/USER_GUIDE.md)
 
 ### Quick Command Reference
 
@@ -333,7 +334,7 @@ modfetch download --batch jobs.yml --place
 
   modfetch tui --config /path/to/config.yml
 
-  - **TUI v2 (default)**: Feature-rich interface with extensive UX upgrades
+  - **Feature-rich interface** with extensive UX upgrades
     - **7 Tabs**: All, Pending, Active, Completed, Failed, **Library**, **Settings**
     - **Library (Tab 5 or L)**: Browse downloaded models, search, filter, view details
       - Search by name with `/`, filter by type/source
@@ -349,13 +350,6 @@ modfetch download --batch jobs.yml --place
     - Actions: n (new), r (refresh), d (details), g (group by status), t (toggle columns)
     - Per‑row actions: p (pause/cancel), y (retry), C (copy path), U (copy URL), O (open/reveal), D (delete staged), X (clear row)
     - Live speed and ETA with throughput sparklines and comprehensive status indicators
-  - **TUI v1 (refactored)**: Enhanced MVC architecture with vibrant colors and rich theming
-
-    modfetch tui --config /path/to/config.yml --v1
-
-    - Colorful status indicators (green for completed, red for failed, pink for active)
-    - Clean borders and enhanced visual feedback
-    - Full navigation support with discoverable help system
   - Behavior:
     - Resolving spinner appears immediately, then planning → running
     - Live speed and ETA for both chunked and single‑stream fallback downloads

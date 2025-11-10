@@ -19,8 +19,6 @@ export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 modfetch tui
 ```
 
-<!-- TUI v2 is the default; no flag required -->
-
 ## Layout overview
 
 The TUI has **7 tabs** that you can switch between:
