@@ -248,15 +248,3 @@ func TestRegistry_FetchMetadata(t *testing.T) {
 	}
 }
 
-// mockTransport is a mock HTTP transport for testing
-type mockTransport struct {
-	response *http.Response
-	err      error
-}
-
-func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return m.response, nil
-}
