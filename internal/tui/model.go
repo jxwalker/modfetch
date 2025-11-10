@@ -45,23 +45,6 @@ type Theme struct {
 	bad         lipgloss.Style
 }
 
-func defaultTheme() Theme {
-	b := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
-	return Theme{
-		border:      b.BorderForeground(lipgloss.Color("63")),
-		title:       lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("81")),
-		label:       lipgloss.NewStyle().Faint(true),
-		tabActive:   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("219")),
-		tabInactive: lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
-		row:         lipgloss.NewStyle(),
-		rowSelected: lipgloss.NewStyle().Bold(true),
-		head:        lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true),
-		footer:      lipgloss.NewStyle().Faint(true),
-		ok:          lipgloss.NewStyle().Foreground(lipgloss.Color("42")),
-		bad:         lipgloss.NewStyle().Foreground(lipgloss.Color("196")),
-	}
-}
-
 type tickMsg time.Time
 
 type dlDoneMsg struct {
@@ -1425,13 +1408,6 @@ func (m *Model) applySort(in []state.DownloadRow) []state.DownloadRow {
 	return out
 }
 
-func etaSeconds(cur, total int64, rate float64) float64 {
-	if rate <= 0 || total <= 0 || cur >= total {
-		return 0
-	}
-	return float64(total-cur) / rate
-}
-
 func (m *Model) renderTable() string {
 	rows := m.visibleRows()
 	var sb strings.Builder
@@ -1827,33 +1803,6 @@ func (m *Model) completePath(input string) string {
 	return out
 }
 
-func longestCommonPrefix(ss []string) string {
-	if len(ss) == 0 {
-		return ""
-	}
-	p := ss[0]
-	for _, s := range ss[1:] {
-		for !strings.HasPrefix(strings.ToLower(s), strings.ToLower(p)) {
-			if len(p) == 0 {
-				return ""
-			}
-			p = p[:len(p)-1]
-		}
-	}
-	return p
-}
-
-func tryWrite(dir string) error {
-	f, err := os.CreateTemp(dir, ".mf-wr-*")
-	if err != nil {
-		return err
-	}
-	name := f.Name()
-	_ = f.Close()
-	_ = os.Remove(name)
-	return nil
-}
-
 // Immediate (non-blocking) dest candidate based on URL only
 func (m *Model) immediateDestCandidate(urlStr string) string {
 	s := strings.TrimSpace(urlStr)
@@ -2018,31 +1967,6 @@ func (m *Model) inferExt() string {
 	return ""
 }
 
-func mapCivitFileType(civType, fileName string) string {
-	ct := strings.ToLower(strings.TrimSpace(civType))
-	name := strings.ToLower(fileName)
-	switch ct {
-	case "vae":
-		return "sd.vae"
-	case "textualinversion":
-		return "sd.embedding"
-	}
-	// Heuristics based on filename
-	if strings.Contains(name, "lora") || strings.Contains(name, "lokr") || strings.Contains(name, "locon") {
-		return "sd.lora"
-	}
-	if strings.Contains(name, "control") || strings.Contains(name, "controlnet") {
-		return "sd.controlnet"
-	}
-	if strings.HasSuffix(name, ".gguf") {
-		return "llm.gguf"
-	}
-	if strings.HasSuffix(name, ".safetensors") {
-		return "sd.checkpoint"
-	}
-	return "generic"
-}
-
 // Background placement suggestion: resolve filename then join with placement target
 func (m *Model) suggestPlacementCmd(urlStr, atype string) tea.Cmd {
 	return func() tea.Msg {
@@ -2094,39 +2018,6 @@ func (m *Model) resolveMetaCmd(raw string) tea.Cmd {
 	}
 }
 
-func computeTypesFromConfig(cfg *config.Config) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, r := range cfg.Placement.Mapping {
-		t := strings.TrimSpace(r.Match)
-		if t == "" {
-			continue
-		}
-		if !seen[t] {
-			seen[t] = true
-			out = append(out, t)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-func truncateMiddle(s string, max int) string {
-	if max <= 0 {
-		return ""
-	}
-	runes := []rune(s)
-	if len(runes) <= max {
-		return s
-	}
-	if max <= 1 {
-		return string(runes[:max])
-	}
-	left := max / 2
-	right := max - left - 1
-	return string(runes[:left]) + "…" + string(runes[len(runes)-right:])
-}
-
 func (m *Model) lastColumnWidth(compact bool) int {
 	// Without side panels, use nearly full width minus borders
 	usable := m.w - 2*2 // borders on left/right wrappers
@@ -2157,15 +2048,6 @@ func (m *Model) maxRowsOnScreen() int {
 		return 3
 	}
 	return max
-}
-
-func keyFor(r state.DownloadRow) string { return r.URL + "|" + r.Dest }
-
-func hostOf(urlStr string) string {
-	if u, err := neturl.Parse(urlStr); err == nil {
-		return u.Hostname()
-	}
-	return ""
 }
 
 func (m *Model) selectionOrCurrent() []state.DownloadRow {
@@ -2766,79 +2648,8 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 	}
 }
 
-func openInFileManager(p string, reveal bool) error {
-	p = strings.TrimSpace(p)
-	if p == "" {
-		return fmt.Errorf("empty path")
-	}
-	// Determine directory to open even if file doesn't exist yet
-	var dir string
-	if fi, err := os.Stat(p); err == nil {
-		if fi.IsDir() {
-			dir = p
-		} else {
-			dir = filepath.Dir(p)
-		}
-	} else {
-		dir = filepath.Dir(p)
-	}
-	switch runtime.GOOS {
-	case "darwin":
-		if reveal {
-			// Reveal if possible; if that fails, fallback to opening dir
-			if err := exec.Command("open", "-R", p).Run(); err == nil {
-				return nil
-			}
-		}
-		return exec.Command("open", dir).Run()
-	case "linux":
-		if _, err := exec.LookPath("xdg-open"); err == nil {
-			return exec.Command("xdg-open", dir).Run()
-		}
-	}
-	return fmt.Errorf("cannot open file manager on %s", runtime.GOOS)
-}
-
 // Theme presets
-func themePresets() []Theme {
-	base := defaultTheme()
-	neon := base
-	neon.title = neon.title.Foreground(lipgloss.Color("46")) // neon green
-	neon.head = neon.head.Foreground(lipgloss.Color("49"))
-	neon.border = neon.border.BorderForeground(lipgloss.Color("51"))
-	neon.tabActive = neon.tabActive.Foreground(lipgloss.Color("48"))
 
-	drac := base
-	drac.title = drac.title.Foreground(lipgloss.Color("213"))
-	drac.head = drac.head.Foreground(lipgloss.Color("219"))
-	drac.border = drac.border.BorderForeground(lipgloss.Color("135"))
-	drac.tabActive = drac.tabActive.Foreground(lipgloss.Color("204"))
-
-	solar := base
-	solar.title = solar.title.Foreground(lipgloss.Color("136"))
-	solar.head = solar.head.Foreground(lipgloss.Color("178"))
-	solar.border = solar.border.BorderForeground(lipgloss.Color("136"))
-	solar.tabActive = solar.tabActive.Foreground(lipgloss.Color("166"))
-	return []Theme{base, neon, drac, solar}
-}
-
-func themeIndexByName(name string) int {
-	s := strings.ToLower(strings.TrimSpace(name))
-	switch s {
-	case "", "default":
-		return 0
-	case "neon":
-		return 1
-	case "drac", "dracula":
-		return 2
-	case "solar", "solarized":
-		return 3
-	default:
-		return -1
-	}
-}
-
-// fetchAndStoreMetadata asynchronously fetches metadata for a downloaded file and stores it in the database.
 // This is fire-and-forget - errors are logged but don't affect the UI.
 func (m *Model) fetchAndStoreMetadata(url, dest, path string) {
 	if m.st == nil {
@@ -2886,56 +2697,6 @@ func (m *Model) fetchAndStoreMetadata(url, dest, path string) {
 	if m.log != nil {
 		m.log.Debugf("stored metadata for %s (%s)", meta.ModelName, url)
 	}
-}
-
-func copyToClipboard(s string) error {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return fmt.Errorf("empty")
-	}
-	switch runtime.GOOS {
-	case "darwin":
-		cmd := exec.Command("pbcopy")
-		in, err := cmd.StdinPipe()
-		if err != nil {
-			return err
-		}
-		if err := cmd.Start(); err != nil {
-			return err
-		}
-		_, _ = in.Write([]byte(s))
-		_ = in.Close()
-		return cmd.Wait()
-	case "linux":
-		// try wl-copy then xclip
-		if _, err := exec.LookPath("wl-copy"); err == nil {
-			cmd := exec.Command("wl-copy")
-			in, err := cmd.StdinPipe()
-			if err != nil {
-				return err
-			}
-			if err := cmd.Start(); err != nil {
-				return err
-			}
-			_, _ = in.Write([]byte(s))
-			_ = in.Close()
-			return cmd.Wait()
-		}
-		if _, err := exec.LookPath("xclip"); err == nil {
-			cmd := exec.Command("xclip", "-selection", "clipboard")
-			in, err := cmd.StdinPipe()
-			if err != nil {
-				return err
-			}
-			if err := cmd.Start(); err != nil {
-				return err
-			}
-			_, _ = in.Write([]byte(s))
-			_ = in.Close()
-			return cmd.Wait()
-		}
-	}
-	return fmt.Errorf("no clipboard utility found")
 }
 
 // refreshLibraryData loads model metadata from the database
