@@ -185,21 +185,21 @@ type Model struct {
 	hfRateLimited  bool
 	civRateLimited bool
 	// Library view state
-	libraryRows           []state.ModelMetadata
-	librarySelected       int
-	libraryFilter         state.MetadataFilters
-	librarySearch         string
-	libraryViewingDetail  bool
-	libraryDetailModel    *state.ModelMetadata
-	libraryFilterType     string // Filter by model type: "", "LLM", "LoRA", etc.
-	libraryFilterSource   string // Filter by source: "", "huggingface", "civitai"
-	libraryShowFavorites  bool                     // Show only favorites
-	libraryNeedsRefresh   bool                     // Flag to reload library data
-	librarySearchInput    textinput.Model          // Search input for library
-	librarySearchActive   bool                     // Search input is active
-	libraryScanning       bool                     // Currently scanning directories
-	libraryScanProgress   string                   // Scan progress message
-	log                   *logging.Logger
+	libraryRows          []state.ModelMetadata
+	librarySelected      int
+	libraryFilter        state.MetadataFilters
+	librarySearch        string
+	libraryViewingDetail bool
+	libraryDetailModel   *state.ModelMetadata
+	libraryFilterType    string          // Filter by model type: "", "LLM", "LoRA", etc.
+	libraryFilterSource  string          // Filter by source: "", "huggingface", "civitai"
+	libraryShowFavorites bool            // Show only favorites
+	libraryNeedsRefresh  bool            // Flag to reload library data
+	librarySearchInput   textinput.Model // Search input for library
+	librarySearchActive  bool            // Search input is active
+	libraryScanning      bool            // Currently scanning directories
+	libraryScanProgress  string          // Scan progress message
+	log                  *logging.Logger
 }
 
 type uiState struct {
@@ -825,6 +825,10 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.refreshLibraryData()
 		}
 		return m, nil
+	case "6", "m":
+		// Switch to Settings tab (key 6 or 'm' for menu/settings)
+		m.activeTab = 5
+		return m, nil
 	case "j", "down":
 		if m.activeTab == 4 {
 			// Library navigation
@@ -982,24 +986,30 @@ func (m *Model) View() string {
 	if m.activeTab == 4 {
 		// Library-specific commands
 		commands = m.th.border.Width(m.w - 2).Render(m.renderLibraryCommandsBar())
+	} else if m.activeTab == 5 {
+		// Settings tab commands
+		commands = m.th.border.Width(m.w - 2).Render(m.renderSettingsCommandsBar())
 	} else {
 		// Download table commands
 		commands = m.th.border.Width(m.w - 2).Render(m.renderCommandsBar())
 	}
 
-	// Main content: table or library view
+	// Main content: table, library, or settings view
 	var mainContent string
 	if m.activeTab == 4 {
 		// Library view
 		mainContent = m.th.border.Width(m.w - 2).Render(m.renderLibrary())
+	} else if m.activeTab == 5 {
+		// Settings view
+		mainContent = m.th.border.Width(m.w - 2).Render(m.renderSettings())
 	} else {
 		// Download table view
 		mainContent = m.th.border.Width(m.w - 2).Render(m.renderTable())
 	}
 
-	// Inspector (only for download tabs, not library)
+	// Inspector (only for download tabs, not library or settings)
 	inspector := ""
-	if m.activeTab != 4 {
+	if m.activeTab != 4 && m.activeTab != 5 {
 		inspector = m.th.border.Width(m.w - 2).Render(m.renderInspector())
 	}
 
@@ -1286,6 +1296,7 @@ func (m *Model) renderTabs() string {
 		{"Completed", 2},
 		{"Failed", 3},
 		{"Library", 4},
+		{"Settings", 5},
 	}
 	var sb strings.Builder
 	for i, it := range labels {
@@ -1293,16 +1304,23 @@ func (m *Model) renderTabs() string {
 		if it.tab == m.activeTab {
 			style = m.th.tabActive
 		}
-		count := 0
-		if it.tab == -1 {
-			count = len(m.rows)
-		} else if it.tab == 4 {
-			// Library tab shows count of metadata entries
-			count = len(m.libraryRows)
+		var tabLabel string
+		if it.tab == 5 {
+			// Settings tab doesn't show a count
+			tabLabel = it.name
 		} else {
-			count = len(m.filterRows(it.tab))
+			count := 0
+			if it.tab == -1 {
+				count = len(m.rows)
+			} else if it.tab == 4 {
+				// Library tab shows count of metadata entries
+				count = len(m.libraryRows)
+			} else {
+				count = len(m.filterRows(it.tab))
+			}
+			tabLabel = fmt.Sprintf("%s (%d)", it.name, count)
 		}
-		sb.WriteString(style.Render(fmt.Sprintf("%s (%d)", it.name, count)))
+		sb.WriteString(style.Render(tabLabel))
 		if i < len(labels)-1 {
 			sb.WriteString("  •  ")
 		}
@@ -2260,10 +2278,15 @@ func (m *Model) renderLibraryCommandsBar() string {
 	return m.th.footer.Render("j/k navigate • Enter details • Esc back • / search • S scan directories • f favorite • H toasts • ? help • q quit")
 }
 
+func (m *Model) renderSettingsCommandsBar() string {
+	// Settings tab commands reference
+	return m.th.footer.Render("View current configuration • H toasts • ? help • q quit")
+}
+
 func (m *Model) renderHelp() string {
 	var sb strings.Builder
 	sb.WriteString(m.th.head.Render("Help (TUI)") + "\n")
-	sb.WriteString("Tabs: 1 Pending • 2 Active • 3 Completed • 4 Failed • 5/L Library\n")
+	sb.WriteString("Tabs: 1 Pending • 2 Active • 3 Completed • 4 Failed • 5/L Library • 6/M Settings\n")
 	sb.WriteString("\n")
 	sb.WriteString(m.th.head.Render("Download Tabs (1-4)") + "\n")
 	sb.WriteString("Nav: j/k up/down\n")
@@ -2282,6 +2305,10 @@ func (m *Model) renderHelp() string {
 	sb.WriteString("Search: / to enter; Enter to apply; Esc to clear\n")
 	sb.WriteString("Scan: S scan configured directories for existing models\n")
 	sb.WriteString("Favorite: f toggle favorite on selected model\n")
+	sb.WriteString("\n")
+	sb.WriteString(m.th.head.Render("Settings Tab (6/M)") + "\n")
+	sb.WriteString("View current configuration including paths, tokens, and preferences\n")
+	sb.WriteString("To edit settings, modify the YAML config file directly\n")
 	sb.WriteString("\n")
 	sb.WriteString("Quit: q\n")
 	return sb.String()
@@ -2923,7 +2950,7 @@ func (m *Model) refreshLibraryData() {
 		ModelType: m.libraryFilterType,
 		Favorite:  m.libraryShowFavorites,
 		OrderBy:   "updated_at", // Most recently updated first
-		Limit:     1000,          // Reasonable limit
+		Limit:     1000,         // Reasonable limit
 	}
 
 	var rows []state.ModelMetadata
@@ -3223,6 +3250,166 @@ func (m *Model) renderLibraryDetail() string {
 
 	// Footer
 	sb.WriteString(m.th.footer.Render("Press Esc to go back • F to toggle favorite • Q to quit"))
+
+	return sb.String()
+}
+
+// renderSettings displays current configuration
+func (m *Model) renderSettings() string {
+	var sb strings.Builder
+
+	sb.WriteString(m.th.head.Render("Settings & Configuration") + "\n\n")
+
+	// Section: General Paths
+	sb.WriteString(m.th.head.Render("Directory Paths") + "\n")
+	sb.WriteString(m.th.label.Render("Data Root: "))
+	sb.WriteString(m.cfg.General.DataRoot + "\n")
+	sb.WriteString(m.th.label.Render("Download Root: "))
+	sb.WriteString(m.cfg.General.DownloadRoot + "\n")
+	if m.cfg.General.PartialsRoot != "" {
+		sb.WriteString(m.th.label.Render("Partials Root: "))
+		sb.WriteString(m.cfg.General.PartialsRoot + "\n")
+	}
+	sb.WriteString(m.th.label.Render("Placement Mode: "))
+	sb.WriteString(m.cfg.General.PlacementMode + "\n")
+	sb.WriteString("\n")
+
+	// Section: Token Status
+	sb.WriteString(m.th.head.Render("API Token Status") + "\n")
+
+	// HuggingFace token
+	if m.cfg.Sources.HuggingFace.Enabled {
+		env := m.cfg.Sources.HuggingFace.TokenEnv
+		if env == "" {
+			env = "HF_TOKEN"
+		}
+		sb.WriteString(m.th.label.Render("HuggingFace (" + env + "): "))
+		if m.hfTokenSet {
+			if m.hfTokenRejected {
+				sb.WriteString(m.th.err.Render("✗ Set but rejected by API") + "\n")
+			} else {
+				sb.WriteString(m.th.ok.Render("✓ Set") + "\n")
+			}
+		} else {
+			sb.WriteString(m.th.label.Render("Not set") + "\n")
+		}
+	} else {
+		sb.WriteString(m.th.label.Render("HuggingFace: "))
+		sb.WriteString("Disabled\n")
+	}
+
+	// CivitAI token
+	if m.cfg.Sources.CivitAI.Enabled {
+		env := m.cfg.Sources.CivitAI.TokenEnv
+		if env == "" {
+			env = "CIVITAI_TOKEN"
+		}
+		sb.WriteString(m.th.label.Render("CivitAI (" + env + "): "))
+		if m.civTokenSet {
+			if m.civTokenRejected {
+				sb.WriteString(m.th.err.Render("✗ Set but rejected by API") + "\n")
+			} else {
+				sb.WriteString(m.th.ok.Render("✓ Set") + "\n")
+			}
+		} else {
+			sb.WriteString(m.th.label.Render("Not set") + "\n")
+		}
+	} else {
+		sb.WriteString(m.th.label.Render("CivitAI: "))
+		sb.WriteString("Disabled\n")
+	}
+	sb.WriteString("\n")
+
+	// Section: Placement Rules
+	sb.WriteString(m.th.head.Render("Placement Rules") + "\n")
+	if len(m.cfg.Placement.Apps) > 0 {
+		for name, app := range m.cfg.Placement.Apps {
+			sb.WriteString(m.th.label.Render("  " + name + ": "))
+			sb.WriteString(app.Base + "\n")
+			if len(app.Paths) > 0 {
+				for key, path := range app.Paths {
+					sb.WriteString(m.th.label.Render("    " + key + ": "))
+					sb.WriteString(path + "\n")
+				}
+			}
+		}
+	} else {
+		sb.WriteString("  No placement apps configured\n")
+	}
+	sb.WriteString("\n")
+
+	// Section: Download Settings
+	sb.WriteString(m.th.head.Render("Download Settings") + "\n")
+	sb.WriteString(m.th.label.Render("Timeout: "))
+	sb.WriteString(fmt.Sprintf("%d seconds\n", m.cfg.Network.TimeoutSeconds))
+	sb.WriteString(m.th.label.Render("Max Redirects: "))
+	sb.WriteString(fmt.Sprintf("%d\n", m.cfg.Network.MaxRedirects))
+	sb.WriteString(m.th.label.Render("Chunk Size: "))
+	sb.WriteString(fmt.Sprintf("%d MB\n", m.cfg.Concurrency.ChunkSizeMB))
+	sb.WriteString(m.th.label.Render("Per-File Chunks: "))
+	sb.WriteString(fmt.Sprintf("%d\n", m.cfg.Concurrency.PerFileChunks))
+	sb.WriteString(m.th.label.Render("Global Files: "))
+	sb.WriteString(fmt.Sprintf("%d\n", m.cfg.Concurrency.GlobalFiles))
+	sb.WriteString(m.th.label.Render("Stage Partials: "))
+	if m.cfg.General.StagePartials {
+		sb.WriteString("Yes\n")
+	} else {
+		sb.WriteString("No\n")
+	}
+	sb.WriteString("\n")
+
+	// Section: UI Preferences
+	sb.WriteString(m.th.head.Render("UI Preferences") + "\n")
+	sb.WriteString(m.th.label.Render("Theme: "))
+	if m.cfg.UI.Theme != "" {
+		sb.WriteString(m.cfg.UI.Theme + "\n")
+	} else {
+		sb.WriteString("default\n")
+	}
+	sb.WriteString(m.th.label.Render("Column Mode: "))
+	if m.columnMode != "" {
+		sb.WriteString(m.columnMode + "\n")
+	} else {
+		sb.WriteString("dest\n")
+	}
+	sb.WriteString(m.th.label.Render("Compact View: "))
+	if m.isCompact() {
+		sb.WriteString("Yes\n")
+	} else {
+		sb.WriteString("No\n")
+	}
+	sb.WriteString(m.th.label.Render("Refresh Rate: "))
+	if m.cfg.UI.RefreshHz > 0 {
+		sb.WriteString(fmt.Sprintf("%d Hz\n", m.cfg.UI.RefreshHz))
+	} else {
+		sb.WriteString("1 Hz (default)\n")
+	}
+	sb.WriteString("\n")
+
+	// Section: Validation
+	sb.WriteString(m.th.head.Render("Validation Settings") + "\n")
+	sb.WriteString(m.th.label.Render("Require SHA256: "))
+	if m.cfg.Validation.RequireSHA256 {
+		sb.WriteString("Yes\n")
+	} else {
+		sb.WriteString("No\n")
+	}
+	sb.WriteString(m.th.label.Render("Accept MD5/SHA1: "))
+	if m.cfg.Validation.AcceptMD5SHA1IfProvided {
+		sb.WriteString("Yes\n")
+	} else {
+		sb.WriteString("No\n")
+	}
+	sb.WriteString(m.th.label.Render("Safetensors Deep Verify: "))
+	if m.cfg.Validation.SafetensorsDeepVerifyAfterDownload {
+		sb.WriteString("Yes\n")
+	} else {
+		sb.WriteString("No\n")
+	}
+	sb.WriteString("\n")
+
+	// Footer note
+	sb.WriteString(m.th.footer.Render("To edit settings, modify the YAML config file directly and restart"))
 
 	return sb.String()
 }
