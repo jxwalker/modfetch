@@ -135,11 +135,9 @@ func (m *Model) renderToastDrawer() string {
 	if len(m.toasts) == 0 {
 		return m.th.label.Render("(no recent notifications)")
 	}
-	now := time.Now()
 	var sb strings.Builder
 	for i := len(m.toasts) - 1; i >= 0; i-- { // newest first
 		t := m.toasts[i]
-		dur := now.Sub(t.when).Round(time.Second)
 		sb.WriteString(fmt.Sprintf("%s  %s\n", t.msg, m.th.label.Render(humanize.Time(t.when))))
 	}
 	return sb.String()

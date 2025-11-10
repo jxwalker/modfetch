@@ -115,14 +115,18 @@ func (f *CivitAIFetcher) FetchMetadata(ctx context.Context, url string) (*state.
 		ModelID:        fmt.Sprintf("civitai-%s", modelID),
 		Source:         "civitai",
 		Description:    truncateString(apiResp.Description, 5000),
-		Author:         apiResp.Creator.Username,
-		AuthorURL:      fmt.Sprintf("https://civitai.com/user/%s", apiResp.Creator.Username),
 		Tags:           apiResp.Tags,
 		ModelType:      mapCivitAIType(apiResp.Type),
 		HomepageURL:    fmt.Sprintf("https://civitai.com/models/%s", modelID),
 		DownloadCount:  int(apiResp.Stats.DownloadCount),
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
+	}
+
+	// Set author info only if username is non-empty
+	if apiResp.Creator.Username != "" {
+		meta.Author = apiResp.Creator.Username
+		meta.AuthorURL = fmt.Sprintf("https://civitai.com/user/%s", apiResp.Creator.Username)
 	}
 
 	// Get the first model version (usually the latest)

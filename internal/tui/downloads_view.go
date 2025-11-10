@@ -2,11 +2,14 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"github.com/jxwalker/modfetch/internal/downloader"
+	"github.com/jxwalker/modfetch/internal/logging"
 	"github.com/jxwalker/modfetch/internal/state"
 )
 
