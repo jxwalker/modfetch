@@ -21,6 +21,14 @@ type DB struct {
 	stmtListDownloads      *sql.Stmt
 }
 
+// Close closes the database connection
+func (db *DB) Close() error {
+	if db == nil || db.SQL == nil {
+		return nil
+	}
+	return db.SQL.Close()
+}
+
 // WithTx executes fn inside a transaction. If fn returns an error, the transaction is rolled back.
 func (db *DB) WithTx(fn func(tx *sql.Tx) error) error {
 	if db == nil || db.SQL == nil {

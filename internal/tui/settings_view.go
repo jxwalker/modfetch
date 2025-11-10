@@ -40,7 +40,7 @@ func (m *Model) renderAuthStatus() string {
 		}
 		sb.WriteString("HF ")
 		if m.hfTokenSet {
-			if m.hfTokenRejected {
+			if m.hfRejected {
 				sb.WriteString(m.th.bad.Render("✗"))
 			} else {
 				sb.WriteString(m.th.ok.Render("✓"))
@@ -57,7 +57,7 @@ func (m *Model) renderAuthStatus() string {
 		}
 		sb.WriteString("Civ ")
 		if m.civTokenSet {
-			if m.civTokenRejected {
+			if m.civRejected {
 				sb.WriteString(m.th.bad.Render("✗"))
 			} else {
 				sb.WriteString(m.th.ok.Render("✓"))
@@ -100,8 +100,8 @@ func (m *Model) renderSettings() string {
 		}
 		sb.WriteString(m.th.label.Render("HuggingFace (" + env + "): "))
 		if m.hfTokenSet {
-			if m.hfTokenRejected {
-				sb.WriteString(m.th.err.Render("✗ Set but rejected by API") + "\n")
+			if m.hfRejected {
+				sb.WriteString(m.th.bad.Render("✗ Set but rejected by API") + "\n")
 			} else {
 				sb.WriteString(m.th.ok.Render("✓ Set") + "\n")
 			}
@@ -121,8 +121,8 @@ func (m *Model) renderSettings() string {
 		}
 		sb.WriteString(m.th.label.Render("CivitAI (" + env + "): "))
 		if m.civTokenSet {
-			if m.civTokenRejected {
-				sb.WriteString(m.th.err.Render("✗ Set but rejected by API") + "\n")
+			if m.civRejected {
+				sb.WriteString(m.th.bad.Render("✗ Set but rejected by API") + "\n")
 			} else {
 				sb.WriteString(m.th.ok.Render("✓ Set") + "\n")
 			}

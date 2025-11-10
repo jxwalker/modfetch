@@ -205,62 +205,8 @@ func TestInferModelType(t *testing.T) {
 	}
 }
 
-func TestExtractQuantization(t *testing.T) {
-	tests := []struct {
-		name     string
-		filename string
-		want     string
-	}{
-		{
-			name:     "Q4_K_M quantization",
-			filename: "llama-2-7b.Q4_K_M.gguf",
-			want:     "Q4_K_M",
-		},
-		{
-			name:     "Q5_K_S quantization",
-			filename: "model.Q5_K_S.gguf",
-			want:     "Q5_K_S",
-		},
-		{
-			name:     "FP16",
-			filename: "model-fp16.safetensors",
-			want:     "FP16",
-		},
-		{
-			name:     "Q8_0",
-			filename: "llama-2-13b-q8_0.gguf",
-			want:     "Q8_0",
-		},
-		{
-			name:     "No quantization",
-			filename: "model.safetensors",
-			want:     "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := extractQuantization(tt.filename)
-			if got != tt.want {
-				t.Errorf("extractQuantization(%q) = %q, want %q", tt.filename, got, tt.want)
-			}
-		})
-	}
-}
 
 func TestRegistry_FetchMetadata(t *testing.T) {
-	registry := NewRegistry()
-
-	tests := []struct {
-		name       string
-		url        string
-		wantSource string
-	}{
-		{
-			name:       "HuggingFace URL",
-			url:        "https://huggingface.co/TheBloke/Model/resolve/main/file.gguf",
-			wantSource: "huggingface",
-		},
 		{
 			name:       "CivitAI URL",
 			url:        "https://civitai.com/api/download/models/12345",

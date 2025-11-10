@@ -23,7 +23,7 @@ func setupTestDB(t *testing.T) (*state.DB, func()) {
 	}
 
 	cleanup := func() {
-		if err := db.Close(); err != nil {
+		if err := db.SQL.Close(); err != nil {
 			t.Errorf("Failed to close database: %v", err)
 		}
 	}
@@ -641,7 +641,7 @@ func TestScanner_FileFormat(t *testing.T) {
 			}
 
 			// Clean up for next test
-			if err := db.DeleteMetadata(stored[0].ID); err != nil {
+			if err := db.DeleteMetadata(stored[0].DownloadURL); err != nil {
 				t.Fatalf("Failed to clean up: %v", err)
 			}
 		})

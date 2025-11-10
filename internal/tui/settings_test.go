@@ -79,7 +79,7 @@ func setupTestSettings(t *testing.T, cfg *config.Config) (*Model, func()) {
 	model.activeTab = 6 // Settings tab
 
 	cleanup := func() {
-		if err := db.Close(); err != nil {
+		if err := db.SQL.Close(); err != nil {
 			t.Errorf("Failed to close database: %v", err)
 		}
 	}
@@ -219,8 +219,8 @@ func TestSettings_TokenStatus_Rejected(t *testing.T) {
 	model.updateTokenEnvStatus()
 
 	// Simulate token rejection
-	model.hfTokenRejected = true
-	model.civTokenRejected = true
+	model.hfRejected = true
+	model.civRejected = true
 
 	output := model.renderSettings()
 
@@ -302,7 +302,7 @@ func TestSettings_RenderAuthStatus_Compact(t *testing.T) {
 	}
 
 	// Test: Tokens rejected
-	model.hfTokenRejected = true
+	model.hfRejected = true
 	output = model.renderAuthStatus()
 	if !strings.Contains(output, "✗") {
 		t.Error("Auth status should show '✗' for rejected tokens")
