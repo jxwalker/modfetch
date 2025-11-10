@@ -1,0 +1,25 @@
+{
+  "id": "TheBloke/Llama-2-7B-GGUF",
+  "modelId": "TheBloke/Llama-2-7B-GGUF",
+  "author": "TheBloke",
+  "sha": "abc123def456",
+  "lastModified": "2024-01-15T10:30:00.000Z",
+  "private": false,
+  "disabled": false,
+  "gated": false,
+  "tags": [
+    "llama",
+    "llama-2",
+    "gguf",
+    "text-generation",
+    "en",
+    "license:llama2"
+  ],
+  "downloads": 125000,
+  "likes": 450,
+  "license": "llama2",
+  "description": "# Llama 2 7B - GGUF\n\nThis is a GGUF format model files for Llama 2 7B.\n\n## Model Details\n\n- **Developed by:** Meta\n- **Quantized by:** TheBloke\n- **Model type:** Llama 2\n- **Language:** English\n- **License:** Llama 2 Community License\n\n## Usage\n\nThese files are GGUF format model files for Llama 2 7B.\n\nGGUF is a new format introduced by the llama.cpp team on August 21st 2023.",
+  "cardData": {
+    "thumbnail": "https://huggingface.co/TheBloke/Llama-2-7B-GGUF/resolve/main/thumbnail.png"
+  }
+}

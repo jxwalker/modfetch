@@ -127,18 +127,35 @@ See docs/PLACEMENT.md and docs/RESOLVERS.md for details and examples.
 
 modfetch tui --config ~/.config/modfetch/config.yml
 
-- Live list of downloads
-- Throughput and ETA per row
-- Keys:
-  - Navigation: j/k (select), / (filter), m (menu), h/? (help)
-  - Sorting: s (sort by speed), e (sort by ETA), o (clear sort)
-  - Actions: n (new), r (refresh), d (details), g (group by status), t (toggle columns)
-  - Per-row actions: p (pause/cancel), y (retry), C (copy path), U (copy URL), O (open/reveal), D (delete staged), X (clear row)
-- Behavior:
-  - Resolving spinner row appears immediately after starting, then transitions to planning → running
-  - Live speed and ETA for both chunked and single-stream fallback downloads
-  - Supports pasting CivitAI model page URLs; they’re auto-resolved to the correct direct download
-- See the full TUI guide: docs/TUI_GUIDE.md
+The TUI provides **7 tabs** for managing downloads and your model library:
+
+**Download Tabs (0-4):**
+- **All** (Tab 0): All downloads regardless of status
+- **Pending** (Tab 1): Downloads waiting to start
+- **Active** (Tab 2): Currently downloading files
+- **Completed** (Tab 3): Successfully completed downloads
+- **Failed** (Tab 4): Failed downloads
+
+**Library & Settings (5-6):**
+- **Library** (Tab 5 or `L`): Browse and search your downloaded models
+  - View rich metadata: type, quantization, size, tags, descriptions
+  - Search by name with `/`, filter by type and source
+  - Mark favorites with `f`, scan directories with `S`
+  - See docs/LIBRARY.md for complete guide
+- **Settings** (Tab 6 or `M`): View configuration and token status
+  - Directory paths, placement rules, download settings
+  - HuggingFace and CivitAI token validation status
+  - Read-only view (edit config file to make changes)
+
+**Key Features:**
+- Live speed and ETA with throughput tracking
+- Sorting: s (speed), e (ETA), R (remaining bytes), o (clear)
+- Actions: n (new), b (batch), y (retry), p (pause), D (delete)
+- Per-row: C (copy path), U (copy URL), O (open/reveal)
+- Auto-resolves CivitAI model page URLs
+- Auto-recovery of running downloads on startup
+
+See the full TUI guide: docs/TUI_GUIDE.md
 
 ## Tips
 

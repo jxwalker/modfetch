@@ -8,6 +8,9 @@ Highlights
 - Parallel chunked downloads with resume and retries
 - SHA256 integrity verification (per‑chunk and full file)
 - Automatic classification + placement into your app directories
+- **Model Library**: Browse and search your downloaded models with rich metadata
+- **Directory Scanner**: Auto-discover models in your directories (10-100x faster with indexes)
+- **Settings View**: View configuration, token status, and preferences
 - Batch YAML execution with verify and status
 - Rich TUI dashboard and CLI progress with throughput and ETA
 - Structured logging, metrics, and resilient SQLite state
@@ -15,14 +18,27 @@ Highlights
 
 Status: MVP feature‑complete for resolvers and downloads; ongoing polish in TUI and docs.
 
-What's new in v0.5.2
-- **TUI v1 Enhanced**: Restored rich UI elements, vibrant colors, and proper borders to TUI v1 (refactored MVC)
-- **TUI Stability**: Fixed critical startup issues and eliminated terminal escape sequences
-- **Visual Feedback**: Enhanced colorful status indicators and comprehensive theming
-- **Installation Improvements**: Fixed installer 404 errors and unbound variable issues
-- **Navigation**: Restored proper arrow key navigation and help system functionality
+What's new in v0.6.0
+- **Library View**: Browse all your downloaded models with rich metadata, search, and filters
+  - View model details: type, quantization, size, source, tags, descriptions
+  - Search by name, filter by type (LLM, LoRA, VAE, etc.) and source (HuggingFace, CivitAI, local)
+  - Mark models as favorites for quick access
+  - Keyboard shortcuts: `5` or `L` to access Library, `/` to search, `Enter` for details
+- **Directory Scanner**: Automatically discover models in your configured directories
+  - Scans download_root and placement directories
+  - Extracts metadata from filenames (quantization, parameter count, version)
+  - O(log n) duplicate detection with database indexes (10-100x faster than linear scan)
+  - Press `S` in Library view to trigger a scan
+- **Settings Tab**: View your configuration at a glance
+  - See directory paths, API token status, placement rules, download settings
+  - Visual indicators for HuggingFace and CivitAI token status
+  - Press `6` or `M` to access Settings
+- **Performance Optimizations**: Added database indexes for 10-100x speedup on large model libraries
+- **Comprehensive Testing**: 84 test cases including unit, integration, and performance benchmarks
+- **Documentation**: Complete user guides for Library (docs/LIBRARY.md) and Scanner (docs/SCANNER.md)
 
 Previous releases:
+- v0.5.2: TUI v1 Enhanced with rich UI elements and vibrant colors
 - v0.5.1: Critical installer and TUI navigation fixes
 - v0.5.0: Comprehensive installation package with guided setup experience
 
@@ -130,19 +146,29 @@ Usage (see docs/USER_GUIDE.md for details)
   
   - See docs/BATCH.md for the schema and examples
 - TUI dashboard (live list, filters, per‑row speed/ETA):
-  
+
   modfetch tui --config /path/to/config.yml
-  
+
   - **TUI v2 (default)**: Feature-rich interface with extensive UX upgrades
-    - Keys: j/k (select), / (filter), m (menu), h/? (help)
+    - **7 Tabs**: All, Pending, Active, Completed, Failed, **Library**, **Settings**
+    - **Library (Tab 5 or L)**: Browse downloaded models, search, filter, view details
+      - Search by name with `/`, filter by type/source
+      - View rich metadata: quantization, size, tags, descriptions
+      - Mark favorites with `f`, scan directories with `S`
+      - See docs/LIBRARY.md for full guide
+    - **Settings (Tab 6 or M)**: View configuration and token status
+      - See directory paths, placement rules, download settings
+      - Check HuggingFace and CivitAI token status
+      - Visual indicators for token validation
+    - Keys: j/k (select), / (filter/search), m (menu), h/? (help)
     - Sorting: s (sort by speed), e (sort by ETA), R (remaining bytes), o (clear sort)
     - Actions: n (new), r (refresh), d (details), g (group by status), t (toggle columns)
     - Per‑row actions: p (pause/cancel), y (retry), C (copy path), U (copy URL), O (open/reveal), D (delete staged), X (clear row)
     - Live speed and ETA with throughput sparklines and comprehensive status indicators
   - **TUI v1 (refactored)**: Enhanced MVC architecture with vibrant colors and rich theming
-    
+
     modfetch tui --config /path/to/config.yml --v1
-    
+
     - Colorful status indicators (green for completed, red for failed, pink for active)
     - Clean borders and enhanced visual feedback
     - Full navigation support with discoverable help system
@@ -152,6 +178,8 @@ Usage (see docs/USER_GUIDE.md for details)
     - Accepts CivitAI model page URLs (https://civitai.com/models/ID) and rewrites them internally to the correct direct download URL
     - The header marks the active sort (SPEED*/ETA*/[sort: remaining]); the Stats panel shows View indicators (Sort/Group/Column/Theme)
   - See the full TUI guide: docs/TUI_GUIDE.md
+  - See the Library guide: docs/LIBRARY.md
+  - See the Scanner guide: docs/SCANNER.md
 - Verify checksums in state:
   
   modfetch verify --config /path/to/config.yml --all
@@ -225,19 +253,25 @@ Project layout
 - internal/downloader: single + chunked engines
 - internal/resolver: hf:// and civitai:// resolvers
 - internal/placer: placement engine
-- internal/tui: TUI models
-- internal/state: SQLite state DB
+- internal/scanner: directory scanner for model discovery
+- internal/metadata: metadata fetchers for HuggingFace and CivitAI
+- internal/tui: TUI models (Library, Scanner, Settings, Downloads)
+- internal/state: SQLite state DB with indexed metadata storage
 - internal/metrics: Prometheus textfile metrics
-- docs/: configuration, testing, placement, resolvers
+- docs/: configuration, testing, placement, resolvers, library, scanner
 - scripts/: smoke test and helpers
 
 Troubleshooting
 - Missing tokens: Set `HF_TOKEN` or `CIVITAI_TOKEN` in your environment when accessing private resources.
 - TLS or HEAD failures: Downloader falls back to single‑stream when Range/HEAD is unsupported.
 - Resume: Re‑running the same download will resume and verify integrity.
+- Library not showing models: Press `S` in Library view to scan your directories.
+- Slow scanning: First scan may take time; subsequent scans use indexed duplicate detection (10-100x faster).
 
 Roadmap
 - See docs/ROADMAP.md for the consolidated, prioritized roadmap
-- Further TUI enhancements
+- Further TUI enhancements (bulk operations, advanced filters)
 - Placement/classifier refinements and presets
 - Release packaging for more distros
+- Parallel directory scanning
+- Export/import library catalogs
