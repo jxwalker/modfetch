@@ -2,6 +2,8 @@
 
 This guide walks through launching the TUI, understanding the layout, available actions, and tips for troubleshooting.
 
+> **📊 Visual Learner?** Check out [TUI Wireframes](TUI_WIREFRAMES.md) for visual diagrams, wireframes, and navigation flows that show exactly how the TUI works!
+
 ## Launching the TUI
 
 - Using a specific config file:
