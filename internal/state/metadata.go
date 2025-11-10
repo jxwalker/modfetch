@@ -131,6 +131,8 @@ func (db *DB) InitMetadataTable() error {
 		`CREATE INDEX IF NOT EXISTS idx_metadata_favorite ON model_metadata(favorite);`,
 		`CREATE INDEX IF NOT EXISTS idx_metadata_last_used ON model_metadata(last_used);`,
 		`CREATE INDEX IF NOT EXISTS idx_metadata_updated_at ON model_metadata(updated_at);`,
+		`CREATE INDEX IF NOT EXISTS idx_metadata_dest ON model_metadata(dest);`,
+		`CREATE INDEX IF NOT EXISTS idx_metadata_model_name ON model_metadata(model_name);`,
 	}
 
 	for _, stmt := range stmts {
@@ -249,6 +251,66 @@ func (db *DB) GetMetadata(downloadURL string) (*ModelMetadata, error) {
 		&createdAtUnix, &updatedAtUnix,
 		&meta.UserNotes, &meta.UserRating, &favorite,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Deserialize tags
+	if tagsJSON != "" {
+		if err := json.Unmarshal([]byte(tagsJSON), &meta.Tags); err != nil {
+			return nil, fmt.Errorf("deserialize tags: %w", err)
+		}
+	}
+
+	// Convert timestamps
+	meta.CreatedAt = time.Unix(createdAtUnix, 0)
+	meta.UpdatedAt = time.Unix(updatedAtUnix, 0)
+	if lastUsedUnix != nil {
+		lu := time.Unix(*lastUsedUnix, 0)
+		meta.LastUsed = &lu
+	}
+	meta.Favorite = favorite != 0
+
+	return &meta, nil
+}
+
+// GetMetadataByDest retrieves metadata for a specific destination path
+// This is optimized with an index for fast lookups by file path
+func (db *DB) GetMetadataByDest(dest string) (*ModelMetadata, error) {
+	if dest == "" {
+		return nil, fmt.Errorf("dest path is required")
+	}
+
+	stmt := `SELECT
+		id, download_url, dest, model_name, model_id, version, source,
+		description, author, author_url, license, tags,
+		model_type, base_model, architecture, parameter_count, quantization,
+		file_size, file_format,
+		download_count, last_used, times_used,
+		homepage_url, repo_url, documentation_url, thumbnail_url,
+		created_at, updated_at,
+		user_notes, user_rating, favorite
+	FROM model_metadata WHERE dest = ?`
+
+	var meta ModelMetadata
+	var tagsJSON string
+	var lastUsedUnix *int64
+	var createdAtUnix, updatedAtUnix int64
+	var favorite int
+
+	err := db.SQL.QueryRow(stmt, dest).Scan(
+		&meta.ID, &meta.DownloadURL, &meta.Dest, &meta.ModelName, &meta.ModelID, &meta.Version, &meta.Source,
+		&meta.Description, &meta.Author, &meta.AuthorURL, &meta.License, &tagsJSON,
+		&meta.ModelType, &meta.BaseModel, &meta.Architecture, &meta.ParameterCount, &meta.Quantization,
+		&meta.FileSize, &meta.FileFormat,
+		&meta.DownloadCount, &lastUsedUnix, &meta.TimesUsed,
+		&meta.HomepageURL, &meta.RepoURL, &meta.DocumentationURL, &meta.ThumbnailURL,
+		&createdAtUnix, &updatedAtUnix,
+		&meta.UserNotes, &meta.UserRating, &favorite,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil // Not found - return nil without error
+	}
 	if err != nil {
 		return nil, err
 	}

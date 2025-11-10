@@ -120,25 +120,17 @@ func isModelFile(path string) bool {
 }
 
 // findExistingMetadata checks if we already have metadata for this file
+// This uses an indexed query for O(log n) performance instead of O(n)
 func (s *Scanner) findExistingMetadata(path string) (*state.ModelMetadata, error) {
-	// Try to find by dest path
-	filters := state.MetadataFilters{
-		Limit: 1,
-	}
-
-	results, err := s.db.ListMetadata(filters)
+	// Use direct indexed query by dest path
+	meta, err := s.db.GetMetadataByDest(path)
 	if err != nil {
 		return nil, err
 	}
-
-	// Check if any result matches this path
-	for _, meta := range results {
-		if meta.Dest == path {
-			return &meta, nil
-		}
+	if meta == nil {
+		return nil, fmt.Errorf("not found")
 	}
-
-	return nil, fmt.Errorf("not found")
+	return meta, nil
 }
 
 // extractMetadata extracts metadata from file path and name
