@@ -1268,49 +1268,6 @@ func (m *Model) renderBatchModal() string {
 	return sb.String()
 }
 
-func (m *Model) renderTabs() string {
-	labels := []struct {
-		name string
-		tab  int
-	}{
-		{"All", -1},
-		{"Pending", 0},
-		{"Active", 1},
-		{"Completed", 2},
-		{"Failed", 3},
-		{"Library", 4},
-		{"Settings", 5},
-	}
-	var sb strings.Builder
-	for i, it := range labels {
-		style := m.th.tabInactive
-		if it.tab == m.activeTab {
-			style = m.th.tabActive
-		}
-		var tabLabel string
-		if it.tab == 5 {
-			// Settings tab doesn't show a count
-			tabLabel = it.name
-		} else {
-			count := 0
-			if it.tab == -1 {
-				count = len(m.rows)
-			} else if it.tab == 4 {
-				// Library tab shows count of metadata entries
-				count = len(m.libraryRows)
-			} else {
-				count = len(m.filterRows(it.tab))
-			}
-			tabLabel = fmt.Sprintf("%s (%d)", it.name, count)
-		}
-		sb.WriteString(style.Render(tabLabel))
-		if i < len(labels)-1 {
-			sb.WriteString("  •  ")
-		}
-	}
-	return sb.String()
-}
-
 func (m *Model) visibleRows() []state.DownloadRow {
 	rows := m.filterRows(m.activeTab)
 	rows = m.applySearch(rows)
@@ -2067,36 +2024,6 @@ func (m *Model) selectionOrCurrent() []state.DownloadRow {
 	return out
 }
 
-func (m *Model) addToast(s string) {
-	m.toasts = append(m.toasts, toast{msg: s, when: time.Now(), ttl: 3 * time.Second})
-	if len(m.toasts) > 50 {
-		// keep last 50
-		m.toasts = m.toasts[len(m.toasts)-50:]
-	}
-}
-
-func (m *Model) gcToasts() {
-	now := time.Now()
-	var keep []toast
-	for _, t := range m.toasts {
-		if now.Sub(t.when) < t.ttl {
-			keep = append(keep, t)
-		}
-	}
-	m.toasts = keep
-}
-
-func (m *Model) renderToasts() string {
-	if len(m.toasts) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(m.toasts))
-	for _, t := range m.toasts {
-		parts = append(parts, t.msg)
-	}
-	return m.th.label.Render(strings.Join(parts, " • "))
-}
-
 func (m *Model) compactToggle()  { m.cfg.UI.Compact = !m.cfg.UI.Compact }
 func (m *Model) isCompact() bool { return m.cfg.UI.Compact }
 
@@ -2150,67 +2077,6 @@ func (m *Model) saveUIState() {
 	_ = os.WriteFile(p, b, 0o644)
 }
 
-func (m *Model) renderCommandsBar() string {
-	// concise single-line commands reference
-	return m.th.footer.Render("n new • b batch • y/r start • p cancel • D delete • O open • / filter • s/e/R sort • o clear • g group host • t col • v compact • i inspector • H toasts • ? help • q quit")
-}
-
-func (m *Model) renderLibraryCommandsBar() string {
-	// Library tab commands reference
-	return m.th.footer.Render("j/k navigate • Enter details • Esc back • / search • S scan directories • f favorite • H toasts • ? help • q quit")
-}
-
-func (m *Model) renderSettingsCommandsBar() string {
-	// Settings tab commands reference
-	return m.th.footer.Render("View current configuration • H toasts • ? help • q quit")
-}
-
-func (m *Model) renderHelp() string {
-	var sb strings.Builder
-	sb.WriteString(m.th.head.Render("Help (TUI)") + "\n")
-	sb.WriteString("Tabs: 1 Pending • 2 Active • 3 Completed • 4 Failed • 5/L Library • 6/M Settings\n")
-	sb.WriteString("\n")
-	sb.WriteString(m.th.head.Render("Download Tabs (1-4)") + "\n")
-	sb.WriteString("Nav: j/k up/down\n")
-	sb.WriteString("Filter: / to enter; Enter to apply; Esc to clear\n")
-	sb.WriteString("Sort: s speed • e ETA • R remaining • o clear\n")
-	sb.WriteString("Group: g group by host\n")
-	sb.WriteString("Theme: T cycle presets\n")
-	sb.WriteString("Toasts: H toggle drawer\n")
-	sb.WriteString("Select: Space toggle • A select all • X clear selection\n")
-	sb.WriteString("Probe: P re-probe reachability of selected/current (does not start download)\n")
-	sb.WriteString("Columns: t cycle URL/DEST/HOST • v compact view\n")
-	sb.WriteString("Actions: y/r start • p cancel • D delete • O open • C copy path • U copy URL\n")
-	sb.WriteString("\n")
-	sb.WriteString(m.th.head.Render("Library Tab (5/L)") + "\n")
-	sb.WriteString("Nav: j/k up/down • Enter view details • Esc back to list\n")
-	sb.WriteString("Search: / to enter; Enter to apply; Esc to clear\n")
-	sb.WriteString("Scan: S scan configured directories for existing models\n")
-	sb.WriteString("Favorite: f toggle favorite on selected model\n")
-	sb.WriteString("\n")
-	sb.WriteString(m.th.head.Render("Settings Tab (6/M)") + "\n")
-	sb.WriteString("View current configuration including paths, tokens, and preferences\n")
-	sb.WriteString("To edit settings, modify the YAML config file directly\n")
-	sb.WriteString("\n")
-	sb.WriteString("Quit: q\n")
-	return sb.String()
-}
-
-func (m *Model) renderToastDrawer() string {
-	if len(m.toasts) == 0 {
-		return m.th.label.Render("(no recent notifications)")
-	}
-	now := time.Now()
-	var sb strings.Builder
-	for i := len(m.toasts) - 1; i >= 0; i-- { // newest first
-		t := m.toasts[i]
-		dur := now.Sub(t.when).Round(time.Second)
-		sb.WriteString(fmt.Sprintf("%s  %s\n", t.msg, m.th.label.Render(dur.String()+" ago")))
-	}
-	return sb.String()
-}
-
-// URL normalization helper (for modal note only)
 func (m *Model) normalizeURLForNote(raw string) (string, bool) {
 	s := strings.TrimSpace(raw)
 	if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
