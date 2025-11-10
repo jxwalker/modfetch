@@ -26,6 +26,7 @@ import (
 	"github.com/jxwalker/modfetch/internal/metadata"
 	"github.com/jxwalker/modfetch/internal/placer"
 	"github.com/jxwalker/modfetch/internal/resolver"
+	"github.com/jxwalker/modfetch/internal/scanner"
 	"github.com/jxwalker/modfetch/internal/state"
 	"github.com/jxwalker/modfetch/internal/util"
 )
@@ -192,8 +193,12 @@ type Model struct {
 	libraryDetailModel    *state.ModelMetadata
 	libraryFilterType     string // Filter by model type: "", "LLM", "LoRA", etc.
 	libraryFilterSource   string // Filter by source: "", "huggingface", "civitai"
-	libraryShowFavorites  bool   // Show only favorites
-	libraryNeedsRefresh   bool   // Flag to reload library data
+	libraryShowFavorites  bool                     // Show only favorites
+	libraryNeedsRefresh   bool                     // Flag to reload library data
+	librarySearchInput    textinput.Model          // Search input for library
+	librarySearchActive   bool                     // Search input is active
+	libraryScanning       bool                     // Currently scanning directories
+	libraryScanProgress   string                   // Scan progress message
 	log                   *logging.Logger
 }
 
@@ -228,6 +233,11 @@ func New(cfg *config.Config, st *state.DB, version string) tea.Model {
 			mode = "dest"
 		}
 	}
+	// Create library search input
+	libSearch := textinput.New()
+	libSearch.Placeholder = "search models..."
+	libSearch.CharLimit = 256
+
 	m := &Model{
 		cfg: cfg, st: st, th: defaultTheme(), activeTab: -1, prog: p, prev: map[string]obs{}, prevStatus: map[string]string{},
 		build:   strings.TrimSpace(version),
@@ -240,6 +250,7 @@ func New(cfg *config.Config, st *state.DB, version string) tea.Model {
 		// Library state
 		libraryRows:         []state.ModelMetadata{},
 		libraryNeedsRefresh: true,
+		librarySearchInput:  libSearch,
 		log:                 logging.New("info", false),
 	}
 	// Apply config.theme if provided (initial preset); UI state may override
@@ -280,6 +291,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.filterOn {
 			return m.updateFilter(msg)
+		}
+		if m.librarySearchActive {
+			return m.updateLibrarySearch(msg)
 		}
 		return m.updateNormal(msg)
 	case tickMsg:
@@ -370,6 +384,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.addToast("probe failed: unreachable; on hold (" + msg.info + ")")
 		}
 		return m, m.refresh()
+	case scanCompleteMsg:
+		// Handle directory scan completion
+		m.libraryScanning = false
+		m.libraryScanProgress = ""
+
+		if msg.err != nil {
+			m.addToast(fmt.Sprintf("scan error: %v", msg.err))
+		} else if msg.result != nil {
+			m.addToast(fmt.Sprintf("scan complete: %d files scanned, %d models added, %d skipped",
+				msg.result.FilesScanned, msg.result.ModelsAdded, msg.result.ModelsSkipped))
+			// Refresh library to show new models
+			m.libraryNeedsRefresh = true
+			m.refreshLibraryData()
+		}
+		return m, nil
 	case dlDoneMsg:
 		// Apply placement metadata if needed (safe concurrent map access from Update thread)
 		if msg.needsPlaceMap && msg.origKey != msg.resKey {
@@ -682,8 +711,15 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.saveUIState()
 		return m, tea.Quit
 	case "/":
-		m.filterOn = true
-		m.filterInput.Focus()
+		if m.activeTab == 4 {
+			// Library search
+			m.librarySearchActive = true
+			m.librarySearchInput.Focus()
+		} else {
+			// Download filter
+			m.filterOn = true
+			m.filterInput.Focus()
+		}
 		return m, nil
 	case "n":
 		m.newJob = true
@@ -697,6 +733,12 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.batchInput = textinput.New()
 		m.batchInput.Placeholder = "Path to text file with URLs"
 		m.batchInput.Focus()
+		return m, nil
+	case "S":
+		// Scan directories for existing models
+		if m.activeTab == 4 && !m.libraryScanning {
+			return m, m.scanDirectoriesCmd()
+		}
 		return m, nil
 	case "s":
 		m.sortMode = "speed"
@@ -937,8 +979,11 @@ func (m *Model) View() string {
 
 	// Commands bar for quick reference
 	commands := ""
-	if m.activeTab != 4 {
-		// Don't show commands bar in library view
+	if m.activeTab == 4 {
+		// Library-specific commands
+		commands = m.th.border.Width(m.w - 2).Render(m.renderLibraryCommandsBar())
+	} else {
+		// Download table commands
 		commands = m.th.border.Width(m.w - 2).Render(m.renderCommandsBar())
 	}
 
@@ -980,14 +1025,16 @@ func (m *Model) View() string {
 		modal = m.th.border.Width(m.w - 4).Render(m.renderBatchModal())
 	}
 
-	// Minimal footer: show filter input only when active
-	filterBar := ""
+	// Minimal footer: show filter or search input when active
+	inputBar := ""
 	if m.filterOn {
-		filterBar = "Filter: " + m.filterInput.View()
+		inputBar = "Filter: " + m.filterInput.View()
+	} else if m.librarySearchActive {
+		inputBar = "Search: " + m.librarySearchInput.View()
 	}
 	footer := ""
-	if strings.TrimSpace(filterBar) != "" {
-		footer = m.th.border.Width(m.w - 2).Render(m.th.footer.Render(filterBar))
+	if strings.TrimSpace(inputBar) != "" {
+		footer = m.th.border.Width(m.w - 2).Render(m.th.footer.Render(inputBar))
 	}
 
 	parts := []string{titleBar, tabs}
@@ -2208,10 +2255,17 @@ func (m *Model) renderCommandsBar() string {
 	return m.th.footer.Render("n new • b batch • y/r start • p cancel • D delete • O open • / filter • s/e/R sort • o clear • g group host • t col • v compact • i inspector • H toasts • ? help • q quit")
 }
 
+func (m *Model) renderLibraryCommandsBar() string {
+	// Library tab commands reference
+	return m.th.footer.Render("j/k navigate • Enter details • Esc back • / search • S scan directories • f favorite • H toasts • ? help • q quit")
+}
+
 func (m *Model) renderHelp() string {
 	var sb strings.Builder
 	sb.WriteString(m.th.head.Render("Help (TUI)") + "\n")
 	sb.WriteString("Tabs: 1 Pending • 2 Active • 3 Completed • 4 Failed • 5/L Library\n")
+	sb.WriteString("\n")
+	sb.WriteString(m.th.head.Render("Download Tabs (1-4)") + "\n")
 	sb.WriteString("Nav: j/k up/down\n")
 	sb.WriteString("Filter: / to enter; Enter to apply; Esc to clear\n")
 	sb.WriteString("Sort: s speed • e ETA • R remaining • o clear\n")
@@ -2222,6 +2276,13 @@ func (m *Model) renderHelp() string {
 	sb.WriteString("Probe: P re-probe reachability of selected/current (does not start download)\n")
 	sb.WriteString("Columns: t cycle URL/DEST/HOST • v compact view\n")
 	sb.WriteString("Actions: y/r start • p cancel • D delete • O open • C copy path • U copy URL\n")
+	sb.WriteString("\n")
+	sb.WriteString(m.th.head.Render("Library Tab (5/L)") + "\n")
+	sb.WriteString("Nav: j/k up/down • Enter view details • Esc back to list\n")
+	sb.WriteString("Search: / to enter; Enter to apply; Esc to clear\n")
+	sb.WriteString("Scan: S scan configured directories for existing models\n")
+	sb.WriteString("Favorite: f toggle favorite on selected model\n")
+	sb.WriteString("\n")
 	sb.WriteString("Quit: q\n")
 	return sb.String()
 }
@@ -3164,4 +3225,74 @@ func (m *Model) renderLibraryDetail() string {
 	sb.WriteString(m.th.footer.Render("Press Esc to go back • F to toggle favorite • Q to quit"))
 
 	return sb.String()
+}
+
+// updateLibrarySearch handles library search input
+func (m *Model) updateLibrarySearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	s := msg.String()
+
+	switch s {
+	case "esc":
+		m.librarySearchActive = false
+		m.librarySearchInput.Blur()
+		m.librarySearch = ""
+		m.libraryNeedsRefresh = true
+		m.refreshLibraryData()
+		return m, nil
+	case "enter", "ctrl+j":
+		m.librarySearchActive = false
+		m.librarySearchInput.Blur()
+		m.librarySearch = strings.TrimSpace(m.librarySearchInput.Value())
+		m.libraryNeedsRefresh = true
+		m.refreshLibraryData()
+		return m, nil
+	}
+
+	var cmd tea.Cmd
+	m.librarySearchInput, cmd = m.librarySearchInput.Update(msg)
+	return m, cmd
+}
+
+// scanDirectoriesCmd initiates a directory scan for models
+func (m *Model) scanDirectoriesCmd() tea.Cmd {
+	return func() tea.Msg {
+		if m.st == nil || m.cfg == nil {
+			return scanCompleteMsg{err: fmt.Errorf("database or config not available")}
+		}
+
+		// Get directories to scan from config
+		dirs := []string{}
+
+		// Add download root
+		if m.cfg.General.DownloadRoot != "" {
+			dirs = append(dirs, m.cfg.General.DownloadRoot)
+		}
+
+		// Add placement directories
+		for _, rule := range m.cfg.Placement.Rules {
+			if rule.Dest != "" {
+				dirs = append(dirs, rule.Dest)
+			}
+		}
+
+		if len(dirs) == 0 {
+			return scanCompleteMsg{err: fmt.Errorf("no directories configured to scan")}
+		}
+
+		// Perform scan
+		scanner := scanner.NewScanner(m.st)
+		result, err := scanner.ScanDirectories(dirs)
+
+		if err != nil {
+			return scanCompleteMsg{err: err, result: result}
+		}
+
+		return scanCompleteMsg{result: result}
+	}
+}
+
+// scanCompleteMsg is sent when directory scan completes
+type scanCompleteMsg struct {
+	result *scanner.ScanResult
+	err    error
 }

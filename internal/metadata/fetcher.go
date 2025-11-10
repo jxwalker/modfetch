@@ -170,7 +170,7 @@ func (f *HuggingFaceFetcher) FetchMetadata(ctx context.Context, url string) (*st
 	meta.ModelType = inferModelType(filename, apiResp.Tags)
 
 	// Extract quantization from filename if present
-	if quant := extractQuantization(filename); quant != "" {
+	if quant := ExtractQuantization(filename); quant != "" {
 		meta.Quantization = quant
 	}
 
@@ -206,7 +206,7 @@ func (f *HuggingFaceFetcher) basicMetadata(url, modelID, filename, version strin
 		AuthorURL:   fmt.Sprintf("https://huggingface.co/%s", user),
 		RepoURL:     fmt.Sprintf("https://huggingface.co/%s", modelID),
 		ModelType:   inferModelType(filename, nil),
-		Quantization: extractQuantization(filename),
+		Quantization: ExtractQuantization(filename),
 		FileFormat:  strings.ToLower(filepath.Ext(filename)),
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
@@ -275,7 +275,8 @@ func inferModelType(filename string, tags []string) string {
 	return "Unknown"
 }
 
-func extractQuantization(filename string) string {
+// ExtractQuantization extracts quantization info from filename (exported for scanner)
+func ExtractQuantization(filename string) string {
 	filename = strings.ToUpper(filename)
 
 	// Common GGUF quantization patterns
