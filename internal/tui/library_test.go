@@ -25,13 +25,12 @@ func setupTestLibrary(t *testing.T) (*Model, *state.DB, func()) {
 	}
 
 	cfg := &config.Config{
-		General: config.GeneralConfig{
+		General: config.General{
 			DownloadRoot: tmpDir,
 		},
-		Placement: config.PlacementConfig{
-			Rules: []config.PlacementRule{
-				{Dest: filepath.Join(tmpDir, "models")},
-			},
+		Placement: config.Placement{
+			Apps:    make(map[string]config.AppPlacement),
+			Mapping: []config.MappingRule{},
 		},
 	}
 
@@ -537,7 +536,8 @@ func TestLibrary_ScanDirectoriesCmd_NoDirectories(t *testing.T) {
 
 	// Clear directories
 	model.cfg.General.DownloadRoot = ""
-	model.cfg.Placement.Rules = []config.PlacementRule{}
+	model.cfg.Placement.Apps = make(map[string]config.AppPlacement)
+	model.cfg.Placement.Mapping = []config.MappingRule{}
 
 	cmd := model.scanDirectoriesCmd()
 	msg := cmd()

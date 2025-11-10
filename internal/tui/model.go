@@ -1,17 +1,10 @@
 package tui
 
 import (
-	"bufio"
-	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	neturl "net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"sort"
 	"strings"
 	"time"
 
@@ -19,16 +12,12 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/dustin/go-humanize"
 	"github.com/jxwalker/modfetch/internal/config"
-	"github.com/jxwalker/modfetch/internal/downloader"
 	"github.com/jxwalker/modfetch/internal/logging"
-	"github.com/jxwalker/modfetch/internal/metadata"
 	"github.com/jxwalker/modfetch/internal/placer"
 	"github.com/jxwalker/modfetch/internal/resolver"
 	"github.com/jxwalker/modfetch/internal/scanner"
 	"github.com/jxwalker/modfetch/internal/state"
-	"github.com/jxwalker/modfetch/internal/util"
 )
 
 type Theme struct {
@@ -435,8 +424,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.civRejected = false
 			m.civRateLimited = false
 		}
-		// Fetch and store metadata asynchronously via command
-		cmds = append(cmds, m.fetchAndStoreMetadataCmd(msg.url, msg.dest, msg.path))
 		// Auto place if configured
 		key := msg.url + "|" + msg.dest
 		if m.autoPlace[key] {
@@ -453,7 +440,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			delete(m.autoPlace, key)
 			delete(m.placeType, key)
 		}
-		return m, m.refresh()
+		// Fetch and store metadata asynchronously via command, batch with refresh
+		return m, tea.Batch(m.fetchAndStoreMetadataCmd(msg.url, msg.dest, msg.path), m.refresh())
 	}
 	return m, nil
 }

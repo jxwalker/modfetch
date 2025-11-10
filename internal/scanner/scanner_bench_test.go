@@ -376,7 +376,6 @@ func BenchmarkCompleteWorkflow(b *testing.B) {
 	// 5. Store in database
 
 	tmpDir := b.TempDir()
-	dbPath := filepath.Join(tmpDir, "bench.db")
 	modelsDir := filepath.Join(tmpDir, "models")
 
 	// Create 1000 test files

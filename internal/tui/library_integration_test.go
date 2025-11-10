@@ -80,7 +80,7 @@ func TestIntegration_ScanToLibraryFlow(t *testing.T) {
 
 	// Step 3: Load data via Library
 	cfg := &config.Config{
-		General: config.GeneralConfig{
+		General: config.General{
 			DataRoot:     tmpDir,
 			DownloadRoot: modelsDir,
 		},
@@ -192,7 +192,7 @@ func TestIntegration_MetadataFetchToLibrary(t *testing.T) {
 
 	// Load in library
 	cfg := &config.Config{
-		General: config.GeneralConfig{
+		General: config.General{
 			DataRoot:     tmpDir,
 			DownloadRoot: tmpDir,
 		},
@@ -329,7 +329,7 @@ func TestIntegration_SearchFiltering(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		General: config.GeneralConfig{
+		General: config.General{
 			DataRoot:     tmpDir,
 			DownloadRoot: tmpDir,
 		},
@@ -513,7 +513,7 @@ func TestIntegration_FavoriteManagement(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		General: config.GeneralConfig{
+		General: config.General{
 			DataRoot:     tmpDir,
 			DownloadRoot: tmpDir,
 		},

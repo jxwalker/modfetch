@@ -24,7 +24,7 @@ func setupTestSettings(t *testing.T, cfg *config.Config) (*Model, func()) {
 
 	if cfg == nil {
 		cfg = &config.Config{
-			General: config.GeneralConfig{
+			General: config.General{
 				DataRoot:      tmpDir,
 				DownloadRoot:  filepath.Join(tmpDir, "downloads"),
 				PartialsRoot:  filepath.Join(tmpDir, "partials"),
@@ -59,7 +59,7 @@ func setupTestSettings(t *testing.T, cfg *config.Config) (*Model, func()) {
 					TokenEnv: "CIVITAI_TOKEN",
 				},
 			},
-			Placement: config.PlacementConfig{
+			Placement: config.Placement{
 				Apps: map[string]config.PlacementApp{
 					"comfyui": {
 						Base: "/opt/comfyui",
@@ -232,7 +232,7 @@ func TestSettings_TokenStatus_Rejected(t *testing.T) {
 
 func TestSettings_TokenStatus_Disabled(t *testing.T) {
 	cfg := &config.Config{
-		General: config.GeneralConfig{
+		General: config.General{
 			DataRoot:     os.TempDir(),
 			DownloadRoot: os.TempDir(),
 		},
@@ -339,11 +339,11 @@ func TestSettings_PlacementRules(t *testing.T) {
 
 func TestSettings_PlacementRules_Empty(t *testing.T) {
 	cfg := &config.Config{
-		General: config.GeneralConfig{
+		General: config.General{
 			DataRoot:     os.TempDir(),
 			DownloadRoot: os.TempDir(),
 		},
-		Placement: config.PlacementConfig{
+		Placement: config.Placement{
 			Apps: map[string]config.PlacementApp{},
 		},
 	}
@@ -445,7 +445,7 @@ func TestSettings_UIPreferences(t *testing.T) {
 
 func TestSettings_UIPreferences_Defaults(t *testing.T) {
 	cfg := &config.Config{
-		General: config.GeneralConfig{
+		General: config.General{
 			DataRoot:     os.TempDir(),
 			DownloadRoot: os.TempDir(),
 		},
@@ -532,7 +532,7 @@ func TestSettings_ValidationSettings_BooleanRendering(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &config.Config{
-				General: config.GeneralConfig{
+				General: config.General{
 					DataRoot:     os.TempDir(),
 					DownloadRoot: os.TempDir(),
 				},
@@ -581,7 +581,7 @@ func TestSettings_Footer(t *testing.T) {
 
 func TestSettings_CustomTokenEnv(t *testing.T) {
 	cfg := &config.Config{
-		General: config.GeneralConfig{
+		General: config.General{
 			DataRoot:     os.TempDir(),
 			DownloadRoot: os.TempDir(),
 		},
