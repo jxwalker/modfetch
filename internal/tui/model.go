@@ -98,7 +98,7 @@ type Model struct {
 	th              Theme
 	w, h            int
 	build           string
-	activeTab       int // 0: Pending, 1: Active, 2: Completed, 3: Failed, 4: Library
+	activeTab       int // 0: All, 1: Pending, 2: Active, 3: Completed, 4: Failed, 5: Library, 6: Settings
 	rows            []state.DownloadRow
 	selected        int
 	filterOn        bool
@@ -377,9 +377,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if msg.result != nil {
 			m.addToast(fmt.Sprintf("scan complete: %d files scanned, %d models added, %d skipped",
 				msg.result.FilesScanned, msg.result.ModelsAdded, msg.result.ModelsSkipped))
-			// Refresh library to show new models
+			// Refresh library to show new models - will be loaded when user views library tab
 			m.libraryNeedsRefresh = true
-			m.refreshLibraryData()
 		}
 		return m, nil
 	case dlDoneMsg:

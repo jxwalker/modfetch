@@ -2,11 +2,13 @@ package tui
 
 import (
 	"fmt"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/dustin/go-humanize"
 	"github.com/jxwalker/modfetch/internal/scanner"
 	"github.com/jxwalker/modfetch/internal/state"
-	"strings"
 )
 
 // Library view rendering and interaction
