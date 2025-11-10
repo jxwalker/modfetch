@@ -205,8 +205,19 @@ func TestInferModelType(t *testing.T) {
 	}
 }
 
-
 func TestRegistry_FetchMetadata(t *testing.T) {
+	registry := NewRegistry()
+
+	tests := []struct {
+		name       string
+		url        string
+		wantSource string
+	}{
+		{
+			name:       "HuggingFace URL",
+			url:        "https://huggingface.co/TheBloke/Model/resolve/main/file.gguf",
+			wantSource: "huggingface",
+		},
 		{
 			name:       "CivitAI URL",
 			url:        "https://civitai.com/api/download/models/12345",
