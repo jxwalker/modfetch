@@ -1,24 +1,117 @@
 # modfetch
 
-Fetch, verify, and place LLM and Stable Diffusion models reliably from Hugging Face and CivitAI — with resume, per‑chunk and full SHA256, batch YAML, and a TUI.
+> **Fast, resilient downloads for AI models** • Download, verify, and organize LLM and Stable Diffusion models from HuggingFace and CivitAI
 
-A fast, resilient CLI + TUI for getting models where they belong. Parallel chunked downloads with resume, exact SHA256 verification, smart default naming, and placement into your app directories.
+```
+╔═══════════════════════════════════════════════════════════╗
+║  🚀 Parallel Chunked Downloads with Auto-Resume          ║
+║  ✓  SHA256 Integrity Verification                        ║
+║  📚 Rich TUI with Model Library Browser                   ║
+║  🎯 Smart Classification & Auto-Placement                 ║
+║  ⚡ 10-100x Faster with Indexed Model Discovery          ║
+╚═══════════════════════════════════════════════════════════╝
+```
 
-Highlights
-- Parallel chunked downloads with resume and retries
-- SHA256 integrity verification (per‑chunk and full file)
-- Automatic classification + placement into your app directories
-- **Model Library**: Browse and search your downloaded models with rich metadata
-- **Directory Scanner**: Auto-discover models in your directories (10-100x faster with indexes)
-- **Settings View**: View configuration, token status, and preferences
-- Batch YAML execution with verify and status
-- Rich TUI dashboard and CLI progress with throughput and ETA
-- Structured logging, metrics, and resilient SQLite state
-- Graceful cancellation on SIGINT/SIGTERM cleans up partial downloads
+## Quick Links
 
-Status: MVP feature‑complete for resolvers and downloads; ongoing polish in TUI and docs.
+📖 **New User?** Start here: **[Quick Start Guide](docs/QUICKSTART.md)** ← Visual walkthrough in 5 minutes!
 
-What's new in v0.6.0
+📊 **Visual Learner?** See: **[TUI Wireframes](docs/TUI_WIREFRAMES.md)** ← Screenshots and navigation flows
+
+📚 **Documentation:**
+- [TUI Guide](docs/TUI_GUIDE.md) - Complete TUI documentation
+- [Library Guide](docs/LIBRARY.md) - Browse and organize your models
+- [User Guide](docs/USER_GUIDE.md) - Full feature reference
+- [Configuration](docs/CONFIG.md) - Config file options
+
+---
+
+## Features at a Glance
+
+### 🚀 Downloads
+- **Parallel chunked downloads** with automatic resume and retries
+- **SHA256 verification** (per-chunk and full file)
+- **Smart naming** with collision-safe suffixes
+- **Resolver support** for `hf://` and `civitai://` URLs
+- **Auth preflight** with early failure detection
+- **Rate limit handling** with automatic retry
+
+### 📚 Model Library
+- **Browse and search** all your downloaded models
+- **Rich metadata** from HuggingFace and CivitAI APIs
+- **Favorites system** to mark important models
+- **Directory scanner** to discover existing models (10-100x faster with indexes)
+- **Detailed view** with specs, descriptions, tags, and links
+- **Filter by type and source** (LLM, LoRA, VAE, Checkpoint, etc.)
+
+### 🎯 Organization
+- **Automatic placement** into app directories
+- **Smart classification** by model type
+- **Symlink or copy** modes
+- **Batch YAML** for bulk operations
+- **Dry-run mode** to preview actions
+
+### 🖥️ Rich TUI
+- **7 tabs**: All, Pending, Active, Completed, Failed, Library, Settings
+- **Live progress** with speed, ETA, and throughput sparklines
+- **Interactive actions**: pause, retry, delete, reveal, copy
+- **Themes**: Default, Neon, Dracula, Solarized
+- **Filter and sort** downloads by various criteria
+- **Keyboard shortcuts** for power users
+
+### 🔧 Developer-Friendly
+- **Structured logging** (JSON or text)
+- **Metrics export** (Prometheus textfile)
+- **Resilient SQLite** state tracking
+- **Graceful cancellation** (SIGINT/SIGTERM)
+- **JSON output** for scripting
+
+---
+
+## TUI Preview
+
+The modfetch TUI provides a beautiful, full-featured interface for managing your AI models:
+
+```
+╔═══════════════════════════════════════════════════════════════════════════╗
+║  modfetch v0.6.0                    Tab: [2] Active                       ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║  🔄 Active: 2   ✓ Completed: 45   ⏳ Pending: 3   ✗ Failed: 1           ║
+║  Throughput: 32.5 MB/s   •   Auth: HF ✓  CivitAI ✓                       ║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║  Status    │ Progress        │ Speed      │ ETA    │ Size  │ File        ║
+║  ──────────┼─────────────────┼────────────┼────────┼───────┼─────────    ║
+║▶ Running   │ ████████░░░ 45% │ 18.3 MB/s  │ 2m 15s │ 3.8GB │ llama-2...  ║
+║  Running   │ ██████░░░░░ 32% │ 14.2 MB/s  │ 3m 42s │ 4.1GB │ mistral...  ║
+║  Planning  │ ...             │ -          │ -      │ 2.2GB │ sdxl-base...║
+╠═══════════════════════════════════════════════════════════════════════════╣
+║  n:New  y:Retry  p:Pause  5/L:Library  6/M:Settings  ?:Help  q:Quit     ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+```
+
+**Key Features:**
+- 🎨 **Multiple themes** (Neon, Dracula, Solarized) - Press `T` to cycle
+- ⌨️ **Vim-style navigation** (`j`/`k`) plus arrow keys
+- 📊 **Real-time stats** with speed graphs and progress bars
+- 🔍 **Search and filter** with `/` key
+- 📚 **Browse library** with `5` or `L`
+- ⚙️ **View settings** with `6` or `M`
+
+> **See it in action:** Check out the [TUI Wireframes](docs/TUI_WIREFRAMES.md) for detailed visual guides!
+
+---
+
+## Status
+
+✅ **Production Ready:** Core download, verify, and TUI features are stable
+
+🚀 **Active Development:** Library enhancements, bulk operations, advanced filters
+
+📖 **Documentation:** Comprehensive guides with visual examples
+
+---
+
+## What's new in v0.6.0
 - **Library View**: Browse all your downloaded models with rich metadata, search, and filters
   - View model details: type, quantization, size, source, tags, descriptions
   - Search by name, filter by type (LLM, LoRA, VAE, etc.) and source (HuggingFace, CivitAI, local)
@@ -44,54 +137,122 @@ Previous releases:
 
 See full release notes and binaries: https://github.com/jxwalker/modfetch/releases
 
-Installation
-- **One-liner install** (recommended):
-  ```bash
-  curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/install.sh | bash
-  ```
-- **Custom install directory**:
-  ```bash
-  curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/install.sh | bash -s -- --install-dir ~/bin
-  ```
-- **From source**:
-  - Build: `make build` (produces `./bin/modfetch`)
-  - Test: `make test`
-  - Cross‑platform artifacts: `make release-dist`
-- **Binaries**: via GitHub Releases (Linux/macOS with SHA256 checksums)
-- **Homebrew**: `brew install jxwalker/tap/modfetch` (coming soon)
-- **Uninstall**: `curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/uninstall.sh | bash`
-- See CHANGELOG.md for what's new each release
+## Installation
 
-Quickstart (≈1 minute)
+### One-Line Install (Recommended)
+
 ```bash
-# 1) Build
-make build
+curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/install.sh | bash
+```
 
-# 2) Minimal config (see docs/CONFIG.md for full schema)
+**What it does:**
+```
+✓ Downloads latest release
+✓ Verifies SHA256 checksum
+✓ Installs to /usr/local/bin
+✓ Makes executable
+→ Ready to use: modfetch --version
+```
+
+### Alternative Methods
+
+<details>
+<summary><b>📦 Custom Install Directory</b></summary>
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/install.sh | bash -s -- --install-dir ~/bin
+```
+</details>
+
+<details>
+<summary><b>🔨 Build from Source</b></summary>
+
+```bash
+git clone https://github.com/jxwalker/modfetch
+cd modfetch
+make build    # Produces ./bin/modfetch
+make test     # Run tests
+```
+</details>
+
+<details>
+<summary><b>📥 Download Binary (GitHub Releases)</b></summary>
+
+Download from [Releases](https://github.com/jxwalker/modfetch/releases):
+- Linux: amd64, arm64
+- macOS: amd64, arm64, universal
+- All with SHA256 checksums
+</details>
+
+<details>
+<summary><b>🍺 Homebrew (Coming Soon)</b></summary>
+
+```bash
+brew install jxwalker/tap/modfetch
+```
+</details>
+
+<details>
+<summary><b>🗑️ Uninstall</b></summary>
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/uninstall.sh | bash
+```
+</details>
+
+## Get Started in 3 Steps
+
+> 📖 **Want a detailed walkthrough?** See the **[Quick Start Guide](docs/QUICKSTART.md)** with visual examples!
+
+### 1. Install (1 minute)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/install.sh | bash
+```
+
+### 2. Configure (1 minute)
+
+```bash
 mkdir -p ~/.config/modfetch
-cat >~/.config/modfetch/config.yml <<'YAML'
+cat > ~/.config/modfetch/config.yml << 'YAML'
 version: 1
 general:
   data_root: "~/modfetch-data"
   download_root: "~/Downloads/modfetch"
   placement_mode: "symlink"
-network:
-  timeout_seconds: 60
-concurrency:
-  per_file_chunks: 4
-  chunk_size_mb: 8
 sources:
   huggingface: { enabled: true, token_env: "HF_TOKEN" }
   civitai:     { enabled: true, token_env: "CIVITAI_TOKEN" }
 YAML
 
-# 3) First run (public)
-./bin/modfetch download --config ~/.config/modfetch/config.yml --url 'https://proof.ovh.net/files/1Mb.dat'
+export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 ```
 
-Tokens (only for gated content)
-- HF_TOKEN — Hugging Face
-- CIVITAI_TOKEN — CivitAI
+### 3. Your First Download
+
+```bash
+# Test with a small file
+modfetch download --url 'https://proof.ovh.net/files/1Mb.dat'
+
+# Or launch the TUI dashboard
+modfetch tui
+```
+
+**Result:**
+```
+✓ Download complete
+✓ SHA256 verified
+✓ Saved to ~/Downloads/modfetch/1Mb.dat
+```
+
+### Optional: API Tokens (for private/gated content)
+
+```bash
+export HF_TOKEN="your_token"        # Get from: https://huggingface.co/settings/tokens
+export CIVITAI_TOKEN="your_token"   # Get from: https://civitai.com/user/account
+```
+
+---
 
 Requirements
 - Go 1.22+
@@ -106,7 +267,30 @@ Configuration
   ```
 - See docs/CONFIG.md for full schema.
 
-Usage (see docs/USER_GUIDE.md for details)
+## Usage
+
+> 📚 **Full details:** See [User Guide](docs/USER_GUIDE.md) | [TUI Guide](docs/TUI_GUIDE.md) | [TUI Wireframes](docs/TUI_WIREFRAMES.md)
+
+### Quick Command Reference
+
+```bash
+# Launch TUI (recommended for visual management)
+modfetch tui
+
+# Download a file
+modfetch download --url 'URL'
+
+# Verify downloads
+modfetch verify --all
+
+# Place model into app directory
+modfetch place --path /path/to/model.safetensors
+
+# Batch downloads
+modfetch download --batch jobs.yml --place
+```
+
+### Detailed Examples
 - Validate config:
   
   modfetch config validate --config /path/to/config.yml
