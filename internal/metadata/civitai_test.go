@@ -8,6 +8,16 @@ import (
 	"testing"
 )
 
+// mockTransport is a mock HTTP transport for testing
+type mockTransport struct {
+	response *http.Response
+	err      error
+}
+
+func (mt *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return mt.response, mt.err
+}
+
 func TestCivitAIFetcher_CanHandle(t *testing.T) {
 	tests := []struct {
 		name string

@@ -373,10 +373,15 @@ func (m *Model) scanDirectoriesCmd() tea.Cmd {
 			dirs = append(dirs, m.cfg.General.DownloadRoot)
 		}
 
-		// Add placement directories
-		for _, rule := range m.cfg.Placement.Rules {
-			if rule.Dest != "" {
-				dirs = append(dirs, rule.Dest)
+		// Add placement app directories
+		for _, app := range m.cfg.Placement.Apps {
+			if app.Base != "" {
+				dirs = append(dirs, app.Base)
+			}
+			for _, path := range app.Paths {
+				if path != "" {
+					dirs = append(dirs, path)
+				}
 			}
 		}
 
