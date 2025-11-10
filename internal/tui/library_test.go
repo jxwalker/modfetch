@@ -7,7 +7,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/state"
 )
