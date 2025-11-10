@@ -21,11 +21,40 @@ modfetch tui
 
 ## Layout overview
 
+The TUI has **7 tabs** that you can switch between:
+
+1. **All** (Tab 0): All downloads regardless of status
+2. **Pending** (Tab 1): Downloads waiting to start
+3. **Active** (Tab 2): Currently downloading files
+4. **Completed** (Tab 3): Successfully completed downloads
+5. **Failed** (Tab 4): Failed downloads
+6. **Library** (Tab 5 or `L`): Browse and search your downloaded models
+7. **Settings** (Tab 6 or `M`): View your configuration
+
+### Download Tabs (0-4)
+
 - Header: summary, filters, and sort indicators
 - Table: one row per download/resolution task
 - Footer/help: key hints
 
 Row columns include status, progress, speed, ETA, size, and destination path.
+
+### Library Tab (5 or L)
+
+- Browse all downloaded models with rich metadata
+- Search by name, filter by type (LLM, LoRA, VAE) and source
+- View detailed information: quantization, size, tags, descriptions
+- Mark models as favorites
+- Scan directories to discover new models
+- See **docs/LIBRARY.md** for complete documentation
+
+### Settings Tab (6 or M)
+
+- View your modfetch configuration at a glance
+- Check directory paths, placement rules, download settings
+- Verify API token status (HuggingFace, CivitAI)
+- Visual indicators show token validation state
+- Read-only view (edit config file to make changes)
 
 ## Row lifecycle
 
@@ -45,23 +74,48 @@ The TUI now exposes key mappings via a discoverable help system. A concise
 commands bar is always visible at the bottom, and pressing `?` toggles the full
 help overlay.
 
-Common keys include:
+### Global Keys
 
-- `j`/`k` or arrow keys to navigate
-- `n` to start a new download
-- `b` to import a batch file
-- `y` or `r` to start or retry
-- `p` to cancel
-- `D` to delete
-- `O` to open the destination
-- `/` to filter
-- `s`/`e`/`R`/`o` to sort by speed, sort by ETA, sort by remaining bytes, or clear sorting
-- `g` to group by host
-- `t` to cycle the URL/DEST/HOST column
-- `v` to toggle compact view
-- `i` to toggle the inspector
-- `H` to toggle the toast drawer
-- `q` to quit
+- `0`-`4` - Switch to download tabs (All, Pending, Active, Completed, Failed)
+- `5` or `L` - Switch to Library tab
+- `6` or `M` - Switch to Settings tab
+- `j`/`k` or arrow keys - Navigate up/down
+- `?` - Toggle help overlay
+- `q` - Quit
+
+### Download Tab Keys
+
+- `n` - Start a new download
+- `b` - Import a batch file
+- `y` or `r` - Start or retry selected download
+- `p` - Cancel selected download
+- `D` - Delete selected download
+- `O` - Open/reveal destination in file manager
+- `/` - Filter by substring
+- `s`/`e`/`R`/`o` - Sort by speed, ETA, remaining bytes, or clear sort
+- `g` - Group by host/status
+- `t` - Cycle URL/DEST/HOST column
+- `v` - Toggle compact view
+- `i` - Toggle the inspector
+- `H` - Toggle the toast drawer
+- `C` - Copy path to clipboard
+- `U` - Copy URL to clipboard
+- `X` - Clear ephemeral row
+
+### Library Tab Keys
+
+- `j`/`k` or arrow keys - Navigate model list
+- `/` - Search models by name
+- `Enter` - View model details
+- `Esc` - Return to list from detail view
+- `f` - Toggle favorite on selected model
+- `S` - Scan directories for new models
+- `F` - Toggle filter menu (future)
+
+### Settings Tab Keys
+
+- `j`/`k` or arrow keys - Scroll settings view
+- `Esc` or `q` - Return to downloads
 
 ## Themes
 
