@@ -378,13 +378,15 @@ func (db *DB) ListMetadata(filters MetadataFilters) ([]ModelMetadata, error) {
 	// Apply ordering
 	switch filters.OrderBy {
 	case "last_used":
-		query += " ORDER BY last_used DESC NULLS LAST"
+		// SQLite doesn't support NULLS LAST, use IS NULL trick
+		query += " ORDER BY last_used IS NULL, last_used DESC"
 	case "name":
 		query += " ORDER BY model_name COLLATE NOCASE"
 	case "size":
 		query += " ORDER BY file_size DESC"
 	case "rating":
-		query += " ORDER BY user_rating DESC NULLS LAST"
+		// SQLite doesn't support NULLS LAST, use IS NULL trick
+		query += " ORDER BY user_rating IS NULL, user_rating DESC"
 	case "created_at":
 		query += " ORDER BY created_at DESC"
 	default:

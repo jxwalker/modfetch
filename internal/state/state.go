@@ -78,6 +78,32 @@ func Open(cfg *config.Config) (*DB, error) {
 	return db, nil
 }
 
+// NewDB opens a database at the specified path (for testing)
+func NewDB(path string) (*DB, error) {
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout=5000&_pragma=journal_mode(WAL)&_fk=1", path)
+	sqldb, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	if err := initSchema(sqldb); err != nil {
+		return nil, err
+	}
+	db := &DB{SQL: sqldb, Path: path}
+	if err := db.prepareStatements(); err != nil {
+		return nil, err
+	}
+	if err := db.InitChunksTable(); err != nil {
+		return nil, err
+	}
+	if err := db.InitHostCapsTable(); err != nil {
+		return nil, err
+	}
+	if err := db.InitMetadataTable(); err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
 func initSchema(db *sql.DB) error {
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS downloads (
