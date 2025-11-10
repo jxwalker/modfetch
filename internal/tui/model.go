@@ -367,6 +367,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.addToast("probe failed: unreachable; on hold (" + msg.info + ")")
 		}
 		return m, m.refresh()
+	case metadataStoredMsg:
+		// Metadata was successfully stored, mark library as needing refresh
+		m.libraryNeedsRefresh = true
+		return m, nil
 	case scanCompleteMsg:
 		// Handle directory scan completion
 		m.libraryScanning = false
@@ -431,8 +435,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.civRejected = false
 			m.civRateLimited = false
 		}
-		// Fetch and store metadata asynchronously
-		go m.fetchAndStoreMetadata(msg.url, msg.dest, msg.path)
+		// Fetch and store metadata asynchronously via command
+		cmds = append(cmds, m.fetchAndStoreMetadataCmd(msg.url, msg.dest, msg.path))
 		// Auto place if configured
 		key := msg.url + "|" + msg.dest
 		if m.autoPlace[key] {

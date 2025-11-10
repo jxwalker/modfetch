@@ -320,54 +320,59 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 	}
 }
 
-// Theme presets
+// metadataStoredMsg is sent when metadata has been successfully fetched and stored
+type metadataStoredMsg struct {
+	url       string
+	modelName string
+}
 
+// fetchAndStoreMetadataCmd returns a command that fetches and stores metadata in the background.
 // This is fire-and-forget - errors are logged but don't affect the UI.
-
-func (m *Model) fetchAndStoreMetadata(url, dest, path string) {
+func (m *Model) fetchAndStoreMetadataCmd(url, dest, path string) tea.Cmd {
 	if m.st == nil {
-		return
+		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-	// Create metadata registry
-	registry := metadata.NewRegistry()
+		// Create metadata registry
+		registry := metadata.NewRegistry()
 
-	// Fetch metadata from appropriate source
-	meta, err := registry.FetchMetadata(ctx, url)
-	if err != nil {
-		// Log error but don't fail - metadata is optional
+		// Fetch metadata from appropriate source
+		meta, err := registry.FetchMetadata(ctx, url)
+		if err != nil {
+			// Log error but don't fail - metadata is optional
+			if m.log != nil {
+				m.log.Debugf("metadata fetch failed for %s: %v", url, err)
+			}
+			return nil
+		}
+
+		// Set destination path
+		meta.DownloadURL = url
+		meta.Dest = dest
+
+		// Get file size if available
+		if path != "" {
+			if info, err := os.Stat(path); err == nil {
+				meta.FileSize = info.Size()
+			}
+		}
+
+		// Store metadata in database
+		if err := m.st.UpsertMetadata(meta); err != nil {
+			if m.log != nil {
+				m.log.Debugf("metadata storage failed for %s: %v", url, err)
+			}
+			return nil
+		}
+
 		if m.log != nil {
-			m.log.Debugf("metadata fetch failed for %s: %v", url, err)
+			m.log.Debugf("stored metadata for %s (%s)", meta.ModelName, url)
 		}
-		return
-	}
 
-	// Set destination path
-	meta.DownloadURL = url
-	meta.Dest = dest
-
-	// Get file size if available
-	if path != "" {
-		if info, err := os.Stat(path); err == nil {
-			meta.FileSize = info.Size()
-		}
-	}
-
-	// Store metadata in database
-	if err := m.st.UpsertMetadata(meta); err != nil {
-		if m.log != nil {
-			m.log.Debugf("metadata storage failed for %s: %v", url, err)
-		}
-		return
-	}
-
-	// Mark library as needing refresh
-	m.libraryNeedsRefresh = true
-
-	if m.log != nil {
-		m.log.Debugf("stored metadata for %s (%s)", meta.ModelName, url)
+		return metadataStoredMsg{url: url, modelName: meta.ModelName}
 	}
 }

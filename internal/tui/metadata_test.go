@@ -10,16 +10,18 @@ import (
 	"github.com/jxwalker/modfetch/internal/state"
 )
 
-// TestFetchAndStoreMetadata_NilDB tests that metadata fetching handles nil database gracefully
-func TestFetchAndStoreMetadata_NilDB(t *testing.T) {
+// TestFetchAndStoreMetadataCmd_NilDB tests that metadata fetching handles nil database gracefully
+func TestFetchAndStoreMetadataCmd_NilDB(t *testing.T) {
 	m := &Model{
 		st:  nil, // nil database
 		log: logging.New("error", false),
 	}
 
-	// Should not panic with nil database
-	m.fetchAndStoreMetadata("https://example.com/model.gguf", "/path/to/model.gguf", "/path/to/model.gguf")
-	// No assertion needed - just verifying it doesn't panic
+	// Should return nil command when database is nil
+	cmd := m.fetchAndStoreMetadataCmd("https://example.com/model.gguf", "/path/to/model.gguf", "/path/to/model.gguf")
+	if cmd != nil {
+		t.Error("fetchAndStoreMetadataCmd should return nil when database is nil")
+	}
 }
 
 // TestMetadataStorage tests that metadata can be stored and retrieved
