@@ -34,10 +34,6 @@ func (m *Model) updateTokenEnvStatus() {
 func (m *Model) renderAuthStatus() string {
 	var sb strings.Builder
 	if m.cfg.Sources.HuggingFace.Enabled {
-		env := m.cfg.Sources.HuggingFace.TokenEnv
-		if env == "" {
-			env = "HF_TOKEN"
-		}
 		sb.WriteString("HF ")
 		if m.hfTokenSet {
 			if m.hfRejected {
@@ -51,10 +47,6 @@ func (m *Model) renderAuthStatus() string {
 		sb.WriteString(" ")
 	}
 	if m.cfg.Sources.CivitAI.Enabled {
-		env := m.cfg.Sources.CivitAI.TokenEnv
-		if env == "" {
-			env = "CIVITAI_TOKEN"
-		}
 		sb.WriteString("Civ ")
 		if m.civTokenSet {
 			if m.civRejected {

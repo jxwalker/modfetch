@@ -159,7 +159,6 @@ type Model struct {
 	// Library view state
 	libraryRows          []state.ModelMetadata
 	librarySelected      int
-	libraryFilter        state.MetadataFilters
 	librarySearch        string
 	libraryViewingDetail bool
 	libraryDetailModel   *state.ModelMetadata
