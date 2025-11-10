@@ -54,6 +54,16 @@ func (r *Registry) Register(f Fetcher) {
 	r.fetchers = append(r.fetchers, f)
 }
 
+// CanHandle returns true if any registered fetcher can handle the given URL
+func (r *Registry) CanHandle(url string) bool {
+	for _, f := range r.fetchers {
+		if f.CanHandle(url) {
+			return true
+		}
+	}
+	return false
+}
+
 // FetchMetadata attempts to fetch metadata using the appropriate fetcher
 func (r *Registry) FetchMetadata(ctx context.Context, url string) (*state.ModelMetadata, error) {
 	for _, f := range r.fetchers {

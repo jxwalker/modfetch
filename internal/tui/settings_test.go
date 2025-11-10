@@ -31,36 +31,36 @@ func setupTestSettings(t *testing.T, cfg *config.Config) (*Model, func()) {
 				PlacementMode: "auto",
 				StagePartials: true,
 			},
-			Network: config.NetworkConfig{
+			Network: config.Network{
 				TimeoutSeconds: 300,
 				MaxRedirects:   5,
 			},
-			Concurrency: config.ConcurrencyConfig{
+			Concurrency: config.Concurrency{
 				ChunkSizeMB:   64,
 				PerFileChunks: 4,
 				GlobalFiles:   3,
 			},
-			UI: config.UIConfig{
+			UI: config.UIOptions{
 				Theme:     "dark",
 				RefreshHz: 10,
 			},
-			Validation: config.ValidationConfig{
+			Validation: config.Validation{
 				RequireSHA256:                      false,
 				AcceptMD5SHA1IfProvided:            true,
 				SafetensorsDeepVerifyAfterDownload: true,
 			},
-			Sources: config.SourcesConfig{
-				HuggingFace: config.HuggingFaceSourceConfig{
+			Sources: config.Sources{
+				HuggingFace: config.SourceWithToken{
 					Enabled:  true,
 					TokenEnv: "HF_TOKEN",
 				},
-				CivitAI: config.CivitAISourceConfig{
+				CivitAI: config.SourceWithToken{
 					Enabled:  true,
 					TokenEnv: "CIVITAI_TOKEN",
 				},
 			},
 			Placement: config.Placement{
-				Apps: map[string]config.PlacementApp{
+				Apps: map[string]config.AppPlacement{
 					"comfyui": {
 						Base: "/opt/comfyui",
 						Paths: map[string]string{
@@ -236,11 +236,11 @@ func TestSettings_TokenStatus_Disabled(t *testing.T) {
 			DataRoot:     os.TempDir(),
 			DownloadRoot: os.TempDir(),
 		},
-		Sources: config.SourcesConfig{
-			HuggingFace: config.HuggingFaceSourceConfig{
+		Sources: config.Sources{
+			HuggingFace: config.SourceWithToken{
 				Enabled: false,
 			},
-			CivitAI: config.CivitAISourceConfig{
+			CivitAI: config.SourceWithToken{
 				Enabled: false,
 			},
 		},
@@ -344,7 +344,7 @@ func TestSettings_PlacementRules_Empty(t *testing.T) {
 			DownloadRoot: os.TempDir(),
 		},
 		Placement: config.Placement{
-			Apps: map[string]config.PlacementApp{},
+			Apps: map[string]config.AppPlacement{},
 		},
 	}
 
@@ -449,7 +449,7 @@ func TestSettings_UIPreferences_Defaults(t *testing.T) {
 			DataRoot:     os.TempDir(),
 			DownloadRoot: os.TempDir(),
 		},
-		UI: config.UIConfig{
+		UI: config.UIOptions{
 			Theme:     "",
 			RefreshHz: 0,
 		},
@@ -536,7 +536,7 @@ func TestSettings_ValidationSettings_BooleanRendering(t *testing.T) {
 					DataRoot:     os.TempDir(),
 					DownloadRoot: os.TempDir(),
 				},
-				Validation: config.ValidationConfig{
+				Validation: config.Validation{
 					RequireSHA256:                      tt.requireSHA256,
 					AcceptMD5SHA1IfProvided:            tt.acceptMD5,
 					SafetensorsDeepVerifyAfterDownload: tt.safetensorsVerify,
@@ -585,12 +585,12 @@ func TestSettings_CustomTokenEnv(t *testing.T) {
 			DataRoot:     os.TempDir(),
 			DownloadRoot: os.TempDir(),
 		},
-		Sources: config.SourcesConfig{
-			HuggingFace: config.HuggingFaceSourceConfig{
+		Sources: config.Sources{
+			HuggingFace: config.SourceWithToken{
 				Enabled:  true,
 				TokenEnv: "CUSTOM_HF_TOKEN",
 			},
-			CivitAI: config.CivitAISourceConfig{
+			CivitAI: config.SourceWithToken{
 				Enabled:  true,
 				TokenEnv: "CUSTOM_CIV_TOKEN",
 			},
