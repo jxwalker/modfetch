@@ -23,11 +23,11 @@ func NewScanner(db *state.DB) *Scanner {
 
 // ScanResult contains information about a scan operation
 type ScanResult struct {
-	FilesScanned int
-	ModelsFound  int
-	ModelsAdded  int
+	FilesScanned  int
+	ModelsFound   int
+	ModelsAdded   int
 	ModelsSkipped int
-	Errors       []error
+	Errors        []error
 }
 
 // ModelFileExtensions are file extensions we recognize as model files
