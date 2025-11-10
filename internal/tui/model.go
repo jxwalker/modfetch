@@ -114,7 +114,7 @@ type Model struct {
 	th              Theme
 	w, h            int
 	build           string
-	activeTab       int // 0: Pending, 1: Active, 2: Completed, 3: Failed
+	activeTab       int // 0: Pending, 1: Active, 2: Completed, 3: Failed, 4: Library
 	rows            []state.DownloadRow
 	selected        int
 	filterOn        bool
@@ -183,6 +183,18 @@ type Model struct {
 	// rate limit flags
 	hfRateLimited  bool
 	civRateLimited bool
+	// Library view state
+	libraryRows           []state.ModelMetadata
+	librarySelected       int
+	libraryFilter         state.MetadataFilters
+	librarySearch         string
+	libraryViewingDetail  bool
+	libraryDetailModel    *state.ModelMetadata
+	libraryFilterType     string // Filter by model type: "", "LLM", "LoRA", etc.
+	libraryFilterSource   string // Filter by source: "", "huggingface", "civitai"
+	libraryShowFavorites  bool   // Show only favorites
+	libraryNeedsRefresh   bool   // Flag to reload library data
+	log                   *logging.Logger
 }
 
 type uiState struct {
@@ -225,6 +237,10 @@ func New(cfg *config.Config, st *state.DB, version string) tea.Model {
 		tickEvery:  refresh,
 		columnMode: mode,
 		placeType:  map[string]string{}, autoPlace: map[string]bool{},
+		// Library state
+		libraryRows:         []state.ModelMetadata{},
+		libraryNeedsRefresh: true,
+		log:                 logging.New("info", false),
 	}
 	// Apply config.theme if provided (initial preset); UI state may override
 	if name := strings.TrimSpace(cfg.UI.Theme); name != "" {
@@ -653,6 +669,14 @@ func (m *Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s := msg.String()
+
+	// Handle library-specific escape key
+	if s == "esc" && m.activeTab == 4 && m.libraryViewingDetail {
+		m.libraryViewingDetail = false
+		m.libraryDetailModel = nil
+		return m, nil
+	}
+
 	switch s {
 	case "q", "ctrl+c":
 		m.saveUIState()
@@ -749,14 +773,49 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.activeTab = 3
 		m.selected = 0
 		return m, nil
+	case "5", "l":
+		// Switch to Library tab (key 5 or 'l' for library)
+		m.activeTab = 4
+		m.librarySelected = 0
+		m.libraryViewingDetail = false
+		// Load library data if needed
+		if m.libraryNeedsRefresh || len(m.libraryRows) == 0 {
+			m.refreshLibraryData()
+		}
+		return m, nil
 	case "j", "down":
-		if m.selected < len(m.visibleRows())-1 {
-			m.selected++
+		if m.activeTab == 4 {
+			// Library navigation
+			if !m.libraryViewingDetail && m.librarySelected < len(m.libraryRows)-1 {
+				m.librarySelected++
+			}
+		} else {
+			// Download table navigation
+			if m.selected < len(m.visibleRows())-1 {
+				m.selected++
+			}
 		}
 		return m, nil
 	case "k", "up":
-		if m.selected > 0 {
-			m.selected--
+		if m.activeTab == 4 {
+			// Library navigation
+			if !m.libraryViewingDetail && m.librarySelected > 0 {
+				m.librarySelected--
+			}
+		} else {
+			// Download table navigation
+			if m.selected > 0 {
+				m.selected--
+			}
+		}
+		return m, nil
+	case "enter", "ctrl+j":
+		if m.activeTab == 4 {
+			// Library view: open detail view
+			if !m.libraryViewingDetail && m.librarySelected < len(m.libraryRows) {
+				m.libraryDetailModel = &m.libraryRows[m.librarySelected]
+				m.libraryViewingDetail = true
+			}
 		}
 		return m, nil
 	case " ":
@@ -877,13 +936,27 @@ func (m *Model) View() string {
 	tabs := m.th.border.Width(m.w - 2).Render(m.renderTabs())
 
 	// Commands bar for quick reference
-	commands := m.th.border.Width(m.w - 2).Render(m.renderCommandsBar())
+	commands := ""
+	if m.activeTab != 4 {
+		// Don't show commands bar in library view
+		commands = m.th.border.Width(m.w - 2).Render(m.renderCommandsBar())
+	}
 
-	// Full-width table
-	table := m.th.border.Width(m.w - 2).Render(m.renderTable())
+	// Main content: table or library view
+	var mainContent string
+	if m.activeTab == 4 {
+		// Library view
+		mainContent = m.th.border.Width(m.w - 2).Render(m.renderLibrary())
+	} else {
+		// Download table view
+		mainContent = m.th.border.Width(m.w - 2).Render(m.renderTable())
+	}
 
-	// Always-on inspector below the table showing highlighted job details
-	inspector := m.th.border.Width(m.w - 2).Render(m.renderInspector())
+	// Inspector (only for download tabs, not library)
+	inspector := ""
+	if m.activeTab != 4 {
+		inspector = m.th.border.Width(m.w - 2).Render(m.renderInspector())
+	}
 
 	// Optional overlays
 	drawer := ""
@@ -917,7 +990,14 @@ func (m *Model) View() string {
 		footer = m.th.border.Width(m.w - 2).Render(m.th.footer.Render(filterBar))
 	}
 
-	parts := []string{titleBar, tabs, commands, table, inspector}
+	parts := []string{titleBar, tabs}
+	if commands != "" {
+		parts = append(parts, commands)
+	}
+	parts = append(parts, mainContent)
+	if inspector != "" {
+		parts = append(parts, inspector)
+	}
 	if help != "" {
 		parts = append(parts, help)
 	}
@@ -1158,6 +1238,7 @@ func (m *Model) renderTabs() string {
 		{"Active", 1},
 		{"Completed", 2},
 		{"Failed", 3},
+		{"Library", 4},
 	}
 	var sb strings.Builder
 	for i, it := range labels {
@@ -1168,6 +1249,9 @@ func (m *Model) renderTabs() string {
 		count := 0
 		if it.tab == -1 {
 			count = len(m.rows)
+		} else if it.tab == 4 {
+			// Library tab shows count of metadata entries
+			count = len(m.libraryRows)
 		} else {
 			count = len(m.filterRows(it.tab))
 		}
@@ -2127,7 +2211,7 @@ func (m *Model) renderCommandsBar() string {
 func (m *Model) renderHelp() string {
 	var sb strings.Builder
 	sb.WriteString(m.th.head.Render("Help (TUI)") + "\n")
-	sb.WriteString("Tabs: 1 Pending • 2 Active • 3 Completed • 4 Failed\n")
+	sb.WriteString("Tabs: 1 Pending • 2 Active • 3 Completed • 4 Failed • 5/L Library\n")
 	sb.WriteString("Nav: j/k up/down\n")
 	sb.WriteString("Filter: / to enter; Enter to apply; Esc to clear\n")
 	sb.WriteString("Sort: s speed • e ETA • R remaining • o clear\n")
@@ -2708,6 +2792,9 @@ func (m *Model) fetchAndStoreMetadata(url, dest, path string) {
 		return
 	}
 
+	// Mark library as needing refresh
+	m.libraryNeedsRefresh = true
+
 	if m.log != nil {
 		m.log.Debugf("stored metadata for %s (%s)", meta.ModelName, url)
 	}
@@ -2761,4 +2848,320 @@ func copyToClipboard(s string) error {
 		}
 	}
 	return fmt.Errorf("no clipboard utility found")
+}
+
+// refreshLibraryData loads model metadata from the database
+func (m *Model) refreshLibraryData() {
+	if m.st == nil {
+		return
+	}
+
+	// Build filters based on current library filter state
+	filters := state.MetadataFilters{
+		Source:    m.libraryFilterSource,
+		ModelType: m.libraryFilterType,
+		Favorite:  m.libraryShowFavorites,
+		OrderBy:   "updated_at", // Most recently updated first
+		Limit:     1000,          // Reasonable limit
+	}
+
+	var rows []state.ModelMetadata
+	var err error
+
+	if m.librarySearch != "" {
+		// If searching, use search function
+		rows, err = m.st.SearchMetadata(m.librarySearch)
+	} else {
+		// Otherwise use filtered list
+		rows, err = m.st.ListMetadata(filters)
+	}
+
+	if err != nil {
+		if m.log != nil {
+			m.log.Errorf("failed to load library data: %v", err)
+		}
+		return
+	}
+
+	m.libraryRows = rows
+	m.libraryNeedsRefresh = false
+
+	// Reset selection if out of bounds
+	if m.librarySelected >= len(m.libraryRows) {
+		m.librarySelected = 0
+	}
+}
+
+// renderLibrary renders the library view showing downloaded models with metadata
+func (m *Model) renderLibrary() string {
+	if m.libraryViewingDetail && m.libraryDetailModel != nil {
+		return m.renderLibraryDetail()
+	}
+
+	var sb strings.Builder
+
+	// Header with filter status
+	header := m.th.head.Render("Model Library")
+	if m.librarySearch != "" {
+		header += m.th.label.Render(fmt.Sprintf(" • Search: %q", m.librarySearch))
+	}
+	if m.libraryFilterType != "" {
+		header += m.th.label.Render(fmt.Sprintf(" • Type: %s", m.libraryFilterType))
+	}
+	if m.libraryFilterSource != "" {
+		header += m.th.label.Render(fmt.Sprintf(" • Source: %s", m.libraryFilterSource))
+	}
+	if m.libraryShowFavorites {
+		header += m.th.ok.Render(" • ★ Favorites")
+	}
+	sb.WriteString(header + "\n\n")
+
+	if len(m.libraryRows) == 0 {
+		sb.WriteString(m.th.label.Render("No models found in library.\n"))
+		sb.WriteString(m.th.label.Render("Download some models to see them here!\n\n"))
+		sb.WriteString(m.th.footer.Render("Press 1-4 to view downloads, 5 or L for library"))
+		return sb.String()
+	}
+
+	// Calculate available height for list
+	headerLines := 3 // Header + filter info + blank line
+	footerLines := 3 // Help text
+	availableHeight := m.h - headerLines - footerLines
+	if availableHeight < 5 {
+		availableHeight = 5
+	}
+
+	// Calculate pagination
+	start := m.librarySelected
+	if start > len(m.libraryRows)-availableHeight {
+		start = len(m.libraryRows) - availableHeight
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + availableHeight
+	if end > len(m.libraryRows) {
+		end = len(m.libraryRows)
+	}
+
+	// Render model list
+	for i := start; i < end; i++ {
+		model := m.libraryRows[i]
+		style := m.th.row
+		cursor := "  "
+
+		if i == m.librarySelected {
+			style = m.th.rowSelected
+			cursor = "▶ "
+		}
+
+		// Format: [★] ModelName (Type) • Size • Quantization • Source
+		line := cursor
+
+		// Favorite indicator
+		if model.Favorite {
+			line += m.th.ok.Render("★ ")
+		}
+
+		// Model name (truncate if needed)
+		name := model.ModelName
+		if name == "" {
+			name = model.ModelID
+		}
+		if len(name) > 40 {
+			name = name[:37] + "..."
+		}
+		line += style.Bold(true).Render(name)
+
+		// Model type
+		if model.ModelType != "" {
+			line += m.th.label.Render(fmt.Sprintf(" (%s)", model.ModelType))
+		}
+
+		// File size
+		if model.FileSize > 0 {
+			line += m.th.label.Render(fmt.Sprintf(" • %s", humanize.Bytes(uint64(model.FileSize))))
+		}
+
+		// Quantization
+		if model.Quantization != "" {
+			line += m.th.label.Render(fmt.Sprintf(" • %s", model.Quantization))
+		}
+
+		// Source
+		sourceColor := m.th.label
+		if model.Source == "huggingface" {
+			sourceColor = m.th.ok
+		} else if model.Source == "civitai" {
+			sourceColor = lipgloss.NewStyle().Foreground(lipgloss.Color("213"))
+		}
+		line += sourceColor.Render(fmt.Sprintf(" • %s", model.Source))
+
+		sb.WriteString(style.Render(line) + "\n")
+	}
+
+	// Footer with help
+	sb.WriteString("\n")
+	sb.WriteString(m.th.footer.Render(fmt.Sprintf("Showing %d-%d of %d models | ↑↓ navigate • Enter view details • / search • F filter • Q quit",
+		start+1, end, len(m.libraryRows))))
+
+	return sb.String()
+}
+
+// renderLibraryDetail renders detailed view of a single model
+func (m *Model) renderLibraryDetail() string {
+	if m.libraryDetailModel == nil {
+		return "No model selected"
+	}
+
+	model := m.libraryDetailModel
+	var sb strings.Builder
+
+	// Title
+	title := model.ModelName
+	if title == "" {
+		title = model.ModelID
+	}
+	sb.WriteString(m.th.head.Render(title) + "\n\n")
+
+	// Basic info section
+	sb.WriteString(m.th.label.Render("Type: "))
+	sb.WriteString(model.ModelType + "\n")
+
+	if model.Version != "" {
+		sb.WriteString(m.th.label.Render("Version: "))
+		sb.WriteString(model.Version + "\n")
+	}
+
+	if model.Source != "" {
+		sb.WriteString(m.th.label.Render("Source: "))
+		sb.WriteString(model.Source + "\n")
+	}
+
+	if model.Author != "" {
+		sb.WriteString(m.th.label.Render("Author: "))
+		sb.WriteString(model.Author + "\n")
+	}
+
+	if model.License != "" {
+		sb.WriteString(m.th.label.Render("License: "))
+		sb.WriteString(model.License + "\n")
+	}
+
+	sb.WriteString("\n")
+
+	// Model specs
+	if model.Quantization != "" || model.Architecture != "" || model.ParameterCount != "" {
+		sb.WriteString(m.th.head.Render("Specifications") + "\n")
+
+		if model.Architecture != "" {
+			sb.WriteString(m.th.label.Render("Architecture: "))
+			sb.WriteString(model.Architecture + "\n")
+		}
+
+		if model.ParameterCount != "" {
+			sb.WriteString(m.th.label.Render("Parameters: "))
+			sb.WriteString(model.ParameterCount + "\n")
+		}
+
+		if model.Quantization != "" {
+			sb.WriteString(m.th.label.Render("Quantization: "))
+			sb.WriteString(model.Quantization + "\n")
+		}
+
+		if model.BaseModel != "" {
+			sb.WriteString(m.th.label.Render("Base Model: "))
+			sb.WriteString(model.BaseModel + "\n")
+		}
+
+		sb.WriteString("\n")
+	}
+
+	// File info
+	sb.WriteString(m.th.head.Render("File Information") + "\n")
+	if model.FileSize > 0 {
+		sb.WriteString(m.th.label.Render("Size: "))
+		sb.WriteString(humanize.Bytes(uint64(model.FileSize)) + "\n")
+	}
+	if model.FileFormat != "" {
+		sb.WriteString(m.th.label.Render("Format: "))
+		sb.WriteString(model.FileFormat + "\n")
+	}
+	if model.Dest != "" {
+		sb.WriteString(m.th.label.Render("Location: "))
+		sb.WriteString(model.Dest + "\n")
+	}
+	sb.WriteString("\n")
+
+	// Description
+	if model.Description != "" {
+		sb.WriteString(m.th.head.Render("Description") + "\n")
+		// Wrap description text
+		desc := model.Description
+		if len(desc) > 500 {
+			desc = desc[:497] + "..."
+		}
+		sb.WriteString(desc + "\n\n")
+	}
+
+	// Tags
+	if len(model.Tags) > 0 {
+		sb.WriteString(m.th.head.Render("Tags") + "\n")
+		sb.WriteString(strings.Join(model.Tags, ", ") + "\n\n")
+	}
+
+	// Usage stats
+	if model.TimesUsed > 0 || model.DownloadCount > 0 {
+		sb.WriteString(m.th.head.Render("Usage Statistics") + "\n")
+		if model.DownloadCount > 0 {
+			sb.WriteString(m.th.label.Render("Downloads: "))
+			sb.WriteString(fmt.Sprintf("%d\n", model.DownloadCount))
+		}
+		if model.TimesUsed > 0 {
+			sb.WriteString(m.th.label.Render("Times Used: "))
+			sb.WriteString(fmt.Sprintf("%d\n", model.TimesUsed))
+		}
+		if model.LastUsed != nil {
+			sb.WriteString(m.th.label.Render("Last Used: "))
+			sb.WriteString(model.LastUsed.Format("2006-01-02 15:04") + "\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	// User data
+	if model.UserRating > 0 || model.Favorite || model.UserNotes != "" {
+		sb.WriteString(m.th.head.Render("User Data") + "\n")
+		if model.UserRating > 0 {
+			stars := strings.Repeat("★", model.UserRating) + strings.Repeat("☆", 5-model.UserRating)
+			sb.WriteString(m.th.label.Render("Rating: "))
+			sb.WriteString(m.th.ok.Render(stars) + "\n")
+		}
+		if model.Favorite {
+			sb.WriteString(m.th.ok.Render("★ Favorite\n"))
+		}
+		if model.UserNotes != "" {
+			sb.WriteString(m.th.label.Render("Notes: "))
+			sb.WriteString(model.UserNotes + "\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	// Links
+	if model.RepoURL != "" || model.HomepageURL != "" {
+		sb.WriteString(m.th.head.Render("Links") + "\n")
+		if model.HomepageURL != "" {
+			sb.WriteString(m.th.label.Render("Homepage: "))
+			sb.WriteString(model.HomepageURL + "\n")
+		}
+		if model.RepoURL != "" {
+			sb.WriteString(m.th.label.Render("Repository: "))
+			sb.WriteString(model.RepoURL + "\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	// Footer
+	sb.WriteString(m.th.footer.Render("Press Esc to go back • F to toggle favorite • Q to quit"))
+
+	return sb.String()
 }
