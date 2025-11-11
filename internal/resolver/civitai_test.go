@@ -13,6 +13,7 @@ import (
 func TestCivitAIResolveBasic(t *testing.T) {
 	// Integration test that verifies CivitAI API access with authentication
 	// Requires CIVITAI_TOKEN environment variable to be set
+	// Note: CivitAI API can be flaky, so this test uses retry logic
 	if os.Getenv("CIVITAI_TOKEN") == "" {
 		t.Skip("Skipping CivitAI test: CIVITAI_TOKEN not set")
 	}
@@ -33,9 +34,35 @@ func TestCivitAIResolveBasic(t *testing.T) {
 
 	// Test with a known public model (Pony Diffusion V6 XL - model ID 257749)
 	// This is one of the most popular models on CivitAI, very unlikely to be removed
-	res, err := (&CivitAI{}).Resolve(context.Background(), "civitai://model/257749", cfg)
-	if err != nil {
-		t.Fatalf("resolve failed: %v", err)
+	// Retry logic to handle API flakiness
+	var res *Resolved
+	var resolveErr error
+	maxRetries := 3
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		res, resolveErr = (&CivitAI{}).Resolve(context.Background(), "civitai://model/257749", cfg)
+
+		if resolveErr == nil {
+			break
+		}
+
+		// Check if error is API-related
+		errMsg := resolveErr.Error()
+		if attempt < maxRetries && (strings.Contains(errMsg, "503") || strings.Contains(errMsg, "Service Unavailable")) {
+			t.Logf("Resolve attempt %d/%d failed with API error: %v (retrying...)", attempt, maxRetries, resolveErr)
+			continue
+		}
+
+		break
+	}
+
+	// If resolver fails with API errors after retries, skip test
+	if resolveErr != nil {
+		errMsg := resolveErr.Error()
+		if strings.Contains(errMsg, "503") || strings.Contains(errMsg, "Service Unavailable") {
+			t.Skipf("CivitAI API unavailable after %d attempts: %v", maxRetries, resolveErr)
+		}
+		t.Fatalf("resolve failed: %v", resolveErr)
 	}
 	if res.URL == "" {
 		t.Fatalf("empty url")
@@ -63,6 +90,7 @@ func TestCivitAIResolveBasic(t *testing.T) {
 
 func TestCivitAIResolve_WithVersion(t *testing.T) {
 	// Test version-specific resolution
+	// Note: CivitAI API can be flaky, so this test uses retry logic
 	if os.Getenv("CIVITAI_TOKEN") == "" {
 		t.Skip("Skipping CivitAI test: CIVITAI_TOKEN not set")
 	}
@@ -80,10 +108,35 @@ func TestCivitAIResolve_WithVersion(t *testing.T) {
 		t.Fatalf("config: %v", err)
 	}
 
-	// Test with specific version
-	res, err := (&CivitAI{}).Resolve(context.Background(), "civitai://model/257749?version=290640", cfg)
-	if err != nil {
-		t.Fatalf("resolve with version failed: %v", err)
+	// Test with specific version - with retry logic
+	var res *Resolved
+	var resolveErr error
+	maxRetries := 3
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		res, resolveErr = (&CivitAI{}).Resolve(context.Background(), "civitai://model/257749?version=290640", cfg)
+
+		if resolveErr == nil {
+			break
+		}
+
+		// Check if error is API-related
+		errMsg := resolveErr.Error()
+		if attempt < maxRetries && (strings.Contains(errMsg, "503") || strings.Contains(errMsg, "Service Unavailable")) {
+			t.Logf("Resolve attempt %d/%d failed with API error: %v (retrying...)", attempt, maxRetries, resolveErr)
+			continue
+		}
+
+		break
+	}
+
+	// If resolver fails with API errors after retries, skip test
+	if resolveErr != nil {
+		errMsg := resolveErr.Error()
+		if strings.Contains(errMsg, "503") || strings.Contains(errMsg, "Service Unavailable") {
+			t.Skipf("CivitAI API unavailable after %d attempts: %v", maxRetries, resolveErr)
+		}
+		t.Fatalf("resolve with version failed: %v", resolveErr)
 	}
 	if res.URL == "" {
 		t.Fatalf("empty url")
