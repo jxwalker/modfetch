@@ -28,6 +28,9 @@ echo ""
 echo "=== Running Tests ==="
 echo ""
 
+# Disable exit-on-error for tests (allow them to fail gracefully)
+set +e
+
 # Run resolver tests with tokens
 export HF_TOKEN CIVITAI_TOKEN
 go test -v ./internal/resolver -run TestHF || echo "HuggingFace test failed"
@@ -39,6 +42,9 @@ if go test -v ./internal/metadata -list=. 2>/dev/null | grep -q Test; then
     echo "=== Running Metadata Tests ==="
     go test -v ./internal/metadata || echo "Metadata tests failed"
 fi
+
+# Re-enable exit-on-error
+set -e
 
 echo ""
 echo "=== Test Complete ==="
