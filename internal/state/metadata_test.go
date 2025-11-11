@@ -316,7 +316,7 @@ func TestDB_UpdateMetadataUsage(t *testing.T) {
 	}
 
 	// Update again
-	time.Sleep(10 * time.Millisecond) // Ensure different timestamp
+	time.Sleep(1100 * time.Millisecond) // Ensure different timestamp (SQLite strftime has second precision)
 	err = db.UpdateMetadataUsage(meta.DownloadURL)
 	if err != nil {
 		t.Fatalf("UpdateMetadataUsage() second call error = %v", err)

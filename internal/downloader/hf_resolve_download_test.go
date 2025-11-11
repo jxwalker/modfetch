@@ -40,7 +40,8 @@ func TestHFResolveAndDownload(t *testing.T) {
 	}
 	defer func() { _ = st.SQL.Close() }()
 
-	uri := "hf://gpt2/README.md?rev=main"
+	// Use openai-community/gpt2 which is a real, public HuggingFace repository
+	uri := "hf://openai-community/gpt2/README.md?rev=main"
 	res, err := resolver.Resolve(context.Background(), uri, cfg)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)

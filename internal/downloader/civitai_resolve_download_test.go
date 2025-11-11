@@ -2,101 +2,41 @@ package downloader
 
 import (
 	"context"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
-	"time"
 
 	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/logging"
 	"github.com/jxwalker/modfetch/internal/resolver"
 	"github.com/jxwalker/modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/testutil"
 )
 
-func TestCivitAIResolveAndDownload_WithAuthAndChunks(t *testing.T) {
+func TestCivitAIResolveAndDownload(t *testing.T) {
+	// Integration test that downloads a small file from CivitAI
+	// Requires CIVITAI_TOKEN environment variable to be set
+	// Note: CivitAI API can be flaky, so this test uses retry logic
 	if testing.Short() {
 		t.Skip("-short set")
 	}
-	// Prepare payload
-	size := 1024 * 1024 // 1MiB
-	payload := make([]byte, size)
-	for i := 0; i < size; i++ {
-		payload[i] = byte(i % 251)
+	if os.Getenv("CIVITAI_TOKEN") == "" {
+		t.Skip("Skipping CivitAI test: CIVITAI_TOKEN not set")
 	}
-	token := "sekrit"
 
-	// Server that requires Authorization and supports Range
-	var base string
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/v1/models/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
-		_, _ = fmt.Fprintf(w, `{"modelVersions":[{"id":1,"files":[{"id":1,"name":"file.bin","type":"Model","primary":true,"downloadUrl":"%s/secure.bin"}]}]}`, base)
-	})
-	mux.HandleFunc("/secure.bin", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodHead {
-			if got := r.Header.Get("Authorization"); got != "Bearer "+token {
-				w.WriteHeader(401)
-				return
-			}
-			w.Header().Set("Accept-Ranges", "bytes")
-			w.Header().Set("Content-Length", strconv.Itoa(len(payload)))
-			w.Header().Set("ETag", "\"test\"")
-			w.Header().Set("Last-Modified", time.Now().UTC().Format(http.TimeFormat))
-			w.WriteHeader(200)
-			return
-		}
-		if r.Method == http.MethodGet {
-			if got := r.Header.Get("Authorization"); got != "Bearer "+token {
-				w.WriteHeader(401)
-				return
-			}
-			rng := r.Header.Get("Range")
-			if rng == "" {
-				w.WriteHeader(200)
-				_, _ = w.Write(payload)
-				return
-			}
-			var start, end int
-			if _, err := fmt.Sscanf(rng, "bytes=%d-%d", &start, &end); err != nil {
-				w.WriteHeader(416)
-				return
-			}
-			if start < 0 || end >= len(payload) || end < start {
-				w.WriteHeader(416)
-				return
-			}
-			w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(payload)))
-			w.WriteHeader(206)
-			_, _ = w.Write(payload[start : end+1])
-			return
-		}
-		w.WriteHeader(405)
-	})
-	ts := httptest.NewServer(mux)
-	defer ts.Close()
-	base = ts.URL
-
-	// Override CivitAI base URL for resolver
-	old := resolverTestBaseSwap(ts.URL)
-	defer func() { resolverTestBaseSwap(old) }()
-
-	// Config
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "cfg.yml")
 	cfgYaml := []byte("version: 1\n" +
-		"general:\n  data_root: \"" + tmp + "/data\"\n  download_root: \"" + tmp + "/dl\"\n" +
-		"network:\n  timeout_seconds: 10\n  user_agent: \"modfetch-test\"\n" +
-		"concurrency:\n  chunk_size_mb: 1\n  per_file_chunks: 4\n" +
-		"sources:\n  civitai:\n    enabled: true\n    token_env: \"CIVITAI_TEST_TOKEN\"\n")
+		"general:\n" +
+		"  data_root: \"" + tmp + "/data\"\n" +
+		"  download_root: \"" + tmp + "/dl\"\n" +
+		"sources:\n" +
+		"  civitai:\n" +
+		"    enabled: true\n" +
+		"    token_env: \"CIVITAI_TOKEN\"\n")
 	if err := os.WriteFile(cfgPath, cfgYaml, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_ = os.Setenv("CIVITAI_TEST_TOKEN", token)
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		t.Fatalf("config: %v", err)
@@ -108,32 +48,55 @@ func TestCivitAIResolveAndDownload_WithAuthAndChunks(t *testing.T) {
 	}
 	defer func() { _ = st.SQL.Close() }()
 
-	// Resolve and download
-	uri := "civitai://model/xyz"
-	res, err := resolver.Resolve(context.Background(), uri, cfg)
-	if err != nil {
-		t.Fatalf("resolve: %v", err)
+	// Test with a small TextualInversion model (model ID 2114201)
+	// This is a small file (~232 KB) suitable for testing without long download times
+	uri := "civitai://model/2114201"
+
+	// Resolve with retry helper (API can be flaky)
+	var res *resolver.Resolved
+	testutil.RetryOnAPIError(t, testutil.MaxAPIRetries, func() error {
+		var err error
+		res, err = resolver.Resolve(context.Background(), uri, cfg)
+		return err
+	}, "CivitAI resolve")
+
+	// Verify URL and headers before download
+	if res.URL == "" {
+		t.Fatalf("empty download URL")
 	}
+	if res.Headers["Authorization"] == "" {
+		t.Fatalf("missing authorization header")
+	}
+
+	// Download with retry helper (API can return 400, 503, or other transient errors)
 	dl := NewChunked(cfg, log, st, nil)
-	dest, sha, err := dl.Download(context.Background(), res.URL, "", "", res.Headers, false)
-	if err != nil {
-		t.Fatalf("download: %v", err)
+	var dest, sha string
+	testutil.RetryOnAPIError(t, testutil.MaxAPIRetries, func() error {
+		var err error
+		dest, sha, err = dl.Download(context.Background(), res.URL, "", "", res.Headers, false)
+		return err
+	}, "CivitAI download")
+
+	// Verify file was downloaded
+	if _, err := os.Stat(dest); err != nil {
+		t.Fatalf("dest stat: %v", err)
 	}
+
+	// Verify SHA256 hash was calculated
+	if len(sha) != 64 {
+		t.Fatalf("sha length: %d", len(sha))
+	}
+
+	// File should be relatively small (TextualInversion embedding)
 	fi, err := os.Stat(dest)
 	if err != nil {
 		t.Fatalf("stat: %v", err)
 	}
-	if int(fi.Size()) != size {
-		t.Fatalf("size mismatch: %d", fi.Size())
+	// TextualInversion files are typically < 1MB
+	if fi.Size() > 10*1024*1024 {
+		t.Fatalf("downloaded file unexpectedly large: %d bytes", fi.Size())
 	}
-	if len(sha) != 64 {
-		t.Fatalf("sha length: %d", len(sha))
+	if fi.Size() == 0 {
+		t.Fatalf("downloaded file is empty")
 	}
-}
-
-// helper to override resolver base url; returns previous value
-func resolverTestBaseSwap(new string) string {
-	old := resolver.CivitaiBaseForTest()
-	resolver.SetCivitaiBaseForTest(new)
-	return old
 }

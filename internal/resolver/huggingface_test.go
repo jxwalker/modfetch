@@ -32,7 +32,8 @@ func TestHFResolveBasic(t *testing.T) {
 	}
 
 	// Test with a specific file path (doesn't trigger API call for quantization detection)
-	res, err := (&HuggingFace{}).Resolve(context.Background(), "hf://gpt2/README.md?rev=main", cfg)
+	// Use openai-community/gpt2 which is a real, public HuggingFace repository
+	res, err := (&HuggingFace{}).Resolve(context.Background(), "hf://openai-community/gpt2/README.md?rev=main", cfg)
 	if err != nil {
 		t.Fatalf("resolve failed: %v", err)
 	}
