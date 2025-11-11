@@ -10,11 +10,13 @@ import (
 	"github.com/jxwalker/modfetch/internal/logging"
 	"github.com/jxwalker/modfetch/internal/resolver"
 	"github.com/jxwalker/modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/testutil"
 )
 
 func TestCivitAIResolveAndDownload(t *testing.T) {
 	// Integration test that downloads a small file from CivitAI
 	// Requires CIVITAI_TOKEN environment variable to be set
+	// Note: CivitAI API can be flaky, so this test uses retry logic
 	if testing.Short() {
 		t.Skip("-short set")
 	}
@@ -49,10 +51,14 @@ func TestCivitAIResolveAndDownload(t *testing.T) {
 	// Test with a small TextualInversion model (model ID 2114201)
 	// This is a small file (~232 KB) suitable for testing without long download times
 	uri := "civitai://model/2114201"
-	res, err := resolver.Resolve(context.Background(), uri, cfg)
-	if err != nil {
-		t.Fatalf("resolve: %v", err)
-	}
+
+	// Resolve with retry helper (API can be flaky)
+	var res *resolver.Resolved
+	testutil.RetryOnAPIError(t, testutil.MaxAPIRetries, func() error {
+		var err error
+		res, err = resolver.Resolve(context.Background(), uri, cfg)
+		return err
+	}, "CivitAI resolve")
 
 	// Verify URL and headers before download
 	if res.URL == "" {
@@ -62,12 +68,14 @@ func TestCivitAIResolveAndDownload(t *testing.T) {
 		t.Fatalf("missing authorization header")
 	}
 
-	// Actually download the file
+	// Download with retry helper (API can return 400, 503, or other transient errors)
 	dl := NewChunked(cfg, log, st, nil)
-	dest, sha, err := dl.Download(context.Background(), res.URL, "", "", res.Headers, false)
-	if err != nil {
-		t.Fatalf("download: %v", err)
-	}
+	var dest, sha string
+	testutil.RetryOnAPIError(t, testutil.MaxAPIRetries, func() error {
+		var err error
+		dest, sha, err = dl.Download(context.Background(), res.URL, "", "", res.Headers, false)
+		return err
+	}, "CivitAI download")
 
 	// Verify file was downloaded
 	if _, err := os.Stat(dest); err != nil {

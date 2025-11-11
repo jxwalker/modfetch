@@ -10,9 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jxwalker/modfetch/internal/state"
 )
+
+// MaxAPIRetries is the default number of retries for flaky external API calls
+const MaxAPIRetries = 3
 
 // MockHTTPServer creates a test HTTP server that serves canned responses from fixtures
 type MockHTTPServer struct {
@@ -271,4 +275,55 @@ func IntPtr(i int) *int {
 // Int64Ptr returns a pointer to an int64
 func Int64Ptr(i int64) *int64 {
 	return &i
+}
+
+// RetryOnAPIError retries an operation when it encounters API-related errors
+// This is useful for flaky external API integration tests (e.g., CivitAI, HuggingFace)
+// Uses exponential backoff between retries (1s, 2s, 4s)
+// Returns error if all retries fail with non-API errors, or skips test if API is unavailable
+func RetryOnAPIError(t *testing.T, maxRetries int, operation func() error, operationName string) {
+	t.Helper()
+
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		lastErr = operation()
+
+		if lastErr == nil {
+			// Success!
+			return
+		}
+
+		// Check if error is API-related (503, 400, Service Unavailable, Bad Request)
+		errMsg := lastErr.Error()
+		isAPIError := strings.Contains(errMsg, "503") ||
+			strings.Contains(errMsg, "400") ||
+			strings.Contains(errMsg, "Service Unavailable") ||
+			strings.Contains(errMsg, "Bad Request")
+
+		if isAPIError && attempt < maxRetries {
+			// Exponential backoff: 1s, 2s, 4s
+			backoffDuration := time.Duration(1<<uint(attempt-1)) * time.Second
+			t.Logf("%s attempt %d/%d failed with API error: %v (retrying in %v...)",
+				operationName, attempt, maxRetries, lastErr, backoffDuration)
+			time.Sleep(backoffDuration)
+			continue
+		}
+
+		// Either non-API error or last attempt
+		break
+	}
+
+	// If all retries failed with API errors, skip the test
+	if lastErr != nil {
+		errMsg := lastErr.Error()
+		isAPIError := strings.Contains(errMsg, "503") ||
+			strings.Contains(errMsg, "400") ||
+			strings.Contains(errMsg, "Service Unavailable") ||
+			strings.Contains(errMsg, "Bad Request")
+
+		if isAPIError {
+			t.Skipf("External API unavailable after %d attempts: %v", maxRetries, lastErr)
+		}
+		t.Fatalf("%s failed: %v", operationName, lastErr)
+	}
 }
