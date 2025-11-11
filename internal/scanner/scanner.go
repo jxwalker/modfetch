@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -63,9 +64,13 @@ func (s *Scanner) ScanDirectories(dirs []string) (*ScanResult, error) {
 func (s *Scanner) scanDirectory(dir string, result *ScanResult) error {
 	return filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			// Skip directories we can't access
+			// Skip directories we can't access due to permissions
 			if os.IsPermission(err) {
 				return filepath.SkipDir
+			}
+			// Return other errors (like non-existent paths) so they're captured
+			if os.IsNotExist(err) {
+				return err
 			}
 			return nil
 		}
@@ -203,6 +208,13 @@ func extractNameAndVersion(filename string, meta *state.ModelMetadata) {
 	// model_name_fp16
 	// ModelName-7B-GGUF
 
+	// First extract version using regex to capture full version strings like v1.0, v1.5.1
+	versionRegex := regexp.MustCompile(`(?i)[_-]?(v\d+(?:\.\d+)*)[_-]?`)
+	if matches := versionRegex.FindStringSubmatch(filename); len(matches) > 1 {
+		meta.Version = matches[1]
+	}
+
+	// Split by delimiters for other metadata
 	parts := strings.FieldsFunc(filename, func(r rune) bool {
 		return r == '-' || r == '_' || r == '.'
 	})
@@ -214,14 +226,9 @@ func extractNameAndVersion(filename string, meta *state.ModelMetadata) {
 	// First part is usually the model name
 	meta.ModelName = parts[0]
 
-	// Look for version indicators
+	// Look for other metadata in parts
 	for _, part := range parts {
 		lower := strings.ToLower(part)
-
-		// Version patterns
-		if strings.HasPrefix(lower, "v") && len(part) > 1 {
-			meta.Version = part
-		}
 
 		// Parameter count patterns (7B, 13B, 70B, etc.)
 		if strings.HasSuffix(lower, "b") && len(part) <= 4 {

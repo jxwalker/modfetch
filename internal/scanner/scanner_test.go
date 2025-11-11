@@ -604,7 +604,6 @@ func TestScanner_FileFormat(t *testing.T) {
 	defer cleanup()
 
 	scanner := NewScanner(db)
-	testDir := t.TempDir()
 
 	tests := []struct {
 		filename       string
@@ -618,6 +617,8 @@ func TestScanner_FileFormat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.filename, func(t *testing.T) {
+			// Use a separate testDir for each subtest to avoid interference
+			testDir := t.TempDir()
 			createTestFile(t, testDir, tt.filename, 1024)
 
 			_, err := scanner.ScanDirectories([]string{testDir})
@@ -626,7 +627,7 @@ func TestScanner_FileFormat(t *testing.T) {
 			}
 
 			// Get the last added metadata
-			filters := state.MetadataFilters{Limit: 1}
+			filters := state.MetadataFilters{Limit: 1, OrderBy: "created_at"}
 			stored, err := db.ListMetadata(filters)
 			if err != nil {
 				t.Fatalf("Failed to list metadata: %v", err)

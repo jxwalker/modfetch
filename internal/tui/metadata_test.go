@@ -226,7 +226,7 @@ func TestMetadataUsageTracking(t *testing.T) {
 	}
 
 	// Track again
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(1100 * time.Millisecond) // SQLite strftime has second precision
 	if err := db.UpdateMetadataUsage(meta.DownloadURL); err != nil {
 		t.Fatalf("UpdateMetadataUsage() second call error = %v", err)
 	}
