@@ -21,6 +21,9 @@ import (
 
 type HuggingFace struct{}
 
+// hfBaseURL allows tests to override the API host.
+var hfBaseURL = "https://huggingface.co"
+
 // hfRepoFile represents a file in a HuggingFace repository.
 type hfRepoFile struct {
 	Path string `json:"path"`
@@ -76,7 +79,7 @@ func (h *HuggingFace) CanHandle(u string) bool { return strings.HasPrefix(u, "hf
 
 // listRepoFiles fetches the file tree from HuggingFace API.
 func (h *HuggingFace) listRepoFiles(ctx context.Context, repoID, rev string, headers map[string]string) ([]hfRepoFile, error) {
-	apiURL := fmt.Sprintf("https://huggingface.co/api/models/%s/tree/%s?recursive=true", repoID, rev)
+	apiURL := fmt.Sprintf("%s/api/models/%s/tree/%s?recursive=true", hfBaseURL, repoID, rev)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
@@ -283,7 +286,7 @@ func (h *HuggingFace) Resolve(ctx context.Context, uri string, cfg *config.Confi
 
 	// If specific file path given and no quant requested, use direct resolution (backward compatible)
 	if filePath != "" && !needsQuantDetection {
-		base := "https://huggingface.co/" + repoID
+		base := hfBaseURL + "/" + repoID
 		resURL := base + "/resolve/" + url.PathEscape(rev) + "/" + strings.ReplaceAll(filePath, "+", "%2B")
 
 		fileName := path.Base(filePath)
@@ -323,7 +326,7 @@ func (h *HuggingFace) Resolve(ctx context.Context, uri string, cfg *config.Confi
 	}
 
 	// Build resolved URL with selected file
-	base := "https://huggingface.co/" + repoID
+	base := hfBaseURL + "/" + repoID
 	resURL := base + "/resolve/" + url.PathEscape(rev) + "/" + strings.ReplaceAll(selected.FilePath, "+", "%2B")
 
 	fileName := path.Base(selected.FilePath)
