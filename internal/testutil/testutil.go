@@ -48,7 +48,7 @@ func NewMockHTTPServer() *MockHTTPServer {
 
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprintf(w, "No mock response configured for %s", key)
+			_, _ = fmt.Fprintf(w, "No mock response configured for %s", key)
 			return
 		}
 
@@ -58,7 +58,7 @@ func NewMockHTTPServer() *MockHTTPServer {
 		}
 
 		w.WriteHeader(resp.StatusCode)
-		fmt.Fprint(w, resp.Body)
+		_, _ = fmt.Fprint(w, resp.Body)
 	}))
 
 	return ms
@@ -185,7 +185,7 @@ func TempDir(t *testing.T) string {
 	}
 
 	t.Cleanup(func() {
-		os.RemoveAll(dir)
+		_ = os.RemoveAll(dir)
 	})
 
 	return dir

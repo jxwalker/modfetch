@@ -247,4 +247,3 @@ func TestRegistry_FetchMetadata(t *testing.T) {
 		})
 	}
 }
-

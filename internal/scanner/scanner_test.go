@@ -46,7 +46,7 @@ func createTestFile(t *testing.T, dir, filename string, size int64) string {
 	if err != nil {
 		t.Fatalf("Failed to create file %s: %v", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Write dummy data to simulate file size
 	if size > 0 {

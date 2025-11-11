@@ -731,27 +731,29 @@ func (m *Model) View() string {
 	tabs := m.th.border.Width(m.w - 2).Render(m.renderTabs())
 
 	// Commands bar for quick reference
-	commands := ""
-	if m.activeTab == 4 {
+	var commands string
+	switch m.activeTab {
+	case 4:
 		// Library-specific commands
 		commands = m.th.border.Width(m.w - 2).Render(m.renderLibraryCommandsBar())
-	} else if m.activeTab == 5 {
+	case 5:
 		// Settings tab commands
 		commands = m.th.border.Width(m.w - 2).Render(m.renderSettingsCommandsBar())
-	} else {
+	default:
 		// Download table commands
 		commands = m.th.border.Width(m.w - 2).Render(m.renderCommandsBar())
 	}
 
 	// Main content: table, library, or settings view
 	var mainContent string
-	if m.activeTab == 4 {
+	switch m.activeTab {
+	case 4:
 		// Library view
 		mainContent = m.th.border.Width(m.w - 2).Render(m.renderLibrary())
-	} else if m.activeTab == 5 {
+	case 5:
 		// Settings view
 		mainContent = m.th.border.Width(m.w - 2).Render(m.renderSettings())
-	} else {
+	default:
 		// Download table view
 		mainContent = m.th.border.Width(m.w - 2).Render(m.renderTable())
 	}
