@@ -74,6 +74,8 @@ func run(ctx context.Context, args []string) error {
 		return handleClean(ctx, args[1:])
 	case "batch":
 		return handleBatch(ctx, args[1:])
+	case "doctor":
+		return handleDoctor(ctx, args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -99,6 +101,7 @@ Commands:
   verify            Verify SHA256 of a file or all completed downloads
   tui               Open the interactive terminal dashboard
   batch import      Import URLs from a text file and produce a YAML batch
+  doctor            Run diagnostic checks on modfetch installation
   version           Print version
   help              Show this help
   completion        Generate shell completion scripts (bash|zsh|fish)
