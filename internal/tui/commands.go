@@ -30,17 +30,19 @@ func (m *Model) renderTabs() string {
 			style = m.th.tabActive
 		}
 		var tabLabel string
-		if it.tab == 5 {
+		switch it.tab {
+		case 5:
 			// Settings tab doesn't show a count
 			tabLabel = it.name
-		} else {
-			count := 0
-			if it.tab == -1 {
+		default:
+			var count int
+			switch it.tab {
+			case -1:
 				count = len(m.rows)
-			} else if it.tab == 4 {
+			case 4:
 				// Library tab shows count of metadata entries
 				count = len(m.libraryRows)
-			} else {
+			default:
 				count = len(m.filterRows(it.tab))
 			}
 			tabLabel = fmt.Sprintf("%s (%d)", it.name, count)

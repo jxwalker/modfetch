@@ -42,7 +42,7 @@ func benchmarkScanDirectories(b *testing.B, fileCount int) {
 	if err != nil {
 		b.Fatalf("Failed to create database: %v", err)
 	}
-	defer db.SQL.Close()
+	defer func() { _ = db.SQL.Close() }()
 
 	scanner := NewScanner(db)
 
@@ -100,7 +100,7 @@ func benchmarkDuplicateDetection(b *testing.B, modelCount int) {
 	if err != nil {
 		b.Fatalf("Failed to create database: %v", err)
 	}
-	defer db.SQL.Close()
+	defer func() { _ = db.SQL.Close() }()
 
 	// Pre-populate database with models
 	for i := 0; i < modelCount; i++ {
@@ -169,7 +169,7 @@ func BenchmarkMetadataExtraction(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create test file: %v", err)
 	}
-	f.Close()
+	_ = f.Close()
 
 	info, err := os.Stat(testFile)
 	if err != nil {
@@ -182,7 +182,7 @@ func BenchmarkMetadataExtraction(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create database: %v", err)
 	}
-	defer db.SQL.Close()
+	defer func() { _ = db.SQL.Close() }()
 
 	scanner := NewScanner(db)
 
@@ -206,7 +206,7 @@ func BenchmarkScanWithProgress(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create database: %v", err)
 	}
-	defer db.SQL.Close()
+	defer func() { _ = db.SQL.Close() }()
 
 	scanner := NewScanner(db)
 
@@ -274,7 +274,7 @@ func BenchmarkDatabaseUpsert(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create database: %v", err)
 	}
-	defer db.SQL.Close()
+	defer func() { _ = db.SQL.Close() }()
 
 	// Pre-create metadata objects
 	metas := make([]*state.ModelMetadata, b.N)
@@ -305,7 +305,7 @@ func BenchmarkDatabaseQuery(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to create database: %v", err)
 	}
-	defer db.SQL.Close()
+	defer func() { _ = db.SQL.Close() }()
 
 	// Pre-populate with 10,000 models
 	for i := 0; i < 10000; i++ {
@@ -362,7 +362,7 @@ func createBenchmarkFiles(b *testing.B, dir string, count int) {
 		if err != nil {
 			b.Fatalf("Failed to create file: %v", err)
 		}
-		f.Close()
+		_ = f.Close()
 	}
 }
 
@@ -401,7 +401,7 @@ func BenchmarkCompleteWorkflow(b *testing.B) {
 			b.Errorf("Expected 1000 files scanned, got %d", result.FilesScanned)
 		}
 
-		db.SQL.Close()
-		os.Remove(iterDBPath)
+		_ = db.SQL.Close()
+		_ = os.Remove(iterDBPath)
 	}
 }

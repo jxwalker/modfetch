@@ -10,21 +10,21 @@ func TestDB_UpsertMetadata(t *testing.T) {
 	db := testDB(t)
 
 	meta := &ModelMetadata{
-		DownloadURL: "https://example.com/model.gguf",
-		Dest:        "/path/to/model.gguf",
-		ModelName:   "Test Model",
-		ModelID:     "test/model",
-		Version:     "v1.0",
-		Source:      "huggingface",
-		Description: "A test model",
-		Author:      "TestAuthor",
-		AuthorURL:   "https://example.com/author",
-		License:     "MIT",
-		Tags:        []string{"test", "example"},
-		ModelType:   "LLM",
+		DownloadURL:  "https://example.com/model.gguf",
+		Dest:         "/path/to/model.gguf",
+		ModelName:    "Test Model",
+		ModelID:      "test/model",
+		Version:      "v1.0",
+		Source:       "huggingface",
+		Description:  "A test model",
+		Author:       "TestAuthor",
+		AuthorURL:    "https://example.com/author",
+		License:      "MIT",
+		Tags:         []string{"test", "example"},
+		ModelType:    "LLM",
 		Quantization: "Q4_K_M",
-		FileSize:    1024 * 1024,
-		FileFormat:  ".gguf",
+		FileSize:     1024 * 1024,
+		FileFormat:   ".gguf",
 	}
 
 	// Test insert
@@ -399,7 +399,7 @@ func testDB(t *testing.T) *DB {
 	}
 
 	t.Cleanup(func() {
-		sqlDB.Close()
+		_ = sqlDB.Close()
 	})
 
 	return db

@@ -403,7 +403,7 @@ func (db *DB) ListMetadata(filters MetadataFilters) ([]ModelMetadata, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []ModelMetadata
 	for rows.Next() {
@@ -503,7 +503,7 @@ func (db *DB) SearchMetadata(query string) ([]ModelMetadata, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []ModelMetadata
 	for rows.Next() {

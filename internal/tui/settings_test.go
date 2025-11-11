@@ -153,8 +153,8 @@ func TestSettings_TokenStatus_NotSet(t *testing.T) {
 	defer cleanup()
 
 	// Ensure tokens are not set
-	os.Unsetenv("HF_TOKEN")
-	os.Unsetenv("CIVITAI_TOKEN")
+	_ = os.Unsetenv("HF_TOKEN")
+	_ = os.Unsetenv("CIVITAI_TOKEN")
 
 	model.updateTokenEnvStatus()
 	output := model.renderSettings()
@@ -179,11 +179,11 @@ func TestSettings_TokenStatus_Set(t *testing.T) {
 	defer cleanup()
 
 	// Set tokens in environment
-	os.Setenv("HF_TOKEN", "test-hf-token")
-	os.Setenv("CIVITAI_TOKEN", "test-civ-token")
+	_ = os.Setenv("HF_TOKEN", "test-hf-token")
+	_ = os.Setenv("CIVITAI_TOKEN", "test-civ-token")
 	defer func() {
-		os.Unsetenv("HF_TOKEN")
-		os.Unsetenv("CIVITAI_TOKEN")
+		_ = os.Unsetenv("HF_TOKEN")
+		_ = os.Unsetenv("CIVITAI_TOKEN")
 	}()
 
 	model.updateTokenEnvStatus()
@@ -209,11 +209,11 @@ func TestSettings_TokenStatus_Rejected(t *testing.T) {
 	defer cleanup()
 
 	// Set tokens
-	os.Setenv("HF_TOKEN", "invalid-token")
-	os.Setenv("CIVITAI_TOKEN", "invalid-token")
+	_ = os.Setenv("HF_TOKEN", "invalid-token")
+	_ = os.Setenv("CIVITAI_TOKEN", "invalid-token")
 	defer func() {
-		os.Unsetenv("HF_TOKEN")
-		os.Unsetenv("CIVITAI_TOKEN")
+		_ = os.Unsetenv("HF_TOKEN")
+		_ = os.Unsetenv("CIVITAI_TOKEN")
 	}()
 
 	model.updateTokenEnvStatus()
@@ -272,8 +272,8 @@ func TestSettings_RenderAuthStatus_Compact(t *testing.T) {
 	defer cleanup()
 
 	// Test: No tokens set
-	os.Unsetenv("HF_TOKEN")
-	os.Unsetenv("CIVITAI_TOKEN")
+	_ = os.Unsetenv("HF_TOKEN")
+	_ = os.Unsetenv("CIVITAI_TOKEN")
 	model.updateTokenEnvStatus()
 
 	output := model.renderAuthStatus()
@@ -288,11 +288,11 @@ func TestSettings_RenderAuthStatus_Compact(t *testing.T) {
 	}
 
 	// Test: Tokens set
-	os.Setenv("HF_TOKEN", "test")
-	os.Setenv("CIVITAI_TOKEN", "test")
+	_ = os.Setenv("HF_TOKEN", "test")
+	_ = os.Setenv("CIVITAI_TOKEN", "test")
 	defer func() {
-		os.Unsetenv("HF_TOKEN")
-		os.Unsetenv("CIVITAI_TOKEN")
+		_ = os.Unsetenv("HF_TOKEN")
+		_ = os.Unsetenv("CIVITAI_TOKEN")
 	}()
 	model.updateTokenEnvStatus()
 
@@ -601,11 +601,11 @@ func TestSettings_CustomTokenEnv(t *testing.T) {
 	defer cleanup()
 
 	// Set custom token env vars
-	os.Setenv("CUSTOM_HF_TOKEN", "test")
-	os.Setenv("CUSTOM_CIV_TOKEN", "test")
+	_ = os.Setenv("CUSTOM_HF_TOKEN", "test")
+	_ = os.Setenv("CUSTOM_CIV_TOKEN", "test")
 	defer func() {
-		os.Unsetenv("CUSTOM_HF_TOKEN")
-		os.Unsetenv("CUSTOM_CIV_TOKEN")
+		_ = os.Unsetenv("CUSTOM_HF_TOKEN")
+		_ = os.Unsetenv("CUSTOM_CIV_TOKEN")
 	}()
 
 	model.updateTokenEnvStatus()
@@ -654,11 +654,11 @@ func TestSettings_UpdateTokenEnvStatus_EmptyEnvValue(t *testing.T) {
 	defer cleanup()
 
 	// Set token to empty string (should be treated as not set)
-	os.Setenv("HF_TOKEN", "")
-	os.Setenv("CIVITAI_TOKEN", "   ") // Whitespace only
+	_ = os.Setenv("HF_TOKEN", "")
+	_ = os.Setenv("CIVITAI_TOKEN", "   ") // Whitespace only
 	defer func() {
-		os.Unsetenv("HF_TOKEN")
-		os.Unsetenv("CIVITAI_TOKEN")
+		_ = os.Unsetenv("HF_TOKEN")
+		_ = os.Unsetenv("CIVITAI_TOKEN")
 	}()
 
 	model.updateTokenEnvStatus()

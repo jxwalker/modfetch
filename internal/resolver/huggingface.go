@@ -96,7 +96,7 @@ func (h *HuggingFace) listRepoFiles(ctx context.Context, repoID, rev string, hea
 	if err != nil {
 		return nil, fmt.Errorf("hf api request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		// Limit error body read to 1KB to prevent memory issues

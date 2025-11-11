@@ -47,10 +47,10 @@ func TestIntegration_ScanToLibraryFlow(t *testing.T) {
 			t.Fatalf("Failed to create file: %v", err)
 		}
 		if err := f.Truncate(tf.size); err != nil {
-			f.Close()
+			_ = f.Close()
 			t.Fatalf("Failed to set file size: %v", err)
 		}
-		f.Close()
+		_ = f.Close()
 	}
 
 	// Step 1: Initialize database
@@ -58,7 +58,7 @@ func TestIntegration_ScanToLibraryFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Step 2: Run scanner
 	scan := scanner.NewScanner(db)
@@ -156,7 +156,7 @@ func TestIntegration_MetadataFetchToLibrary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Simulate metadata fetch from HuggingFace
 	// (In real scenario, this would come from API)
@@ -276,7 +276,7 @@ func TestIntegration_SearchFiltering(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Create diverse set of models
 	models := []state.ModelMetadata{
@@ -418,13 +418,13 @@ func TestIntegration_DuplicateDetection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create file: %v", err)
 	}
-	f.Close()
+	_ = f.Close()
 
 	db, err := state.NewDB(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	scan := scanner.NewScanner(db)
 
@@ -486,7 +486,7 @@ func TestIntegration_FavoriteManagement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create database: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	// Create test models
 	models := []state.ModelMetadata{

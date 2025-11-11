@@ -153,11 +153,14 @@ func (m *Model) renderLibrary() string {
 		}
 
 		// Source
-		sourceColor := m.th.label
-		if model.Source == "huggingface" {
+		var sourceColor lipgloss.Style
+		switch model.Source {
+		case "huggingface":
 			sourceColor = m.th.ok
-		} else if model.Source == "civitai" {
+		case "civitai":
 			sourceColor = lipgloss.NewStyle().Foreground(lipgloss.Color("213"))
+		default:
+			sourceColor = m.th.label
 		}
 		line += sourceColor.Render(fmt.Sprintf(" • %s", model.Source))
 

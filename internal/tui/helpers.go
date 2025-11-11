@@ -124,7 +124,7 @@ func tryWrite(dir string) error {
 		return err
 	}
 	tmp := filepath.Join(dir, ".modfetch-write-test")
-	defer os.Remove(tmp)
+	defer func() { _ = os.Remove(tmp) }()
 	return os.WriteFile(tmp, []byte("test"), 0o644)
 }
 

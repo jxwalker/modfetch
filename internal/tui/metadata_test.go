@@ -31,7 +31,7 @@ func TestMetadataStorage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 
 	db := &state.DB{SQL: sqlDB}
 
@@ -92,7 +92,7 @@ func TestMetadataFiltering(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 
 	db := &state.DB{SQL: sqlDB}
 
@@ -189,7 +189,7 @@ func TestMetadataUsageTracking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 
 	db := &state.DB{SQL: sqlDB}
 
@@ -251,7 +251,7 @@ func TestModelWithMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create test database: %v", err)
 	}
-	defer sqlDB.Close()
+	defer func() { _ = sqlDB.Close() }()
 
 	db := &state.DB{SQL: sqlDB}
 

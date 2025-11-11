@@ -88,7 +88,7 @@ func (f *CivitAIFetcher) FetchMetadata(ctx context.Context, url string) (*state.
 		}
 		return nil, fmt.Errorf("fetching metadata: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
 		return nil, fmt.Errorf("CivitAI access denied - API key may be required or VPN needed")
@@ -110,17 +110,17 @@ func (f *CivitAIFetcher) FetchMetadata(ctx context.Context, url string) (*state.
 
 	// Build metadata from API response
 	meta := &state.ModelMetadata{
-		DownloadURL:    url,
-		ModelName:      apiResp.Name,
-		ModelID:        fmt.Sprintf("civitai-%s", modelID),
-		Source:         "civitai",
-		Description:    truncateString(apiResp.Description, 5000),
-		Tags:           apiResp.Tags,
-		ModelType:      mapCivitAIType(apiResp.Type),
-		HomepageURL:    fmt.Sprintf("https://civitai.com/models/%s", modelID),
-		DownloadCount:  int(apiResp.Stats.DownloadCount),
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
+		DownloadURL:   url,
+		ModelName:     apiResp.Name,
+		ModelID:       fmt.Sprintf("civitai-%s", modelID),
+		Source:        "civitai",
+		Description:   truncateString(apiResp.Description, 5000),
+		Tags:          apiResp.Tags,
+		ModelType:     mapCivitAIType(apiResp.Type),
+		HomepageURL:   fmt.Sprintf("https://civitai.com/models/%s", modelID),
+		DownloadCount: int(apiResp.Stats.DownloadCount),
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 
 	// Set author info only if username is non-empty
@@ -170,12 +170,12 @@ func (f *CivitAIFetcher) FetchMetadata(ctx context.Context, url string) (*state.
 
 // civitAIModelResponse represents the CivitAI API model response
 type civitAIModelResponse struct {
-	ID          int64  `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Type        string `json:"type"`
-	POI         bool   `json:"poi"`
-	NSFW        bool   `json:"nsfw"`
+	ID          int64    `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Type        string   `json:"type"`
+	POI         bool     `json:"poi"`
+	NSFW        bool     `json:"nsfw"`
 	Tags        []string `json:"tags"`
 	Creator     struct {
 		Username string `json:"username"`
@@ -192,16 +192,16 @@ type civitAIModelResponse struct {
 }
 
 type civitAIModelVersion struct {
-	ID            int64    `json:"id"`
-	ModelID       int64    `json:"modelId"`
-	Name          string   `json:"name"`
-	Description   string   `json:"description"`
-	CreatedAt     string   `json:"createdAt"`
-	DownloadURL   string   `json:"downloadUrl"`
-	TrainedWords  []string `json:"trainedWords"`
-	BaseModel     string   `json:"baseModel"`
-	BaseModelType string   `json:"baseModelType"`
-	Files         []civitAIFile `json:"files"`
+	ID            int64          `json:"id"`
+	ModelID       int64          `json:"modelId"`
+	Name          string         `json:"name"`
+	Description   string         `json:"description"`
+	CreatedAt     string         `json:"createdAt"`
+	DownloadURL   string         `json:"downloadUrl"`
+	TrainedWords  []string       `json:"trainedWords"`
+	BaseModel     string         `json:"baseModel"`
+	BaseModelType string         `json:"baseModelType"`
+	Files         []civitAIFile  `json:"files"`
 	Images        []civitAIImage `json:"images"`
 }
 
@@ -274,7 +274,7 @@ func (f *CivitAIFetcher) CheckConnectivity(ctx context.Context) error {
 		}
 		return fmt.Errorf("connectivity check failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("CivitAI returned status %d - access may be restricted", resp.StatusCode)
@@ -297,7 +297,7 @@ func (f *CivitAIFetcher) ValidateAPIKey(ctx context.Context, apiKey string) erro
 	if err != nil {
 		return fmt.Errorf("API request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return fmt.Errorf("invalid API key")

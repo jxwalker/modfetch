@@ -141,7 +141,7 @@ func (f *HuggingFaceFetcher) FetchMetadata(ctx context.Context, url string) (*st
 		// If API fails, return basic metadata
 		return f.basicMetadata(url, modelID, filename, version), nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		// API failed, return basic metadata
@@ -160,20 +160,20 @@ func (f *HuggingFaceFetcher) FetchMetadata(ctx context.Context, url string) (*st
 
 	// Build metadata from API response
 	meta := &state.ModelMetadata{
-		DownloadURL:  url,
-		ModelName:    repo,
-		ModelID:      modelID,
-		Version:      version,
-		Source:       "huggingface",
-		Description:  truncateString(apiResp.Description, 5000),
-		Author:       user,
-		AuthorURL:    fmt.Sprintf("https://huggingface.co/%s", user),
-		License:      apiResp.License,
-		Tags:         apiResp.Tags,
-		RepoURL:      fmt.Sprintf("https://huggingface.co/%s", modelID),
-		HomepageURL:  fmt.Sprintf("https://huggingface.co/%s", modelID),
-		CreatedAt:    time.Now(),
-		UpdatedAt:    time.Now(),
+		DownloadURL: url,
+		ModelName:   repo,
+		ModelID:     modelID,
+		Version:     version,
+		Source:      "huggingface",
+		Description: truncateString(apiResp.Description, 5000),
+		Author:      user,
+		AuthorURL:   fmt.Sprintf("https://huggingface.co/%s", user),
+		License:     apiResp.License,
+		Tags:        apiResp.Tags,
+		RepoURL:     fmt.Sprintf("https://huggingface.co/%s", modelID),
+		HomepageURL: fmt.Sprintf("https://huggingface.co/%s", modelID),
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
 	// Infer model type from tags or filename
@@ -207,38 +207,38 @@ func (f *HuggingFaceFetcher) basicMetadata(url, modelID, filename, version strin
 	}
 
 	return &state.ModelMetadata{
-		DownloadURL: url,
-		ModelName:   repo,
-		ModelID:     modelID,
-		Version:     version,
-		Source:      "huggingface",
-		Author:      user,
-		AuthorURL:   fmt.Sprintf("https://huggingface.co/%s", user),
-		RepoURL:     fmt.Sprintf("https://huggingface.co/%s", modelID),
-		ModelType:   inferModelType(filename, nil),
+		DownloadURL:  url,
+		ModelName:    repo,
+		ModelID:      modelID,
+		Version:      version,
+		Source:       "huggingface",
+		Author:       user,
+		AuthorURL:    fmt.Sprintf("https://huggingface.co/%s", user),
+		RepoURL:      fmt.Sprintf("https://huggingface.co/%s", modelID),
+		ModelType:    inferModelType(filename, nil),
 		Quantization: ExtractQuantization(filename),
-		FileFormat:  strings.ToLower(filepath.Ext(filename)),
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		FileFormat:   strings.ToLower(filepath.Ext(filename)),
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
 	}
 }
 
 // huggingFaceModelResponse represents the HuggingFace API response
 type huggingFaceModelResponse struct {
-	ID          string   `json:"id"`
-	ModelID     string   `json:"modelId"`
-	Author      string   `json:"author"`
-	SHA         string   `json:"sha"`
-	LastModified string  `json:"lastModified"`
-	Private     bool     `json:"private"`
-	Disabled    bool     `json:"disabled"`
-	Gated       bool     `json:"gated"`
-	Tags        []string `json:"tags"`
-	Downloads   int64    `json:"downloads"`
-	Likes       int64    `json:"likes"`
-	License     string   `json:"license"`
-	Description string   `json:"description"`
-	CardData    *struct {
+	ID           string   `json:"id"`
+	ModelID      string   `json:"modelId"`
+	Author       string   `json:"author"`
+	SHA          string   `json:"sha"`
+	LastModified string   `json:"lastModified"`
+	Private      bool     `json:"private"`
+	Disabled     bool     `json:"disabled"`
+	Gated        bool     `json:"gated"`
+	Tags         []string `json:"tags"`
+	Downloads    int64    `json:"downloads"`
+	Likes        int64    `json:"likes"`
+	License      string   `json:"license"`
+	Description  string   `json:"description"`
+	CardData     *struct {
 		ThumbnailURL string `json:"thumbnail"`
 	} `json:"cardData"`
 }
