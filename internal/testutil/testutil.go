@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jxwalker/modfetch/internal/state"
 )
@@ -278,6 +279,7 @@ func Int64Ptr(i int64) *int64 {
 
 // RetryOnAPIError retries an operation when it encounters API-related errors
 // This is useful for flaky external API integration tests (e.g., CivitAI, HuggingFace)
+// Uses exponential backoff between retries (1s, 2s, 4s)
 // Returns error if all retries fail with non-API errors, or skips test if API is unavailable
 func RetryOnAPIError(t *testing.T, maxRetries int, operation func() error, operationName string) {
 	t.Helper()
@@ -299,8 +301,11 @@ func RetryOnAPIError(t *testing.T, maxRetries int, operation func() error, opera
 			strings.Contains(errMsg, "Bad Request")
 
 		if isAPIError && attempt < maxRetries {
-			t.Logf("%s attempt %d/%d failed with API error: %v (retrying...)",
-				operationName, attempt, maxRetries, lastErr)
+			// Exponential backoff: 1s, 2s, 4s
+			backoffDuration := time.Duration(1<<uint(attempt-1)) * time.Second
+			t.Logf("%s attempt %d/%d failed with API error: %v (retrying in %v...)",
+				operationName, attempt, maxRetries, lastErr, backoffDuration)
+			time.Sleep(backoffDuration)
 			continue
 		}
 
