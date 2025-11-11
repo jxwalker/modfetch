@@ -496,8 +496,28 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.sortMode = "eta"
 		return m, nil
 	case "o":
-		m.sortMode = ""
-		return m, nil
+		// Clear completed and failed downloads
+		deleted := 0
+		for _, r := range m.rows {
+			if r.Status == "complete" || r.Status == "failed" {
+				key := keyFor(r)
+				if cancel, ok := m.running[key]; ok {
+					cancel()
+					delete(m.running, key)
+				}
+				_ = m.st.DeleteChunks(r.URL, r.Dest)
+				if err := m.st.DeleteDownload(r.URL, r.Dest); err == nil {
+					deleted++
+				}
+				delete(m.selectedKeys, key)
+			}
+		}
+		if deleted > 0 {
+			m.addToast(fmt.Sprintf("cleared %d completed/failed", deleted))
+		} else {
+			m.addToast("no completed/failed downloads to clear")
+		}
+		return m, m.refresh()
 	case "R":
 		m.sortMode = "rem"
 		return m, nil
