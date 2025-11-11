@@ -20,8 +20,10 @@ import (
 	"database/sql"
 
 	"github.com/jxwalker/modfetch/internal/config"
+	friendlyerrors "github.com/jxwalker/modfetch/internal/errors"
 	"github.com/jxwalker/modfetch/internal/logging"
 	"github.com/jxwalker/modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/system"
 	"github.com/jxwalker/modfetch/internal/util"
 )
 
@@ -175,6 +177,24 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers, noResume)
 	}
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "planning"})
+
+	// Check if we have sufficient disk space before starting download
+	if h.size > 0 {
+		downloadDir := filepath.Dir(destPath)
+		if downloadDir == "" || downloadDir == "." {
+			downloadDir = e.cfg.General.DownloadRoot
+		}
+
+		sufficient, available, err := system.HasSufficientSpace(downloadDir, uint64(h.size))
+		if err != nil {
+			e.log.Warnf("could not check disk space: %v", err)
+		} else if !sufficient {
+			// Not enough disk space
+			required := uint64(float64(h.size) * 1.1) // with 10% buffer
+			_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "error"})
+			return "", "", friendlyerrors.DiskSpaceError(available, required)
+		}
+	}
 
 	part := stagePartPath(e.cfg, url, destPath)
 	if noResume {

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jxwalker/modfetch/internal/config"
+	friendlyerrors "github.com/jxwalker/modfetch/internal/errors"
 	"github.com/jxwalker/modfetch/internal/util"
 )
 
@@ -193,12 +194,29 @@ func civitaiFetchModel(ctx context.Context, client *http.Client, headers map[str
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return civitModel{}, err
+		return civitModel{}, friendlyerrors.NetworkError(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+
 	if resp.StatusCode/100 != 2 {
+		// Provide friendly error messages for common issues
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return civitModel{}, friendlyerrors.AuthError("civitai.com", resp.StatusCode, fmt.Errorf("status %d", resp.StatusCode))
+		}
+
+		if resp.StatusCode == http.StatusNotFound {
+			return civitModel{}, friendlyerrors.NewFriendlyError(
+				fmt.Sprintf("CivitAI model not found: %s", modelID),
+				"Check that:\n"+
+					"1. Model ID is correct (e.g., civitai://model/257749)\n"+
+					"2. Model exists and is publicly accessible\n"+
+					"3. You have the required access permissions",
+			).WithDetails(fmt.Errorf("status 404"))
+		}
+
 		return civitModel{}, fmt.Errorf("civitai models: %s", resp.Status)
 	}
+
 	var m civitModel
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return civitModel{}, err
@@ -213,12 +231,26 @@ func civitaiFetchVersion(ctx context.Context, client *http.Client, headers map[s
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return civitVersion{}, err
+		return civitVersion{}, friendlyerrors.NetworkError(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+
 	if resp.StatusCode/100 != 2 {
+		// Provide friendly error messages
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return civitVersion{}, friendlyerrors.AuthError("civitai.com", resp.StatusCode, fmt.Errorf("status %d", resp.StatusCode))
+		}
+
+		if resp.StatusCode == http.StatusNotFound {
+			return civitVersion{}, friendlyerrors.NewFriendlyError(
+				fmt.Sprintf("CivitAI model version not found: %s", versionID),
+				"Check that the version ID is correct and accessible",
+			).WithDetails(fmt.Errorf("status 404"))
+		}
+
 		return civitVersion{}, fmt.Errorf("civitai version: %s", resp.Status)
 	}
+
 	var v civitVersion
 	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
 		return civitVersion{}, err

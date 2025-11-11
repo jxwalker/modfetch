@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jxwalker/modfetch/internal/config"
+	friendlyerrors "github.com/jxwalker/modfetch/internal/errors"
 	"github.com/jxwalker/modfetch/internal/util"
 )
 
@@ -94,13 +95,30 @@ func (h *HuggingFace) listRepoFiles(ctx context.Context, repoID, rev string, hea
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("hf api request: %w", err)
+		return nil, friendlyerrors.NetworkError(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		// Limit error body read to 1KB to prevent memory issues
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+
+		// Provide friendly error for auth failures
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return nil, friendlyerrors.AuthError("huggingface.co", resp.StatusCode, fmt.Errorf("status %d: %s", resp.StatusCode, string(body)))
+		}
+
+		// Provide friendly error for not found
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, friendlyerrors.NewFriendlyError(
+				fmt.Sprintf("HuggingFace repository not found: %s", repoID),
+				"Check that:\n"+
+					"1. Repository name is correct (format: owner/repo)\n"+
+					"2. Repository exists and is public\n"+
+					"3. You have accepted the repository license if gated",
+			).WithDetails(fmt.Errorf("status 404"))
+		}
+
 		return nil, fmt.Errorf("hf api returned %d: %s", resp.StatusCode, string(body))
 	}
 
