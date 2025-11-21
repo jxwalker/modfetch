@@ -1,1 +1,0 @@
-"""GAD Demo Backend Application."""
