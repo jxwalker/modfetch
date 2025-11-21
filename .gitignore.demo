@@ -1,0 +1,34 @@
+# GAD Demo - Git ignore file
+# Add these lines to your main .gitignore if integrating with existing project
+
+# Python
+backend/__pycache__/
+backend/app/__pycache__/
+backend/app/routers/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/venv/
+backend/env/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.env
+*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log

@@ -1,0 +1,55 @@
+.PHONY: help install dev clean docker-build docker-up docker-down
+
+help:
+	@echo "GAD System Demo - Available Commands"
+	@echo ""
+	@echo "  make -f Makefile.demo install        Install all dependencies"
+	@echo "  make -f Makefile.demo dev            Start development servers"
+	@echo "  make -f Makefile.demo clean          Clean generated files"
+	@echo "  make -f Makefile.demo docker-build   Build Docker images"
+	@echo "  make -f Makefile.demo docker-up      Start Docker containers"
+	@echo "  make -f Makefile.demo docker-down    Stop Docker containers"
+	@echo ""
+
+install:
+	@echo "Installing backend dependencies..."
+	cd backend && pip install -r requirements.txt
+	@echo "Installing frontend dependencies..."
+	cd frontend && npm install
+	@echo "✓ All dependencies installed"
+
+dev:
+	@echo "Starting GAD System Demo..."
+	@echo "Backend will run on http://localhost:8000"
+	@echo "Frontend will run on http://localhost:3000"
+	@echo ""
+	@echo "Starting backend..."
+	cd backend && uvicorn app.main:app --reload --port 8000 &
+	@echo "Starting frontend..."
+	cd frontend && npm run dev
+
+clean:
+	@echo "Cleaning generated files..."
+	rm -rf backend/__pycache__
+	rm -rf backend/app/__pycache__
+	rm -rf backend/app/routers/__pycache__
+	rm -rf frontend/dist
+	rm -rf frontend/node_modules
+	@echo "✓ Cleaned"
+
+docker-build:
+	@echo "Building Docker images..."
+	docker-compose build
+	@echo "✓ Docker images built"
+
+docker-up:
+	@echo "Starting Docker containers..."
+	docker-compose up -d
+	@echo "✓ GAD System Demo running at http://localhost:3000"
+	@echo "  Backend API: http://localhost:8000"
+	@echo "  Frontend: http://localhost:3000"
+
+docker-down:
+	@echo "Stopping Docker containers..."
+	docker-compose down
+	@echo "✓ Containers stopped"
