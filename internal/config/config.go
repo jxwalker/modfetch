@@ -43,10 +43,12 @@ type General struct {
 }
 
 type Network struct {
-	TimeoutSeconds int    `yaml:"timeout_seconds"`
-	MaxRedirects   int    `yaml:"max_redirects"`
-	TLSVerify      bool   `yaml:"tls_verify"`
-	UserAgent      string `yaml:"user_agent"`
+	TimeoutSeconds                     int    `yaml:"timeout_seconds"`
+	MaxRedirects                       int    `yaml:"max_redirects"`
+	TLSVerify                          bool   `yaml:"tls_verify"`
+	UserAgent                          string `yaml:"user_agent"`
+	GlobalBandwidthBytesPerSecond      int64  `yaml:"global_bandwidth_bytes_per_second"`
+	PerDownloadBandwidthBytesPerSecond int64  `yaml:"per_download_bandwidth_bytes_per_second"`
 	// When true, respect HTTP 429 Retry-After for retries (chunked and single fallback)
 	RetryOnRateLimit bool `yaml:"retry_on_rate_limit"`
 	// Cap the wait derived from Retry-After to avoid excessively long sleeps (seconds)
@@ -239,6 +241,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Network.RateLimitMaxDelaySeconds < 0 {
 		return fmt.Errorf("network.rate_limit_max_delay_seconds must be >= 0")
+	}
+	if c.Network.GlobalBandwidthBytesPerSecond < 0 {
+		return fmt.Errorf("network.global_bandwidth_bytes_per_second must be >= 0")
+	}
+	if c.Network.PerDownloadBandwidthBytesPerSecond < 0 {
+		return fmt.Errorf("network.per_download_bandwidth_bytes_per_second must be >= 0")
 	}
 	lvl := stringsLower(c.Logging.Level)
 	switch lvl {

@@ -26,11 +26,13 @@ import (
 )
 
 type Chunked struct {
-	cfg     *config.Config
-	log     *logging.Logger
-	client  *http.Client
-	st      *state.DB
-	metrics interface {
+	cfg                *config.Config
+	log                *logging.Logger
+	client             *http.Client
+	st                 *state.DB
+	globalLimiter      *bandwidthLimiter
+	perDownloadLimiter *bandwidthLimiter
+	metrics            interface {
 		AddBytes(int64)
 		IncRetries(int64)
 		IncDownloadsSuccess()
@@ -46,7 +48,8 @@ func NewChunked(cfg *config.Config, log *logging.Logger, st *state.DB, m interfa
 	ObserveDownloadSeconds(float64)
 	Write() error
 }) *Chunked {
-	return newChunkedWithClient(cfg, log, st, m, newHTTPClient(cfg))
+	global, perDownload := configuredBandwidthLimiters(cfg)
+	return newChunkedWithClientAndLimiters(cfg, log, st, m, newHTTPClient(cfg), global, perDownload)
 }
 
 func newChunkedWithClient(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
@@ -56,10 +59,21 @@ func newChunkedWithClient(cfg *config.Config, log *logging.Logger, st *state.DB,
 	ObserveDownloadSeconds(float64)
 	Write() error
 }, client *http.Client) *Chunked {
+	global, perDownload := configuredBandwidthLimiters(cfg)
+	return newChunkedWithClientAndLimiters(cfg, log, st, m, client, global, perDownload)
+}
+
+func newChunkedWithClientAndLimiters(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
+	AddBytes(int64)
+	IncRetries(int64)
+	IncDownloadsSuccess()
+	ObserveDownloadSeconds(float64)
+	Write() error
+}, client *http.Client, globalLimiter, perDownloadLimiter *bandwidthLimiter) *Chunked {
 	if client == nil {
 		client = newHTTPClient(cfg)
 	}
-	return &Chunked{cfg: cfg, log: log, st: st, client: client, metrics: m}
+	return &Chunked{cfg: cfg, log: log, st: st, client: client, globalLimiter: globalLimiter, perDownloadLimiter: perDownloadLimiter, metrics: m}
 }
 
 type headInfo struct {
@@ -596,7 +610,8 @@ func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *
 	hasher := sha256.New()
 	ow := &offsetWriterAt{w: f, off: c.Start}
 	mw := io.MultiWriter(ow, hasher)
-	written, err := io.CopyN(mw, resp.Body, c.Size)
+	body := newThrottledReader(ctx, resp.Body, e.perDownloadLimiter, e.globalLimiter)
+	written, err := io.CopyN(mw, body, c.Size)
 	if e.metrics != nil && written > 0 {
 		e.metrics.AddBytes(written)
 	}
@@ -659,7 +674,8 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 		if ctx.Err() != nil {
 			return "", "", ctx.Err()
 		}
-		final, sha, err := newSingleWithClient(e.cfg, e.log, e.st, e.metrics, e.client).Download(ctx, url, destPath, expectedSHA, headers, noResume)
+		single := newSingleWithClientAndLimiters(e.cfg, e.log, e.st, e.metrics, e.client, e.globalLimiter, e.perDownloadLimiter)
+		final, sha, err := single.Download(ctx, url, destPath, expectedSHA, headers, noResume)
 		if err == nil {
 			return final, sha, nil
 		}

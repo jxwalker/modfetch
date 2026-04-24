@@ -15,3 +15,25 @@ func TestLoadSampleConfig(t *testing.T) {
 		t.Fatalf("expected non-empty general paths")
 	}
 }
+
+func TestValidateRejectsNegativeBandwidthLimits(t *testing.T) {
+	base := Config{
+		Version: 1,
+		General: General{
+			DataRoot:     t.TempDir(),
+			DownloadRoot: t.TempDir(),
+		},
+	}
+
+	c := base
+	c.Network.GlobalBandwidthBytesPerSecond = -1
+	if err := c.Validate(); err == nil {
+		t.Fatal("expected negative global bandwidth limit to fail validation")
+	}
+
+	c = base
+	c.Network.PerDownloadBandwidthBytesPerSecond = -1
+	if err := c.Validate(); err == nil {
+		t.Fatal("expected negative per-download bandwidth limit to fail validation")
+	}
+}

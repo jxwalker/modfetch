@@ -15,7 +15,7 @@ Priority 1 — Critical reliability and performance
   - Self-check and targeted re-fetch of dirty chunks is implemented in chunked downloader.
 
 Priority 2 — Core functionality gaps
-- Bandwidth throttling (per-download and global) [NEW]
+- Bandwidth throttling (per-download and global) [IMPL]
 - Mirror/fallback URLs with ordered failover [NEW]
 - Partial verification during single-stream downloads [NEW]
   - Periodic checkpoints; chunked mode already verifies per-chunk.

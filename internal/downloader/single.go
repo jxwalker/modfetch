@@ -46,11 +46,13 @@ func probeRangeGET(client *http.Client, url string, headers map[string]string, u
 }
 
 type Single struct {
-	cfg     *config.Config
-	log     *logging.Logger
-	client  *http.Client
-	st      *state.DB
-	metrics interface {
+	cfg                *config.Config
+	log                *logging.Logger
+	client             *http.Client
+	st                 *state.DB
+	globalLimiter      *bandwidthLimiter
+	perDownloadLimiter *bandwidthLimiter
+	metrics            interface {
 		AddBytes(int64)
 		IncDownloadsSuccess()
 		ObserveDownloadSeconds(float64)
@@ -64,7 +66,8 @@ func NewSingle(cfg *config.Config, log *logging.Logger, st *state.DB, m interfac
 	ObserveDownloadSeconds(float64)
 	Write() error
 }) *Single {
-	return newSingleWithClient(cfg, log, st, m, newHTTPClient(cfg))
+	global, perDownload := configuredBandwidthLimiters(cfg)
+	return newSingleWithClientAndLimiters(cfg, log, st, m, newHTTPClient(cfg), global, perDownload)
 }
 
 func newSingleWithClient(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
@@ -73,15 +76,27 @@ func newSingleWithClient(cfg *config.Config, log *logging.Logger, st *state.DB, 
 	ObserveDownloadSeconds(float64)
 	Write() error
 }, client *http.Client) *Single {
+	global, perDownload := configuredBandwidthLimiters(cfg)
+	return newSingleWithClientAndLimiters(cfg, log, st, m, client, global, perDownload)
+}
+
+func newSingleWithClientAndLimiters(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
+	AddBytes(int64)
+	IncDownloadsSuccess()
+	ObserveDownloadSeconds(float64)
+	Write() error
+}, client *http.Client, globalLimiter, perDownloadLimiter *bandwidthLimiter) *Single {
 	if client == nil {
 		client = newHTTPClient(cfg)
 	}
 	return &Single{
-		cfg:     cfg,
-		log:     log,
-		st:      st,
-		client:  client,
-		metrics: m,
+		cfg:                cfg,
+		log:                log,
+		st:                 st,
+		client:             client,
+		globalLimiter:      globalLimiter,
+		perDownloadLimiter: perDownloadLimiter,
+		metrics:            m,
 	}
 }
 
@@ -259,7 +274,8 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 
 	// Do not preallocate for single-stream so that .part size reflects real progress
 	mw := io.MultiWriter(f, hasher)
-	nWritten, err := io.Copy(mw, resp.Body)
+	body := newThrottledReader(ctx, resp.Body, s.perDownloadLimiter, s.globalLimiter)
+	nWritten, err := io.Copy(mw, body)
 	if s.metrics != nil && nWritten > 0 {
 		s.metrics.AddBytes(nWritten)
 	}
