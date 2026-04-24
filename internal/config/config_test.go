@@ -37,3 +37,36 @@ func TestValidateRejectsNegativeBandwidthLimits(t *testing.T) {
 		t.Fatal("expected negative per-download bandwidth limit to fail validation")
 	}
 }
+
+func TestValidateRejectsNegativeConcurrencyValues(t *testing.T) {
+	base := Config{
+		Version: 1,
+		General: General{
+			DataRoot:     t.TempDir(),
+			DownloadRoot: t.TempDir(),
+		},
+	}
+
+	tests := []struct {
+		name string
+		edit func(*Config)
+	}{
+		{"global files", func(c *Config) { c.Concurrency.GlobalFiles = -1 }},
+		{"per file chunks", func(c *Config) { c.Concurrency.PerFileChunks = -1 }},
+		{"per host requests", func(c *Config) { c.Concurrency.PerHostRequests = -1 }},
+		{"chunk size", func(c *Config) { c.Concurrency.ChunkSizeMB = -1 }},
+		{"max retries", func(c *Config) { c.Concurrency.MaxRetries = -1 }},
+		{"backoff min", func(c *Config) { c.Concurrency.Backoff.MinMS = -1 }},
+		{"backoff max", func(c *Config) { c.Concurrency.Backoff.MaxMS = -1 }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := base
+			tt.edit(&c)
+			if err := c.Validate(); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+}

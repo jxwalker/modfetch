@@ -33,7 +33,7 @@ Priority 4 — Quality improvements
 - Rich, structured error context with remediation hints [NEW]
 - Test coverage expansion (resolvers/state/placer/downloaders) [NEW]
 - Metrics expansion (per-download stats, percentiles) [NEW]
-- Configuration validation hardening [NEW]
+- Configuration validation hardening [IMPL]
 
 Priority 5 — Advanced features
 - Archive extraction post-download (zip/tar/7z) [NEW]

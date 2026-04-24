@@ -248,6 +248,27 @@ func (c *Config) Validate() error {
 	if c.Network.PerDownloadBandwidthBytesPerSecond < 0 {
 		return fmt.Errorf("network.per_download_bandwidth_bytes_per_second must be >= 0")
 	}
+	if c.Concurrency.GlobalFiles < 0 {
+		return fmt.Errorf("concurrency.global_files must be >= 0")
+	}
+	if c.Concurrency.PerFileChunks < 0 {
+		return fmt.Errorf("concurrency.per_file_chunks must be >= 0")
+	}
+	if c.Concurrency.PerHostRequests < 0 {
+		return fmt.Errorf("concurrency.per_host_requests must be >= 0")
+	}
+	if c.Concurrency.ChunkSizeMB < 0 {
+		return fmt.Errorf("concurrency.chunk_size_mb must be >= 0")
+	}
+	if c.Concurrency.MaxRetries < 0 {
+		return fmt.Errorf("concurrency.max_retries must be >= 0")
+	}
+	if c.Concurrency.Backoff.MinMS < 0 {
+		return fmt.Errorf("concurrency.backoff.min_ms must be >= 0")
+	}
+	if c.Concurrency.Backoff.MaxMS < 0 {
+		return fmt.Errorf("concurrency.backoff.max_ms must be >= 0")
+	}
 	lvl := stringsLower(c.Logging.Level)
 	switch lvl {
 	case "", "debug", "info", "warn", "error":
