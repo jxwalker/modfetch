@@ -4,6 +4,9 @@ import (
 	"os"
 )
 
+var writeAndSyncFile = writeAndSync
+var fsyncDirectory = fsyncDir
+
 // writeAndSync writes content to path and fsyncs the file.
 func writeAndSync(path string, b []byte) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)

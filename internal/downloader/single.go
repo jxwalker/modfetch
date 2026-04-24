@@ -21,6 +21,24 @@ import (
 	"github.com/jxwalker/modfetch/internal/util"
 )
 
+func (s *Single) persistComplete(url, destPath, expectedSHA, actualSHA, etag, lastMod string, size int64, warning error) {
+	row := state.DownloadRow{
+		URL:            url,
+		Dest:           destPath,
+		ExpectedSHA256: expectedSHA,
+		ActualSHA256:   actualSHA,
+		ETag:           etag,
+		LastModified:   lastMod,
+		Size:           size,
+		Status:         "complete",
+	}
+	if warning != nil {
+		row.LastError = warning.Error()
+		s.log.Warnf("%s", row.LastError)
+	}
+	_ = s.st.UpsertDownload(row)
+}
+
 // local helper to probe size and range via GET bytes=0-0
 func probeRangeGET(client *http.Client, url string, headers map[string]string, ua string) (size int64, ok bool) {
 	req, _ := http.NewRequest(http.MethodGet, url, nil)
@@ -223,11 +241,15 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 			if err != nil {
 				return "", "", err
 			}
-			if err := writeAndSync(destPath+".sha256", []byte(actualSHA+"  "+filepath.Base(destPath)+"\n")); err != nil {
-				return "", "", err
+			if err := writeAndSyncFile(destPath+".sha256", []byte(actualSHA+"  "+filepath.Base(destPath)+"\n")); err != nil {
+				s.persistComplete(url, destPath, expectedSHA, actualSHA, etag, lastMod, size, fmt.Errorf("finalized artifact but failed to write sha256 sidecar: %w", err))
+				return destPath, actualSHA, nil
 			}
-			_ = fsyncDir(filepath.Dir(destPath))
-			_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "complete"})
+			if err := fsyncDirectory(filepath.Dir(destPath)); err != nil {
+				s.persistComplete(url, destPath, expectedSHA, actualSHA, etag, lastMod, size, fmt.Errorf("finalized artifact but failed to fsync destination directory: %w", err))
+				return destPath, actualSHA, nil
+			}
+			s.persistComplete(url, destPath, expectedSHA, actualSHA, etag, lastMod, size, nil)
 			if s.metrics != nil {
 				s.metrics.IncDownloadsSuccess()
 				s.metrics.ObserveDownloadSeconds(time.Since(startTime).Seconds())
@@ -301,12 +323,16 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		actualSHA = sha2
 	}
 	// Write checksum file (durable)
-	if err := writeAndSync(destPath+".sha256", []byte(actualSHA+"  "+filepath.Base(destPath)+"\n")); err != nil {
-		return "", "", err
+	if err := writeAndSyncFile(destPath+".sha256", []byte(actualSHA+"  "+filepath.Base(destPath)+"\n")); err != nil {
+		s.persistComplete(url, destPath, expectedSHA, actualSHA, etag, lastMod, size, fmt.Errorf("finalized artifact but failed to write sha256 sidecar: %w", err))
+		return destPath, actualSHA, nil
 	}
 	// Fsync parent directory to persist rename and sidecar
-	_ = fsyncDir(filepath.Dir(destPath))
-	_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "complete"})
+	if err := fsyncDirectory(filepath.Dir(destPath)); err != nil {
+		s.persistComplete(url, destPath, expectedSHA, actualSHA, etag, lastMod, size, fmt.Errorf("finalized artifact but failed to fsync destination directory: %w", err))
+		return destPath, actualSHA, nil
+	}
+	s.persistComplete(url, destPath, expectedSHA, actualSHA, etag, lastMod, size, nil)
 	if s.metrics != nil {
 		s.metrics.IncDownloadsSuccess()
 		s.metrics.ObserveDownloadSeconds(time.Since(startTime).Seconds())

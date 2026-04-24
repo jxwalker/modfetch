@@ -173,6 +173,21 @@ type Model struct {
 	log                  *logging.Logger
 }
 
+func (m *Model) clearRunningState(msg dlDoneMsg) {
+	keys := []string{
+		msg.url + "|" + msg.dest,
+		msg.origKey,
+		msg.resKey,
+	}
+	for _, key := range keys {
+		if key == "" {
+			continue
+		}
+		delete(m.running, key)
+		delete(m.retrying, key)
+	}
+}
+
 type uiState struct {
 	ThemeIndex int    `json:"theme_index"`
 	ShowURL    bool   `json:"show_url"`
@@ -374,6 +389,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case dlDoneMsg:
+		m.clearRunningState(msg)
 		// Apply placement metadata if needed (safe concurrent map access from Update thread)
 		if msg.needsPlaceMap && msg.origKey != msg.resKey {
 			if msg.autoPlace {

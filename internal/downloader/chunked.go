@@ -39,6 +39,24 @@ type Chunked struct {
 	}
 }
 
+func (e *Chunked) persistComplete(url, destPath, expectedSHA, actualSHA, etag, lastMod string, size int64, warning error) {
+	row := state.DownloadRow{
+		URL:            url,
+		Dest:           destPath,
+		ExpectedSHA256: expectedSHA,
+		ActualSHA256:   actualSHA,
+		ETag:           etag,
+		LastModified:   lastMod,
+		Size:           size,
+		Status:         "complete",
+	}
+	if warning != nil {
+		row.LastError = warning.Error()
+		e.log.Warnf("%s", row.LastError)
+	}
+	_ = e.st.UpsertDownload(row)
+}
+
 func NewChunked(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
 	AddBytes(int64)
 	IncRetries(int64)
@@ -439,11 +457,15 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		}
 		finalSHA = sha2
 	}
-	if err := writeAndSync(destPath+".sha256", []byte(finalSHA+"  "+filepath.Base(destPath)+"\n")); err != nil {
-		return "", "", err
+	if err := writeAndSyncFile(destPath+".sha256", []byte(finalSHA+"  "+filepath.Base(destPath)+"\n")); err != nil {
+		e.persistComplete(url, destPath, expectedSHA, finalSHA, h.etag, h.lastMod, h.size, fmt.Errorf("finalized artifact but failed to write sha256 sidecar: %w", err))
+		return destPath, finalSHA, nil
 	}
-	_ = fsyncDir(filepath.Dir(destPath))
-	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: finalSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "complete"})
+	if err := fsyncDirectory(filepath.Dir(destPath)); err != nil {
+		e.persistComplete(url, destPath, expectedSHA, finalSHA, h.etag, h.lastMod, h.size, fmt.Errorf("finalized artifact but failed to fsync destination directory: %w", err))
+		return destPath, finalSHA, nil
+	}
+	e.persistComplete(url, destPath, expectedSHA, finalSHA, h.etag, h.lastMod, h.size, nil)
 	if e.metrics != nil {
 		e.metrics.IncDownloadsSuccess()
 		e.metrics.ObserveDownloadSeconds(time.Since(startTime).Seconds())

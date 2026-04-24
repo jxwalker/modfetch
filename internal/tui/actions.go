@@ -28,13 +28,68 @@ func (m *Model) recoverCmd() tea.Cmd {
 		var todo []state.DownloadRow
 		for _, r := range rows {
 			st := strings.ToLower(strings.TrimSpace(r.Status))
-			if st == "running" || st == "hold" {
-				// Skip completed
+			if st == "running" {
+				if m.reconcileRecoveredRow(r) {
+					continue
+				}
 				todo = append(todo, r)
 			}
 		}
 		return recoverRowsMsg{rows: todo}
 	}
+}
+
+func (m *Model) reconcileRecoveredRow(r state.DownloadRow) bool {
+	fi, err := os.Stat(r.Dest)
+	if err != nil || fi.IsDir() {
+		return false
+	}
+	part := downloader.StagePartPath(m.cfg, r.URL, r.Dest)
+	if _, err := os.Stat(part); err == nil {
+		return false
+	}
+	if r.Size > 0 && fi.Size() != r.Size {
+		return false
+	}
+	actualSHA := strings.TrimSpace(r.ActualSHA256)
+	if actualSHA == "" {
+		actualSHA = readSHA256Sidecar(r.Dest + ".sha256")
+	}
+	_ = m.st.UpsertDownload(state.DownloadRow{
+		URL:            r.URL,
+		Dest:           r.Dest,
+		ExpectedSHA256: r.ExpectedSHA256,
+		ActualSHA256:   actualSHA,
+		ETag:           r.ETag,
+		LastModified:   r.LastModified,
+		Size:           maxInt64(r.Size, fi.Size()),
+		Status:         "complete",
+		LastError:      "recovered terminal state from finalized artifact on startup",
+	})
+	return true
+}
+
+func readSHA256Sidecar(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	fields := strings.Fields(string(b))
+	if len(fields) == 0 {
+		return ""
+	}
+	sum := strings.TrimSpace(fields[0])
+	if len(sum) == 64 {
+		return sum
+	}
+	return ""
+}
+
+func maxInt64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func (m *Model) selectionOrCurrent() []state.DownloadRow {
