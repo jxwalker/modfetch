@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -468,11 +469,18 @@ func handleDownload(ctx context.Context, args []string) error {
 
 		go func() {
 			defer close(jobs)
+			items := make([]jobItem, 0, len(bf.Jobs))
 			for i, job := range bf.Jobs {
+				items = append(items, jobItem{idx: i, job: job})
+			}
+			sort.SliceStable(items, func(i, j int) bool {
+				return items[i].job.Priority > items[j].job.Priority
+			})
+			for _, item := range items {
 				select {
 				case <-gctx.Done():
 					return
-				case jobs <- jobItem{idx: i, job: job}:
+				case jobs <- item:
 				}
 			}
 		}()

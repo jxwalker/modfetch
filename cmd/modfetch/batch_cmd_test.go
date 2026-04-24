@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/jxwalker/modfetch/internal/batch"
@@ -120,5 +121,75 @@ func TestDownloadBatch_UsesOrderedMirrorFallback(t *testing.T) {
 	}
 	if string(got) != "mirror ok" {
 		t.Fatalf("expected mirror content, got %q", string(got))
+	}
+}
+
+func TestDownloadBatch_EnqueuesHigherPriorityFirst(t *testing.T) {
+	d := t.TempDir()
+	cfgPath := filepath.Join(d, "config.yaml")
+	downloadRoot := filepath.Join(d, "downloads")
+	if err := os.MkdirAll(downloadRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "version: 1\n" +
+		"general:\n" +
+		"  data_root: " + fmt.Sprintf("%q", d) + "\n" +
+		"  download_root: " + fmt.Sprintf("%q", downloadRoot) + "\n" +
+		"concurrency:\n" +
+		"  per_host_requests: 1\n" +
+		"  max_retries: 1\n"
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu sync.Mutex
+	var order []string
+	mkServer := func(name, body string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodHead {
+				w.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			mu.Lock()
+			order = append(order, name)
+			mu.Unlock()
+			_, _ = w.Write([]byte(body))
+		}))
+	}
+	low := mkServer("low", "low")
+	defer low.Close()
+	high := mkServer("high", "high")
+	defer high.Close()
+
+	batchPath := filepath.Join(d, "jobs.yaml")
+	batchYAML := "version: 1\njobs:\n" +
+		"  - uri: \"" + low.URL + "/model.bin\"\n" +
+		"    priority: 1\n" +
+		"    dest: \"" + filepath.Join(downloadRoot, "low.bin") + "\"\n" +
+		"  - uri: \"" + high.URL + "/model.bin\"\n" +
+		"    priority: 10\n" +
+		"    dest: \"" + filepath.Join(downloadRoot, "high.bin") + "\"\n"
+	if err := os.WriteFile(batchPath, []byte(batchYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	args := []string{"--config", cfgPath, "--batch", batchPath, "--batch-parallel", "1", "--quiet"}
+	if err := handleDownload(context.Background(), args); err != nil {
+		t.Fatalf("download batch failed: %v", err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	firstHigh, firstLow := -1, -1
+	for i, name := range order {
+		if name == "high" && firstHigh < 0 {
+			firstHigh = i
+		}
+		if name == "low" && firstLow < 0 {
+			firstLow = i
+		}
+	}
+	if firstHigh < 0 || firstLow < 0 || firstHigh > firstLow {
+		t.Fatalf("expected high priority first, got %v", order)
 	}
 }

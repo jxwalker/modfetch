@@ -27,7 +27,7 @@ Priority 3 — User experience
   - Factor large models into smaller components; refine sort/group/columns; persistence of selection when filtering; progress accuracy during planning.
 - Progress persistence across sessions [IMPL]
 - Adaptive retry/backoff by error type [IMPL]
-- Download queue management with priorities [NEW]
+- Download queue management with priorities [IMPL]
 
 Priority 4 — Quality improvements
 - Rich, structured error context with remediation hints [NEW]

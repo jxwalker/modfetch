@@ -18,6 +18,8 @@ BatchJob fields:
   - Examples: `https://...`, `hf://owner/repo/path?rev=main`, `civitai://model/123456?version=42&file=vae`
 - mirrors: array of strings (optional)
   - Ordered fallback direct HTTP(S) URLs or resolver URIs. The primary `uri` is tried first; mirrors are tried in listed order using the same destination and SHA256 expectation.
+- priority: integer (optional; default 0)
+  - Higher-priority jobs are enqueued first. Jobs with the same priority keep their file order.
 - dest: string (optional)
   - Destination file path. If omitted:
     - For civitai:// URIs: modfetch saves to `<general.download_root>/<ModelName> - <OriginalFileName>` (sanitized), with collision-safe suffixes.
@@ -38,6 +40,7 @@ BatchJob fields:
 version: 1
 jobs:
   - uri: "https://proof.ovh.net/files/1Mb.dat"
+    priority: 10
     mirrors:
       - "https://proof.ovh.net/files/1Mb.dat"
     place: false
