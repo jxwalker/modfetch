@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
@@ -23,6 +24,13 @@ type Manager struct {
 	retriesTotal     atomic.Int64
 	downloadsSuccess atomic.Int64
 	lastDownloadSec  atomic.Float64
+	downloadSecSum   atomic.Float64
+	downloadSecCount atomic.Int64
+	downloadSecLe1   atomic.Int64
+	downloadSecLe5   atomic.Int64
+	downloadSecLe30  atomic.Int64
+	downloadSecLe120 atomic.Int64
+	downloadSecLe600 atomic.Int64
 	activeDownloads  atomic.Int64
 }
 
@@ -81,7 +89,27 @@ func (m *Manager) ObserveDownloadSeconds(sec float64) {
 	if m == nil {
 		return
 	}
+	if sec < 0 || math.IsNaN(sec) || math.IsInf(sec, 0) {
+		return
+	}
 	m.lastDownloadSec.Store(sec)
+	m.downloadSecSum.Add(sec)
+	m.downloadSecCount.Add(1)
+	if sec <= 1 {
+		m.downloadSecLe1.Add(1)
+	}
+	if sec <= 5 {
+		m.downloadSecLe5.Add(1)
+	}
+	if sec <= 30 {
+		m.downloadSecLe30.Add(1)
+	}
+	if sec <= 120 {
+		m.downloadSecLe120.Add(1)
+	}
+	if sec <= 600 {
+		m.downloadSecLe600.Add(1)
+	}
 }
 
 func (m *Manager) IncActive(n int64) {
@@ -149,6 +177,36 @@ func (m *Manager) Write() error {
 		return err
 	}
 	if _, err := fmt.Fprintf(f, "modfetch_last_download_seconds %.6f\n", m.lastDownloadSec.Load()); err != nil {
+		return err
+	}
+
+	if _, err := fmt.Fprintf(f, "# HELP modfetch_download_seconds Duration distribution for completed downloads in seconds.\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "# TYPE modfetch_download_seconds histogram\n"); err != nil {
+		return err
+	}
+	count := m.downloadSecCount.Load()
+	buckets := []struct {
+		le    string
+		count int64
+	}{
+		{le: "1", count: m.downloadSecLe1.Load()},
+		{le: "5", count: m.downloadSecLe5.Load()},
+		{le: "30", count: m.downloadSecLe30.Load()},
+		{le: "120", count: m.downloadSecLe120.Load()},
+		{le: "600", count: m.downloadSecLe600.Load()},
+		{le: "+Inf", count: count},
+	}
+	for _, bucket := range buckets {
+		if _, err := fmt.Fprintf(f, "modfetch_download_seconds_bucket{le=%q} %d\n", bucket.le, bucket.count); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintf(f, "modfetch_download_seconds_sum %.6f\n", m.downloadSecSum.Load()); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "modfetch_download_seconds_count %d\n", count); err != nil {
 		return err
 	}
 
