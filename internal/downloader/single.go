@@ -288,6 +288,17 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error", LastError: ioMsg})
 		return "", "", errors.New(ioMsg)
 	}
+	if size > 0 {
+		fi, statErr := f.Stat()
+		if statErr != nil {
+			return "", "", statErr
+		}
+		if fi.Size() != size {
+			msg := fmt.Sprintf("download size mismatch: expected=%d actual=%d", size, fi.Size())
+			_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error", LastError: msg})
+			return "", "", errors.New(msg)
+		}
+	}
 	// Ensure file data is durable before rename
 	_ = f.Sync()
 	if ctx.Err() != nil {

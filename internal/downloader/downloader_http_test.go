@@ -173,6 +173,56 @@ func TestFallback_NoRangeSupport(t *testing.T) {
 	}
 }
 
+func TestSingleRejectsShortBodyAgainstHeadSize(t *testing.T) {
+	tmp := t.TempDir()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/short.bin", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Length", "6")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if r.Method == http.MethodGet {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("abc"))
+			return
+		}
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	cfgPath := filepath.Join(tmp, "cfg.yml")
+	cfgYaml := []byte(strings.Join([]string{
+		"version: 1",
+		"general:",
+		"  data_root: \"" + tmp + "/data\"",
+		"  download_root: \"" + tmp + "/dl\"",
+		"  stage_partials: false",
+	}, "\n"))
+	if err := os.WriteFile(cfgPath, cfgYaml, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	st, err := state.Open(cfg)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	defer func() { _ = st.SQL.Close() }()
+
+	dl := NewSingle(cfg, logging.New("error", false), st, nil)
+	_, _, err = dl.Download(context.Background(), ts.URL+"/short.bin", "", "", nil, false)
+	if err == nil {
+		t.Fatal("expected size mismatch error")
+	}
+	if !strings.Contains(err.Error(), "download size mismatch") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 // Test corruption of one chunk on first attempt and repair on retry using expected SHA.
 func TestChunked_CorruptOneChunkThenRepair(t *testing.T) {
 	tmp := t.TempDir()
