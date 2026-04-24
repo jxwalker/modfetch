@@ -496,12 +496,12 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 			return "", ctx.Err()
 		}
 		lastErr = err
-		if e.metrics != nil {
-			e.metrics.IncRetries(1)
-		}
-		_ = e.st.IncDownloadRetries(url, destPath, 1)
 		// backoff or honor Retry-After for 429 if enabled
 		if rle, ok := err.(rateLimitedError); ok && e.cfg.Network.RetryOnRateLimit {
+			if e.metrics != nil {
+				e.metrics.IncRetries(1)
+			}
+			_ = e.st.IncDownloadRetries(url, destPath, 1)
 			wait := rle.after
 			capSec := e.cfg.Network.RateLimitMaxDelaySeconds
 			if capSec <= 0 {
@@ -537,6 +537,13 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 			_ = e.st.UpdateDownloadStatus(url, destPath, "running", "")
 			continue
 		}
+		if !isRetryableDownloadError(err) {
+			return "", err
+		}
+		if e.metrics != nil {
+			e.metrics.IncRetries(1)
+		}
+		_ = e.st.IncDownloadRetries(url, destPath, 1)
 		// default backoff
 		b := e.cfg.Concurrency.Backoff
 		min := b.MinMS
@@ -583,7 +590,7 @@ func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *
 	// Require 206 for partial ranges; allow 200 only if the requested range is the entire file
 	if resp.StatusCode == http.StatusOK {
 		if c.Start != 0 || c.End != h.size-1 {
-			return "", fmt.Errorf("chunk %d: server ignored Range; got 200 for partial request", c.Index)
+			return "", nonRetryableError{err: fmt.Errorf("chunk %d: server ignored Range; got 200 for partial request", c.Index)}
 		}
 	} else if resp.StatusCode != http.StatusPartialContent {
 		// Friendly error for common cases; include chunk index for context
@@ -603,7 +610,7 @@ func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *
 			hadAuth = true
 		}
 		msg := friendlyHTTPStatusMessage(e.cfg, host, resp.StatusCode, resp.Status, hadAuth)
-		return "", fmt.Errorf("chunk %d: %s", c.Index, msg)
+		return "", httpStatusError{statusCode: resp.StatusCode, msg: fmt.Sprintf("chunk %d: %s", c.Index, msg)}
 	}
 	// Write this chunk using a WriteAt-backed offset writer to avoid concurrent Seek/Write races
 	hasher := sha256.New()
@@ -682,9 +689,9 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 			return "", "", ctx.Err()
 		}
 		lastErr = err
-		_ = e.st.IncDownloadRetries(url, destPath, 1)
 		// backoff between attempts; honor Retry-After if enabled
 		if rle, ok := err.(rateLimitedError); ok && e.cfg.Network.RetryOnRateLimit {
+			_ = e.st.IncDownloadRetries(url, destPath, 1)
 			wait := rle.after
 			capSec := e.cfg.Network.RateLimitMaxDelaySeconds
 			if capSec <= 0 {
@@ -705,6 +712,10 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 				continue
 			}
 		}
+		if !isRetryableDownloadError(err) {
+			return "", "", err
+		}
+		_ = e.st.IncDownloadRetries(url, destPath, 1)
 		b := e.cfg.Concurrency.Backoff
 		min := b.MinMS
 		if min <= 0 {

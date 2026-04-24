@@ -26,7 +26,7 @@ Priority 3 — User experience
 - TUI refactor and feature polish [NEW]
   - Factor large models into smaller components; refine sort/group/columns; persistence of selection when filtering; progress accuracy during planning.
 - Progress persistence across sessions [NEW]
-- Adaptive retry/backoff by error type [NEW]
+- Adaptive retry/backoff by error type [IMPL]
 - Download queue management with priorities [NEW]
 
 Priority 4 — Quality improvements

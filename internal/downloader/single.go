@@ -264,7 +264,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		}
 		msg := friendlyHTTPStatusMessage(s.cfg, host, resp.StatusCode, resp.Status, hadAuth)
 		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error", LastError: msg})
-		return "", "", errors.New(msg)
+		return "", "", httpStatusError{statusCode: resp.StatusCode, msg: msg}
 	}
 
 	// Do not preallocate for single-stream so that .part size reflects real progress
@@ -291,7 +291,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	actualSHA := hex.EncodeToString(hasher.Sum(nil))
 	if expectedSHA != "" && !equalSHA(expectedSHA, actualSHA) {
 		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "checksum_mismatch"})
-		return "", actualSHA, fmt.Errorf("sha256 mismatch: expected=%s actual=%s", expectedSHA, actualSHA)
+		return "", actualSHA, checksumMismatchError{msg: fmt.Sprintf("sha256 mismatch: expected=%s actual=%s", expectedSHA, actualSHA)}
 	}
 
 	// Move to final (cross-filesystem safe)

@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"errors"
 	"fmt"
 	stdhttp "net/http"
 	neturl "net/url"
@@ -20,6 +21,57 @@ type rateLimitedError struct {
 }
 
 func (e rateLimitedError) Error() string { return e.msg }
+
+type httpStatusError struct {
+	statusCode int
+	msg        string
+}
+
+func (e httpStatusError) Error() string { return e.msg }
+
+type checksumMismatchError struct {
+	msg string
+}
+
+func (e checksumMismatchError) Error() string { return e.msg }
+
+type nonRetryableError struct {
+	err error
+}
+
+func (e nonRetryableError) Error() string { return e.err.Error() }
+func (e nonRetryableError) Unwrap() error { return e.err }
+
+func isRetryableDownloadError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var nonRetryable nonRetryableError
+	if errors.As(err, &nonRetryable) {
+		return false
+	}
+	var checksum checksumMismatchError
+	if errors.As(err, &checksum) {
+		return false
+	}
+	var status httpStatusError
+	if errors.As(err, &status) {
+		return retryableHTTPStatus(status.statusCode)
+	}
+	var rateLimited rateLimitedError
+	if errors.As(err, &rateLimited) {
+		return true
+	}
+	return true
+}
+
+func retryableHTTPStatus(statusCode int) bool {
+	switch statusCode {
+	case stdhttp.StatusRequestTimeout, stdhttp.StatusTooEarly, stdhttp.StatusTooManyRequests:
+		return true
+	}
+	return statusCode == 0 || statusCode >= 500
+}
 
 func parseRetryAfter(raw string) time.Duration {
 	s := strings.TrimSpace(raw)
