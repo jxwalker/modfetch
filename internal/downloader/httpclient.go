@@ -9,10 +9,24 @@ import (
 	neturl "net/url"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jxwalker/modfetch/internal/config"
 )
+
+type dnsCacheEntry struct {
+	addrs   []net.IPAddr
+	expires time.Time
+}
+
+type cachingDialer struct {
+	base     *net.Dialer
+	resolver *net.Resolver
+	ttl      time.Duration
+	mu       sync.Mutex
+	cache    map[string]dnsCacheEntry
+}
 
 func newHTTPClient(cfg *config.Config) *http.Client {
 	timeoutSeconds := 0
@@ -27,12 +41,23 @@ func newHTTPClient(cfg *config.Config) *http.Client {
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
+	baseDialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	dialContext := baseDialer.DialContext
+	if cfg != nil && cfg.Network.DNSCacheTTLSeconds > 0 {
+		dialContext = (&cachingDialer{
+			base:     baseDialer,
+			resolver: net.DefaultResolver,
+			ttl:      time.Duration(cfg.Network.DNSCacheTTLSeconds) * time.Second,
+			cache:    map[string]dnsCacheEntry{},
+		}).DialContext
+	}
+
 	tr := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           dialContext,
 		TLSHandshakeTimeout:   10 * time.Second,
 		IdleConnTimeout:       90 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
@@ -68,6 +93,57 @@ func newHTTPClient(cfg *config.Config) *http.Client {
 		return nil
 	}
 	return client
+}
+
+func (d *cachingDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil || d == nil || d.ttl <= 0 || net.ParseIP(host) != nil {
+		return d.base.DialContext(ctx, network, address)
+	}
+	addrs, err := d.lookup(ctx, network, host)
+	if err != nil || len(addrs) == 0 {
+		return d.base.DialContext(ctx, network, address)
+	}
+	var lastErr error
+	for _, addr := range addrs {
+		ip := addr.IP
+		if network == "tcp4" && ip.To4() == nil {
+			continue
+		}
+		if network == "tcp6" && ip.To4() != nil {
+			continue
+		}
+		conn, err := d.base.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+		if err == nil {
+			return conn, nil
+		}
+		lastErr = err
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return d.base.DialContext(ctx, network, address)
+}
+
+func (d *cachingDialer) lookup(ctx context.Context, network, host string) ([]net.IPAddr, error) {
+	key := network + "|" + strings.ToLower(host)
+	now := time.Now()
+	d.mu.Lock()
+	if entry, ok := d.cache[key]; ok && now.Before(entry.expires) {
+		addrs := append([]net.IPAddr(nil), entry.addrs...)
+		d.mu.Unlock()
+		return addrs, nil
+	}
+	d.mu.Unlock()
+
+	addrs, err := d.resolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	d.mu.Lock()
+	d.cache[key] = dnsCacheEntry{addrs: append([]net.IPAddr(nil), addrs...), expires: now.Add(d.ttl)}
+	d.mu.Unlock()
+	return addrs, nil
 }
 
 // userAgent returns the configured User-Agent, or a sensible default

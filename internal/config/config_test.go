@@ -38,6 +38,20 @@ func TestValidateRejectsNegativeBandwidthLimits(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsNegativeDNSCacheTTL(t *testing.T) {
+	c := Config{
+		Version: 1,
+		General: General{
+			DataRoot:     t.TempDir(),
+			DownloadRoot: t.TempDir(),
+		},
+	}
+	c.Network.DNSCacheTTLSeconds = -1
+	if err := c.Validate(); err == nil {
+		t.Fatal("expected negative DNS cache TTL to fail validation")
+	}
+}
+
 func TestValidateRejectsNegativeConcurrencyValues(t *testing.T) {
 	base := Config{
 		Version: 1,

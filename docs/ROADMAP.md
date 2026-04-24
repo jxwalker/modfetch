@@ -60,7 +60,7 @@ Technical debt
 
 Performance optimizations
 - Pre-allocate/truncate files in chunked mode (done) and consider parallel chunk verification [NEW]
-- DNS result caching for repeated hosts [NEW]
+- DNS result caching for repeated hosts [IMPL]
 - Adaptive chunk size based on throughput [NEW]
 
 Breaking changes to consider for v1.0

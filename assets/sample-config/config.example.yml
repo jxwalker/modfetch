@@ -18,6 +18,8 @@ network:
   # Optional bandwidth caps in bytes/second. 0 or omitted means unlimited.
   # global_bandwidth_bytes_per_second: 0
   # per_download_bandwidth_bytes_per_second: 0
+  # Optional DNS cache TTL in seconds for repeated hosts. 0 or omitted disables caching.
+  # dns_cache_ttl_seconds: 60
   # Respect HTTP 429 Retry-After for retries (optional)
   # retry_on_rate_limit: false
   # Cap waits derived from Retry-After (seconds)
