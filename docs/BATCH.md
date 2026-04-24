@@ -16,6 +16,8 @@ BatchJob fields:
 - uri: string (required)
   - Direct HTTP(S) or resolver URI
   - Examples: `https://...`, `hf://owner/repo/path?rev=main`, `civitai://model/123456?version=42&file=vae`
+- mirrors: array of strings (optional)
+  - Ordered fallback direct HTTP(S) URLs or resolver URIs. The primary `uri` is tried first; mirrors are tried in listed order using the same destination and SHA256 expectation.
 - dest: string (optional)
   - Destination file path. If omitted:
     - For civitai:// URIs: modfetch saves to `<general.download_root>/<ModelName> - <OriginalFileName>` (sanitized), with collision-safe suffixes.
@@ -36,6 +38,8 @@ BatchJob fields:
 version: 1
 jobs:
   - uri: "https://proof.ovh.net/files/1Mb.dat"
+    mirrors:
+      - "https://proof.ovh.net/files/1Mb.dat"
     place: false
 
   - uri: "hf://gpt2/README.md?rev=main"
@@ -70,4 +74,3 @@ Notes:
 - Tokens for gated resources must come from environment variables (HF_TOKEN, CIVITAI_TOKEN). Do not put secrets in YAML.
 - Chunked downloads are used when supported; otherwise modfetch falls back to single-stream and resumes via `.part` files.
 - On re-run, downloads will resume and verify integrity; placement dedupes by SHA256 if `allow_overwrite: false`.
-

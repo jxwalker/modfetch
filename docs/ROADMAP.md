@@ -16,7 +16,7 @@ Priority 1 — Critical reliability and performance
 
 Priority 2 — Core functionality gaps
 - Bandwidth throttling (per-download and global) [IMPL]
-- Mirror/fallback URLs with ordered failover [NEW]
+- Mirror/fallback URLs with ordered failover [IMPL]
 - Partial verification during single-stream downloads [NEW]
   - Periodic checkpoints; chunked mode already verifies per-chunk.
 - Connection pool management [IMPL]

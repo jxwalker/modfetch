@@ -13,12 +13,13 @@ type File struct {
 }
 
 type BatchJob struct {
-	URI    string `yaml:"uri"`
-	Dest   string `yaml:"dest"`
-	SHA256 string `yaml:"sha256"`
-	Type   string `yaml:"type"`
-	Place  bool   `yaml:"place"`
-	Mode   string `yaml:"mode"` // symlink|hardlink|copy
+	URI     string   `yaml:"uri"`
+	Mirrors []string `yaml:"mirrors"`
+	Dest    string   `yaml:"dest"`
+	SHA256  string   `yaml:"sha256"`
+	Type    string   `yaml:"type"`
+	Place   bool     `yaml:"place"`
+	Mode    string   `yaml:"mode"` // symlink|hardlink|copy
 }
 
 func Load(path string) (*File, error) {

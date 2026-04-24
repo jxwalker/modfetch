@@ -389,7 +389,40 @@ func handleDownload(ctx context.Context, args []string) error {
 						if *forceSkip {
 							expected = ""
 						}
-						final, sum, err := dl.Download(gctx, resolvedURL, destCandidate, expected, headers, false)
+						type downloadCandidate struct {
+							url     string
+							headers map[string]string
+						}
+						candidates := []downloadCandidate{{url: resolvedURL, headers: headers}}
+						for _, mirror := range job.Mirrors {
+							mirror = strings.TrimSpace(mirror)
+							if mirror == "" {
+								continue
+							}
+							mirrorURL, mirrorHeaders, err := resolveBatchDownloadCandidate(gctx, c, mirror)
+							if err != nil {
+								return fmt.Errorf("job %d mirror resolve %q: %w", it.idx, mirror, err)
+							}
+							candidates = append(candidates, downloadCandidate{url: mirrorURL, headers: mirrorHeaders})
+						}
+						var final, sum string
+						var err error
+						for attempt, candidate := range candidates {
+							final, sum, err = dl.Download(gctx, candidate.url, destCandidate, expected, candidate.headers, false)
+							if err == nil {
+								if attempt > 0 {
+									logMu.Lock()
+									log.Infof("job %d: mirror succeeded after %d failed source(s): %s", it.idx, attempt, logging.SanitizeURL(candidate.url))
+									logMu.Unlock()
+								}
+								break
+							}
+							if attempt < len(candidates)-1 {
+								logMu.Lock()
+								log.Warnf("job %d: source failed, trying mirror: %s (%v)", it.idx, logging.SanitizeURL(candidate.url), err)
+								logMu.Unlock()
+							}
+						}
 						if err != nil {
 							return fmt.Errorf("job %d download: %w", it.idx, err)
 						}
@@ -933,6 +966,39 @@ func handleClean(ctx context.Context, args []string) error {
 		log.Warnf("errors: %v", errs)
 	}
 	return nil
+}
+
+func resolveBatchDownloadCandidate(ctx context.Context, c *config.Config, uri string) (string, map[string]string, error) {
+	headers := map[string]string{}
+	if strings.HasPrefix(uri, "hf://") || strings.HasPrefix(uri, "civitai://") {
+		res, err := resolver.Resolve(ctx, uri, c)
+		if err != nil {
+			return "", nil, err
+		}
+		return res.URL, res.Headers, nil
+	}
+	if u, err := neturl.Parse(uri); err == nil {
+		h := strings.ToLower(u.Hostname())
+		if hostIs(h, "civitai.com") && c.Sources.CivitAI.Enabled {
+			env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv)
+			if env == "" {
+				env = "CIVITAI_TOKEN"
+			}
+			if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+				headers["Authorization"] = "Bearer " + tok
+			}
+		}
+		if hostIs(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
+			env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv)
+			if env == "" {
+				env = "HF_TOKEN"
+			}
+			if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+				headers["Authorization"] = "Bearer " + tok
+			}
+		}
+	}
+	return uri, headers, nil
 }
 
 func configOp(args []string, fn func(*config.Config, *logging.Logger) error) error {
