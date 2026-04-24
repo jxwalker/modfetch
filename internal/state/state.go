@@ -257,6 +257,9 @@ func (db *DB) DeleteDownloadAndChunks(url, dest string) error {
 func (db *DB) ReplaceDownloadURL(oldURL string, row DownloadRow) error {
 	return db.WithTx(func(tx *sql.Tx) error {
 		if oldURL != row.URL {
+			if err := db.DeleteChunksTx(tx, oldURL, row.Dest); err != nil {
+				return err
+			}
 			if err := db.DeleteDownloadTx(tx, oldURL, row.Dest); err != nil {
 				return err
 			}

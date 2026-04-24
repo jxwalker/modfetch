@@ -65,8 +65,8 @@ func NewSingle(cfg *config.Config, log *logging.Logger, st *state.DB, m interfac
 	ObserveDownloadSeconds(float64)
 	Write() error
 }) *Single {
-	global, perDownload := configuredBandwidthLimiters(cfg)
-	return newSingleWithClientAndLimiters(cfg, log, st, m, newHTTPClient(cfg), global, perDownload)
+	global, _ := configuredBandwidthLimiters(cfg)
+	return newSingleWithClientAndLimiters(cfg, log, st, m, newHTTPClient(cfg), global, nil)
 }
 
 func newSingleWithClient(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
@@ -75,8 +75,8 @@ func newSingleWithClient(cfg *config.Config, log *logging.Logger, st *state.DB, 
 	ObserveDownloadSeconds(float64)
 	Write() error
 }, client *http.Client) *Single {
-	global, perDownload := configuredBandwidthLimiters(cfg)
-	return newSingleWithClientAndLimiters(cfg, log, st, m, client, global, perDownload)
+	global, _ := configuredBandwidthLimiters(cfg)
+	return newSingleWithClientAndLimiters(cfg, log, st, m, client, global, nil)
 }
 
 func newSingleWithClientAndLimiters(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
@@ -105,6 +105,10 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	if url == "" {
 		return "", "", errors.New("url required")
 	}
+	perDownloadLimiter := s.perDownloadLimiter
+	if perDownloadLimiter == nil {
+		perDownloadLimiter = newPerDownloadBandwidthLimiter(s.cfg)
+	}
 	if destPath == "" {
 		destPath = filepath.Join(s.cfg.General.DownloadRoot, util.SafeFileName(util.URLPathBase(url)))
 	}
@@ -132,9 +136,10 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	s.log.Debugf("HEAD: etag=%s last-mod=%s size=%d range=%v", etag, lastMod, size, rangeOK)
 	_ = s.st.ClearChunksAndUpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "planning"})
 
+	completed := false
 	// Cleanup on cancellation
 	defer func() {
-		if ctx.Err() != nil {
+		if ctx.Err() != nil && !completed {
 			_ = os.Remove(part)
 			_ = s.st.ClearChunksAndUpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "canceled"})
 		}
@@ -245,6 +250,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 				return "", "", err
 			}
 			_ = fsyncDir(filepath.Dir(destPath))
+			completed = true
 			_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "complete"})
 			if s.metrics != nil {
 				s.metrics.IncDownloadsSuccess()
@@ -269,7 +275,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 
 	// Do not preallocate for single-stream so that .part size reflects real progress
 	mw := io.MultiWriter(f, hasher)
-	body := newThrottledReader(ctx, resp.Body, s.perDownloadLimiter, s.globalLimiter)
+	body := newThrottledReader(ctx, resp.Body, perDownloadLimiter, s.globalLimiter)
 	nWritten, err := io.Copy(mw, body)
 	if s.metrics != nil && nWritten > 0 {
 		s.metrics.AddBytes(nWritten)
@@ -325,6 +331,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	}
 	// Fsync parent directory to persist rename and sidecar
 	_ = fsyncDir(filepath.Dir(destPath))
+	completed = true
 	_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "complete"})
 	if s.metrics != nil {
 		s.metrics.IncDownloadsSuccess()

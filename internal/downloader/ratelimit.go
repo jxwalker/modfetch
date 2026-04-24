@@ -22,11 +22,11 @@ func configuredBandwidthLimiters(cfg *config.Config) (global, perDownload *bandw
 		return nil, nil
 	}
 	if bps := cfg.Network.GlobalBandwidthBytesPerSecond; bps > 0 {
-		if existing, ok := globalBandwidthLimiters.Load(cfg); ok {
+		if existing, ok := globalBandwidthLimiters.Load(bps); ok {
 			global = existing.(*bandwidthLimiter)
 		} else {
 			limiter := newBandwidthLimiter(bps)
-			existing, _ := globalBandwidthLimiters.LoadOrStore(cfg, limiter)
+			existing, _ := globalBandwidthLimiters.LoadOrStore(bps, limiter)
 			global = existing.(*bandwidthLimiter)
 		}
 	}
@@ -34,6 +34,13 @@ func configuredBandwidthLimiters(cfg *config.Config) (global, perDownload *bandw
 		perDownload = newBandwidthLimiter(bps)
 	}
 	return global, perDownload
+}
+
+func newPerDownloadBandwidthLimiter(cfg *config.Config) *bandwidthLimiter {
+	if cfg == nil {
+		return nil
+	}
+	return newBandwidthLimiter(cfg.Network.PerDownloadBandwidthBytesPerSecond)
 }
 
 func newBandwidthLimiter(bytesPerSecond int64) *bandwidthLimiter {

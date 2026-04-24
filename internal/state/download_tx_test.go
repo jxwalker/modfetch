@@ -92,9 +92,12 @@ func TestReplaceDownloadURL(t *testing.T) {
 	db := testDownloadDB(t)
 
 	oldURL := "hf://owner/repo/file.gguf"
-	dest := "/tmp/file.gguf"
+	dest := filepath.Join(t.TempDir(), "file.gguf")
 	if err := db.UpsertDownload(DownloadRow{URL: oldURL, Dest: dest, Status: "pending"}); err != nil {
 		t.Fatalf("upsert original: %v", err)
+	}
+	if err := db.UpsertChunk(ChunkRow{URL: oldURL, Dest: dest, Index: 0, Start: 0, End: 9, Size: 10, Status: "pending"}); err != nil {
+		t.Fatalf("upsert original chunk: %v", err)
 	}
 
 	newURL := "https://cdn.example.com/file.gguf"
@@ -119,5 +122,12 @@ func TestReplaceDownloadURL(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("expected old row to be removed, got %d", count)
+	}
+	chunks, err := db.ListChunks(oldURL, dest)
+	if err != nil {
+		t.Fatalf("list old chunks: %v", err)
+	}
+	if len(chunks) != 0 {
+		t.Fatalf("expected old chunks to be removed, got %d", len(chunks))
 	}
 }

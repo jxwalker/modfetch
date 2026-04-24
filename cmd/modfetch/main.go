@@ -408,7 +408,7 @@ func handleDownload(ctx context.Context, args []string) error {
 						var final, sum string
 						var err error
 						for attempt, candidate := range candidates {
-							final, sum, err = dl.Download(gctx, candidate.url, destCandidate, expected, candidate.headers, false)
+							final, sum, err = dl.Download(gctx, candidate.url, destCandidate, expected, candidate.headers, attempt > 0)
 							if err == nil {
 								if attempt > 0 {
 									logMu.Lock()
@@ -418,8 +418,10 @@ func handleDownload(ctx context.Context, args []string) error {
 								break
 							}
 							if attempt < len(candidates)-1 {
+								_ = st.DeleteDownloadAndChunks(candidate.url, destCandidate)
+								next := logging.SanitizeURL(candidates[attempt+1].url)
 								logMu.Lock()
-								log.Warnf("job %d: source failed, trying mirror: %s (%v)", it.idx, logging.SanitizeURL(candidate.url), err)
+								log.Warnf("job %d: source failed: %s (%v); trying next source: %s", it.idx, logging.SanitizeURL(candidate.url), err, next)
 								logMu.Unlock()
 							}
 						}

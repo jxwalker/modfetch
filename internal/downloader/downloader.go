@@ -45,6 +45,5 @@ func NewAuto(c *config.Config, l *logging.Logger, st *state.DB, m interface {
 
 func (a *Auto) Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string, noResume bool) (string, string, error) {
 	// Delegate to chunked downloader which handles head probe and fallback.
-	_, perDownload := configuredBandwidthLimiters(a.c)
-	return newChunkedWithClientAndLimiters(a.c, a.l, a.st, a.m, a.client, a.globalLimiter, perDownload).Download(ctx, url, destPath, expectedSHA, headers, noResume)
+	return newChunkedWithClientAndLimiters(a.c, a.l, a.st, a.m, a.client, a.globalLimiter, nil).Download(ctx, url, destPath, expectedSHA, headers, noResume)
 }
