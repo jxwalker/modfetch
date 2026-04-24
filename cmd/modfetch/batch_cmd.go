@@ -247,7 +247,7 @@ func handleBatchImport(ctx context.Context, args []string) error {
 		// Probe for filename and final URL
 		meta, err := downloader.ProbeURL(ctx, c, probeURL, headers)
 		if err != nil {
-			log.Warnf("line %d: probe failed for %s: %v", lineNum, probeURL, err)
+			log.Warnf("line %d: probe failed for %s: %v", lineNum, logging.SanitizeURL(probeURL), logging.SanitizeError(err))
 		}
 		// If no dest provided yet, choose a good one
 		if strings.TrimSpace(jDest) == "" {
@@ -269,7 +269,7 @@ func handleBatchImport(ctx context.Context, args []string) error {
 
 		// Maybe compute SHA256 by streaming; this is heavy
 		if strings.EqualFold(strings.TrimSpace(*shaMode), "compute") && strings.TrimSpace(jSHA) == "" {
-			log.Infof("computing sha256 for %s (this may take a while)", uri)
+			log.Infof("computing sha256 for %s (this may take a while)", logging.SanitizeURL(uri))
 			sha, err := downloader.ComputeRemoteSHA256(ctx, c, probeURL, headers)
 			if err != nil {
 				return fmt.Errorf("line %d: compute sha: %w", lineNum, err)

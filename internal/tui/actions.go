@@ -343,7 +343,7 @@ func (m *Model) fetchAndStoreMetadataCmd(url, dest, path string) tea.Cmd {
 		if err != nil {
 			// Log error but don't fail - metadata is optional
 			if m.log != nil {
-				m.log.Debugf("metadata fetch failed for %s: %v", url, err)
+				m.log.Debugf("metadata fetch failed for %s: %v", logging.SanitizeURL(url), logging.SanitizeError(err))
 			}
 			return nil
 		}
@@ -362,13 +362,13 @@ func (m *Model) fetchAndStoreMetadataCmd(url, dest, path string) tea.Cmd {
 		// Store metadata in database
 		if err := m.st.UpsertMetadata(meta); err != nil {
 			if m.log != nil {
-				m.log.Debugf("metadata storage failed for %s: %v", url, err)
+				m.log.Debugf("metadata storage failed for %s: %v", logging.SanitizeURL(url), logging.SanitizeError(err))
 			}
 			return nil
 		}
 
 		if m.log != nil {
-			m.log.Debugf("stored metadata for %s (%s)", meta.ModelName, url)
+			m.log.Debugf("stored metadata for %s (%s)", meta.ModelName, logging.SanitizeURL(url))
 		}
 
 		return metadataStoredMsg{url: url, modelName: meta.ModelName}

@@ -147,7 +147,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		} else {
 			// As a last resort, resolve signed redirect then retry probe on the final URL
 			if ru, ok := resolveRedirectURL(e.client, url, headers, userAgent(e.cfg)); ok {
-				e.log.Debugf("resolved redirect -> %s", ru)
+				e.log.Debugf("resolved redirect -> %s", logging.SanitizeURL(ru))
 				url = ru
 				// Do not forward Authorization to different host
 				if u1, _ := neturl.Parse(ru); u1 != nil {
@@ -199,7 +199,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		}
 	}
 	if err != nil || h.size <= 0 || !h.acceptRange {
-		e.log.WarnfThrottled(fmt.Sprintf("fallback:%s|%s", url, destPath), 2*time.Second, "chunked: falling back to single: %v", err)
+		e.log.WarnfThrottled(fmt.Sprintf("fallback:%s|%s", url, destPath), 2*time.Second, "chunked: falling back to single: %v", logging.SanitizeError(err))
 		// Clear any stale chunk state so progress doesn't show bogus completed bytes
 		_ = e.st.DeleteChunks(url, destPath)
 		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers, noResume, perDownloadLimiter)

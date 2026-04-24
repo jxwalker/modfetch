@@ -54,7 +54,7 @@ Quick wins (remaining)
 Technical debt
 - Remove duplicate SafeFileName implementations (ensure all call util.SafeFileName) [IMPL]
 - Consolidate HTTP client creation to a shared pool [IMPL]
-- Standardize error wrapping and logging redaction [NEW]
+- Standardize error wrapping and logging redaction [IMPL]
 - Trim dead code in legacy TUI model [NEW]
 - Audit metrics writes/guards when disabled [IMPL]
 
