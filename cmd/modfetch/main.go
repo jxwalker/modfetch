@@ -393,22 +393,30 @@ func handleDownload(ctx context.Context, args []string) error {
 							url     string
 							headers map[string]string
 						}
-						candidates := []downloadCandidate{{url: resolvedURL, headers: headers}}
-						for _, mirror := range job.Mirrors {
-							mirror = strings.TrimSpace(mirror)
-							if mirror == "" {
+						sources := append([]string{job.URI}, job.Mirrors...)
+						candidates := make([]downloadCandidate, 0, len(sources))
+						for _, source := range sources {
+							source = strings.TrimSpace(source)
+							if source == "" {
 								continue
 							}
-							mirrorURL, mirrorHeaders, err := resolveBatchDownloadCandidate(gctx, c, mirror)
+							candidateURL, candidateHeaders, err := resolveBatchDownloadCandidate(gctx, c, source)
 							if err != nil {
-								return fmt.Errorf("job %d mirror resolve %q: %w", it.idx, mirror, err)
+								logMu.Lock()
+								log.Warnf("job %d: skipping source %q: %v", it.idx, logging.SanitizeURL(source), logging.SanitizeError(err))
+								logMu.Unlock()
+								continue
 							}
-							candidates = append(candidates, downloadCandidate{url: mirrorURL, headers: mirrorHeaders})
+							candidates = append(candidates, downloadCandidate{url: candidateURL, headers: candidateHeaders})
+						}
+						if len(candidates) == 0 {
+							return fmt.Errorf("job %d: no valid download candidates", it.idx)
 						}
 						var final, sum string
 						var err error
+						baseNoResume := *noResume || c.General.AlwaysNoResume
 						for attempt, candidate := range candidates {
-							final, sum, err = dl.Download(gctx, candidate.url, destCandidate, expected, candidate.headers, attempt > 0)
+							final, sum, err = dl.Download(gctx, candidate.url, destCandidate, expected, candidate.headers, baseNoResume || attempt > 0)
 							if err == nil {
 								if attempt > 0 {
 									logMu.Lock()

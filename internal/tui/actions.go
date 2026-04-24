@@ -256,7 +256,16 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 			// Mark that placement data needs to be remapped in Update()
 			needsMap = true
 			// Remove the old pending row and create/refresh the resolved one as pending
-			_ = m.st.ReplaceDownloadURL(urlStr, state.DownloadRow{URL: resolved, Dest: dest, Status: "pending"})
+			if err := m.st.ReplaceDownloadURL(urlStr, state.DownloadRow{URL: resolved, Dest: dest, Status: "pending"}); err != nil {
+				if m.log != nil {
+					m.log.Errorf("state remap failed for %s: %v", logging.SanitizeURL(resolved), logging.SanitizeError(err))
+				}
+				_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "error", LastError: "state remap failed: " + err.Error()})
+				return dlDoneMsg{
+					url: resolved, dest: dest, path: "", err: fmt.Errorf("state remap failed: %w", err),
+					origKey: origKey, resKey: resKey, autoPlace: autoPlaceVal, placeType: placeTypeVal, needsPlaceMap: false,
+				}
+			}
 		}
 		if start {
 			if !m.cfg.Network.DisableAuthPreflight {

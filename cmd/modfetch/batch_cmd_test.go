@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -22,8 +23,8 @@ func TestBatchImport_FromTextURLs_NoNetworkRequired(t *testing.T) {
 	}
 	cfg := "version: 1\n" +
 		"general:\n" +
-		"  data_root: " + strings.ReplaceAll(d, "\\", "\\\\") + "\n" +
-		"  download_root: " + strings.ReplaceAll(downloadRoot, "\\", "\\\\") + "\n"
+		"  data_root: " + fmt.Sprintf("%q", d) + "\n" +
+		"  download_root: " + fmt.Sprintf("%q", downloadRoot) + "\n"
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -80,8 +81,8 @@ func TestDownloadBatch_UsesOrderedMirrorFallback(t *testing.T) {
 	}
 	cfg := "version: 1\n" +
 		"general:\n" +
-		"  data_root: " + d + "\n" +
-		"  download_root: " + downloadRoot + "\n" +
+		"  data_root: " + fmt.Sprintf("%q", d) + "\n" +
+		"  download_root: " + fmt.Sprintf("%q", downloadRoot) + "\n" +
 		"concurrency:\n" +
 		"  max_retries: 1\n"
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {

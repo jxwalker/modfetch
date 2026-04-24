@@ -50,24 +50,30 @@ func newBandwidthLimiter(bytesPerSecond int64) *bandwidthLimiter {
 	return &bandwidthLimiter{bytesPerSecond: bytesPerSecond}
 }
 
-func (l *bandwidthLimiter) wait(ctx context.Context, n int) error {
+func (l *bandwidthLimiter) reserve(n int) time.Time {
 	if l == nil || l.bytesPerSecond <= 0 || n <= 0 {
-		return nil
+		return time.Time{}
 	}
 	delay := time.Duration(int64(time.Second) * int64(n) / l.bytesPerSecond)
 	if delay <= 0 {
-		return nil
+		return time.Time{}
 	}
 
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	now := time.Now()
 	if l.next.Before(now) {
 		l.next = now
 	}
 	ready := l.next.Add(delay)
 	l.next = ready
-	l.mu.Unlock()
+	return ready
+}
 
+func waitUntil(ctx context.Context, ready time.Time) error {
+	if ready.IsZero() {
+		return nil
+	}
 	wait := time.Until(ready)
 	if wait <= 0 {
 		return nil
@@ -104,10 +110,15 @@ func newThrottledReader(ctx context.Context, reader io.Reader, limiters ...*band
 func (r *throttledReader) Read(p []byte) (int, error) {
 	n, err := r.reader.Read(p)
 	if n > 0 {
+		var latest time.Time
 		for _, limiter := range r.limiters {
-			if waitErr := limiter.wait(r.ctx, n); waitErr != nil {
-				return n, waitErr
+			ready := limiter.reserve(n)
+			if ready.After(latest) {
+				latest = ready
 			}
+		}
+		if waitErr := waitUntil(r.ctx, latest); waitErr != nil {
+			return n, waitErr
 		}
 	}
 	return n, err
