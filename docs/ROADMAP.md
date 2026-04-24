@@ -42,7 +42,7 @@ Priority 5 — Advanced features
 - Download scheduling (cron-like windows) [NEW]
 
 Priority 6 — Architecture
-- Context propagation pattern improvements [NEW]
+- Context propagation pattern improvements [IMPL]
 - Plugin architecture for resolvers [IMPL]
 - Event-driven updates vs polling [NEW]
 

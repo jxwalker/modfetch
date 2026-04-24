@@ -90,7 +90,7 @@ func ProbeURL(ctx context.Context, cfg *config.Config, rawURL string, headers ma
 	}
 	// Final fallback: try to resolve a redirect without following, then re-probe
 	if (meta.Size <= 0 || !meta.AcceptRange) && meta.FinalURL == "" {
-		if ru, ok := resolveRedirectURL(cl, rawURL, headers, ua); ok {
+		if ru, ok := resolveRedirectURL(ctx, cl, rawURL, headers, ua); ok {
 			meta.FinalURL = ru
 			// try a HEAD on resolved
 			req3, _ := http.NewRequestWithContext(ctx, http.MethodHead, ru, nil)

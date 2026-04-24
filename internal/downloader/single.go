@@ -21,8 +21,8 @@ import (
 )
 
 // local helper to probe size and range via GET bytes=0-0
-func probeRangeGET(client *http.Client, url string, headers map[string]string, ua string) (size int64, ok bool) {
-	req, _ := http.NewRequest(http.MethodGet, url, nil)
+func probeRangeGET(ctx context.Context, client *http.Client, url string, headers map[string]string, ua string) (size int64, ok bool) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	req.Header.Set("User-Agent", ua)
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -372,7 +372,7 @@ func (s *Single) head(ctx context.Context, url string, headers map[string]string
 	}
 	// Fallback: if HEAD failed or size/range not known, try a 0-0 Range GET to infer
 	if size <= 0 || !rangeOK {
-		if sz, ok := probeRangeGET(s.client, url, headers, userAgent(s.cfg)); ok && sz > 0 {
+		if sz, ok := probeRangeGET(ctx, s.client, url, headers, userAgent(s.cfg)); ok && sz > 0 {
 			size = sz
 			rangeOK = true
 		}

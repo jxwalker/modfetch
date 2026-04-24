@@ -146,7 +146,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 			err = nil
 		} else {
 			// As a last resort, resolve signed redirect then retry probe on the final URL
-			if ru, ok := resolveRedirectURL(e.client, url, headers, userAgent(e.cfg)); ok {
+			if ru, ok := resolveRedirectURL(ctx, e.client, url, headers, userAgent(e.cfg)); ok {
 				e.log.Debugf("resolved redirect -> %s", logging.SanitizeURL(ru))
 				url = ru
 				// Do not forward Authorization to different host

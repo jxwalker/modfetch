@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -89,11 +90,11 @@ var defaultVersion = "dev"
 
 // resolveRedirectURL performs a single GET without following redirects to capture the Location.
 // Returns the absolute redirected URL if present.
-func resolveRedirectURL(baseClient *http.Client, rawURL string, headers map[string]string, ua string) (string, bool) {
+func resolveRedirectURL(ctx context.Context, baseClient *http.Client, rawURL string, headers map[string]string, ua string) (string, bool) {
 	// clone client with redirect disabled
 	cl := *baseClient
 	cl.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
-	req, _ := http.NewRequest(http.MethodGet, rawURL, nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	req.Header.Set("User-Agent", ua)
 	for k, v := range headers {
 		req.Header.Set(k, v)
