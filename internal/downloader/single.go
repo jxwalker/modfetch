@@ -10,7 +10,6 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -107,11 +106,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		return "", "", errors.New("url required")
 	}
 	if destPath == "" {
-		seg := lastURLSegment(url)
-		if seg == "" {
-			return "", "", errors.New("cannot infer destination filename")
-		}
-		destPath = filepath.Join(s.cfg.General.DownloadRoot, seg)
+		destPath = filepath.Join(s.cfg.General.DownloadRoot, util.SafeFileName(util.URLPathBase(url)))
 	}
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 		return "", "", err
@@ -365,16 +360,6 @@ func (s *Single) head(ctx context.Context, url string, headers map[string]string
 		}
 	}
 	return
-}
-
-func lastURLSegment(uStr string) string {
-	if u, err := neturl.Parse(uStr); err == nil {
-		b := path.Base(u.Path)
-		if b != "/" && b != "." && b != "" {
-			return b
-		}
-	}
-	return ""
 }
 
 func equalSHA(exp, got string) bool {

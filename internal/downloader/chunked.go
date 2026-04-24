@@ -11,7 +11,6 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -173,10 +172,10 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 			name = h.filename
 		}
 		if name == "" && h.finalURL != "" {
-			name = baseNameFromURL(h.finalURL)
+			name = util.URLPathBase(h.finalURL)
 		}
 		if name == "" {
-			name = baseNameFromURL(url)
+			name = util.URLPathBase(url)
 		}
 		name = util.SafeFileName(name)
 		destPath = filepath.Join(e.cfg.General.DownloadRoot, name)
@@ -761,19 +760,6 @@ func parseDispositionFilename(cd string) string {
 		}
 	}
 	return ""
-}
-
-// baseNameFromURL returns the last path segment from a URL, ignoring query/fragments.
-func baseNameFromURL(uStr string) string {
-	u, err := neturl.Parse(uStr)
-	if err != nil || u.Path == "" {
-		return "download"
-	}
-	b := path.Base(u.Path)
-	if b == "/" || b == "." || b == "" {
-		return "download"
-	}
-	return b
 }
 
 func hashRange(f *os.File, start, size int64) (string, error) {

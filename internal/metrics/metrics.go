@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"go.uber.org/atomic"
@@ -15,6 +16,7 @@ type Manager struct {
 	path   string
 	ticker *time.Ticker
 	stop   chan struct{}
+	once   sync.Once
 
 	// counters
 	bytesTotal       atomic.Int64
@@ -99,7 +101,7 @@ func (m *Manager) IncActive(n int64) {
 }
 
 func (m *Manager) Write() error {
-	if m == nil {
+	if m == nil || m.path == "" {
 		return nil
 	}
 	f, err := os.CreateTemp(filepath.Dir(m.path), ".metrics.tmp.*")
@@ -107,31 +109,68 @@ func (m *Manager) Write() error {
 		return err
 	}
 	defer func() { _ = os.Remove(f.Name()) }()
+	defer func() { _ = f.Close() }()
 	// Prometheus textfile format
 	// Use modfetch_ prefix
-	_, _ = fmt.Fprintf(f, "# HELP modfetch_bytes_downloaded_total Total bytes downloaded.\n")
-	_, _ = fmt.Fprintf(f, "# TYPE modfetch_bytes_downloaded_total counter\n")
-	_, _ = fmt.Fprintf(f, "modfetch_bytes_downloaded_total %d\n", m.bytesTotal.Load())
+	if _, err := fmt.Fprintf(f, "# HELP modfetch_bytes_downloaded_total Total bytes downloaded.\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "# TYPE modfetch_bytes_downloaded_total counter\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "modfetch_bytes_downloaded_total %d\n", m.bytesTotal.Load()); err != nil {
+		return err
+	}
 
-	_, _ = fmt.Fprintf(f, "# HELP modfetch_retries_total Total chunk retries.\n")
-	_, _ = fmt.Fprintf(f, "# TYPE modfetch_retries_total counter\n")
-	_, _ = fmt.Fprintf(f, "modfetch_retries_total %d\n", m.retriesTotal.Load())
+	if _, err := fmt.Fprintf(f, "# HELP modfetch_retries_total Total chunk retries.\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "# TYPE modfetch_retries_total counter\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "modfetch_retries_total %d\n", m.retriesTotal.Load()); err != nil {
+		return err
+	}
 
-	_, _ = fmt.Fprintf(f, "# HELP modfetch_downloads_success_total Total successful downloads.\n")
-	_, _ = fmt.Fprintf(f, "# TYPE modfetch_downloads_success_total counter\n")
-	_, _ = fmt.Fprintf(f, "modfetch_downloads_success_total %d\n", m.downloadsSuccess.Load())
+	if _, err := fmt.Fprintf(f, "# HELP modfetch_downloads_success_total Total successful downloads.\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "# TYPE modfetch_downloads_success_total counter\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "modfetch_downloads_success_total %d\n", m.downloadsSuccess.Load()); err != nil {
+		return err
+	}
 
-	_, _ = fmt.Fprintf(f, "# HELP modfetch_last_download_seconds Duration of the last completed download in seconds.\n")
-	_, _ = fmt.Fprintf(f, "# TYPE modfetch_last_download_seconds gauge\n")
-	_, _ = fmt.Fprintf(f, "modfetch_last_download_seconds %.6f\n", m.lastDownloadSec.Load())
+	if _, err := fmt.Fprintf(f, "# HELP modfetch_last_download_seconds Duration of the last completed download in seconds.\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "# TYPE modfetch_last_download_seconds gauge\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "modfetch_last_download_seconds %.6f\n", m.lastDownloadSec.Load()); err != nil {
+		return err
+	}
 
-	_, _ = fmt.Fprintf(f, "# HELP modfetch_active_downloads Number of active downloads.\n")
-	_, _ = fmt.Fprintf(f, "# TYPE modfetch_active_downloads gauge\n")
-	_, _ = fmt.Fprintf(f, "modfetch_active_downloads %d\n", m.activeDownloads.Load())
+	if _, err := fmt.Fprintf(f, "# HELP modfetch_active_downloads Number of active downloads.\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "# TYPE modfetch_active_downloads gauge\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "modfetch_active_downloads %d\n", m.activeDownloads.Load()); err != nil {
+		return err
+	}
 
-	_, _ = fmt.Fprintf(f, "# HELP modfetch_metrics_timestamp_seconds UNIX timestamp when this file was written.\n")
-	_, _ = fmt.Fprintf(f, "# TYPE modfetch_metrics_timestamp_seconds gauge\n")
-	_, _ = fmt.Fprintf(f, "modfetch_metrics_timestamp_seconds %d\n", time.Now().Unix())
+	if _, err := fmt.Fprintf(f, "# HELP modfetch_metrics_timestamp_seconds UNIX timestamp when this file was written.\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "# TYPE modfetch_metrics_timestamp_seconds gauge\n"); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(f, "modfetch_metrics_timestamp_seconds %d\n", time.Now().Unix()); err != nil {
+		return err
+	}
 
 	if err := f.Close(); err != nil {
 		return err
@@ -144,11 +183,13 @@ func (m *Manager) Close() {
 	if m == nil {
 		return
 	}
-	if m.ticker != nil {
-		m.ticker.Stop()
-	}
-	if m.stop != nil {
-		close(m.stop)
-	}
-	_ = m.Write()
+	m.once.Do(func() {
+		if m.ticker != nil {
+			m.ticker.Stop()
+		}
+		if m.stop != nil {
+			close(m.stop)
+		}
+		_ = m.Write()
+	})
 }

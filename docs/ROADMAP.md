@@ -52,11 +52,11 @@ Quick wins (remaining)
 - Fix progress bar showing 100% during chunk planning [IMPL]
 
 Technical debt
-- Remove duplicate SafeFileName implementations (ensure all call util.SafeFileName) [NEW]
+- Remove duplicate SafeFileName implementations (ensure all call util.SafeFileName) [IMPL]
 - Consolidate HTTP client creation to a shared pool [IMPL]
 - Standardize error wrapping and logging redaction [NEW]
 - Trim dead code in legacy TUI model [NEW]
-- Audit metrics writes/guards when disabled [NEW]
+- Audit metrics writes/guards when disabled [IMPL]
 
 Performance optimizations
 - Pre-allocate/truncate files in chunked mode (done) and consider parallel chunk verification [NEW]
