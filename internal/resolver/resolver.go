@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 
 	"github.com/jxwalker/modfetch/internal/config"
 )
@@ -41,6 +42,41 @@ type Resolver interface {
 	Resolve(ctx context.Context, uri string, cfg *config.Config) (*Resolved, error)
 }
 
+var (
+	registryMu          sync.RWMutex
+	registeredResolvers []Resolver
+)
+
+// Register adds a resolver ahead of the built-in resolvers and returns an
+// unregister function for tests or plugin lifecycle cleanup.
+func Register(r Resolver) func() {
+	if r == nil {
+		return func() {}
+	}
+	registryMu.Lock()
+	registeredResolvers = append(registeredResolvers, r)
+	registryMu.Unlock()
+	return func() {
+		registryMu.Lock()
+		defer registryMu.Unlock()
+		for i, existing := range registeredResolvers {
+			if existing == r {
+				registeredResolvers = append(registeredResolvers[:i], registeredResolvers[i+1:]...)
+				return
+			}
+		}
+	}
+}
+
+func resolverSnapshot() []Resolver {
+	registryMu.RLock()
+	out := make([]Resolver, 0, len(registeredResolvers)+2)
+	out = append(out, registeredResolvers...)
+	registryMu.RUnlock()
+	out = append(out, &HuggingFace{}, &CivitAI{})
+	return out
+}
+
 func Resolve(ctx context.Context, uri string, cfg *config.Config) (*Resolved, error) {
 	uri = strings.TrimSpace(uri)
 	if cfg != nil {
@@ -52,12 +88,13 @@ func Resolve(ctx context.Context, uri string, cfg *config.Config) (*Resolved, er
 		res *Resolved
 		err error
 	)
-	switch {
-	case strings.HasPrefix(uri, "hf://"):
-		res, err = (&HuggingFace{}).Resolve(ctx, uri, cfg)
-	case strings.HasPrefix(uri, "civitai://"):
-		res, err = (&CivitAI{}).Resolve(ctx, uri, cfg)
-	default:
+	for _, resolver := range resolverSnapshot() {
+		if resolver.CanHandle(uri) {
+			res, err = resolver.Resolve(ctx, uri, cfg)
+			break
+		}
+	}
+	if res == nil && err == nil {
 		err = errors.New("no resolver for uri scheme")
 	}
 	if err == nil && cfg != nil {

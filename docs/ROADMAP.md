@@ -43,7 +43,7 @@ Priority 5 — Advanced features
 
 Priority 6 — Architecture
 - Context propagation pattern improvements [NEW]
-- Plugin architecture for resolvers [NEW]
+- Plugin architecture for resolvers [IMPL]
 - Event-driven updates vs polling [NEW]
 
 Quick wins (remaining)
