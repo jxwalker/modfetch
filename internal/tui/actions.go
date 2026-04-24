@@ -256,8 +256,7 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 			// Mark that placement data needs to be remapped in Update()
 			needsMap = true
 			// Remove the old pending row and create/refresh the resolved one as pending
-			_ = m.st.DeleteDownload(urlStr, dest)
-			_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "pending"})
+			_ = m.st.ReplaceDownloadURL(urlStr, state.DownloadRow{URL: resolved, Dest: dest, Status: "pending"})
 		}
 		if start {
 			if !m.cfg.Network.DisableAuthPreflight {

@@ -207,6 +207,24 @@ func (db *DB) UpsertDownload(row DownloadRow) error {
 	return err
 }
 
+func (db *DB) UpsertDownloadTx(tx *sql.Tx, row DownloadRow) error {
+	now := time.Now().Unix()
+	_, err := tx.Exec(`INSERT INTO downloads(url, dest, expected_sha256, actual_sha256, etag, last_modified, size, status, last_error, created_at, updated_at)
+	                VALUES(?,?,?,?,?,?,?,?,?,?,?)
+	                ON CONFLICT(url, dest) DO UPDATE SET expected_sha256=excluded.expected_sha256, actual_sha256=excluded.actual_sha256, etag=excluded.etag, last_modified=excluded.last_modified, size=excluded.size, status=excluded.status, last_error=excluded.last_error, updated_at=?`,
+		row.URL, row.Dest, row.ExpectedSHA256, row.ActualSHA256, row.ETag, row.LastModified, row.Size, row.Status, row.LastError, now, now, now)
+	return err
+}
+
+func (db *DB) ClearChunksAndUpsertDownload(row DownloadRow) error {
+	return db.WithTx(func(tx *sql.Tx) error {
+		if err := db.DeleteChunksTx(tx, row.URL, row.Dest); err != nil {
+			return err
+		}
+		return db.UpsertDownloadTx(tx, row)
+	})
+}
+
 // IncDownloadRetries increments the retries counter for a download row.
 func (db *DB) IncDownloadRetries(url, dest string, delta int64) error {
 	if delta == 0 {
@@ -220,6 +238,31 @@ func (db *DB) IncDownloadRetries(url, dest string, delta int64) error {
 func (db *DB) DeleteDownload(url, dest string) error {
 	_, err := db.SQL.Exec(`DELETE FROM downloads WHERE url=? AND dest=?`, url, dest)
 	return err
+}
+
+func (db *DB) DeleteDownloadTx(tx *sql.Tx, url, dest string) error {
+	_, err := tx.Exec(`DELETE FROM downloads WHERE url=? AND dest=?`, url, dest)
+	return err
+}
+
+func (db *DB) DeleteDownloadAndChunks(url, dest string) error {
+	return db.WithTx(func(tx *sql.Tx) error {
+		if err := db.DeleteChunksTx(tx, url, dest); err != nil {
+			return err
+		}
+		return db.DeleteDownloadTx(tx, url, dest)
+	})
+}
+
+func (db *DB) ReplaceDownloadURL(oldURL string, row DownloadRow) error {
+	return db.WithTx(func(tx *sql.Tx) error {
+		if oldURL != row.URL {
+			if err := db.DeleteDownloadTx(tx, oldURL, row.Dest); err != nil {
+				return err
+			}
+		}
+		return db.UpsertDownloadTx(tx, row)
+	})
 }
 
 // ListDownloads returns a snapshot of the downloads table

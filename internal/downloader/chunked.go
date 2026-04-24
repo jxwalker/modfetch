@@ -46,7 +46,20 @@ func NewChunked(cfg *config.Config, log *logging.Logger, st *state.DB, m interfa
 	ObserveDownloadSeconds(float64)
 	Write() error
 }) *Chunked {
-	return &Chunked{cfg: cfg, log: log, st: st, client: newHTTPClient(cfg), metrics: m}
+	return newChunkedWithClient(cfg, log, st, m, newHTTPClient(cfg))
+}
+
+func newChunkedWithClient(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
+	AddBytes(int64)
+	IncRetries(int64)
+	IncDownloadsSuccess()
+	ObserveDownloadSeconds(float64)
+	Write() error
+}, client *http.Client) *Chunked {
+	if client == nil {
+		client = newHTTPClient(cfg)
+	}
+	return &Chunked{cfg: cfg, log: log, st: st, client: client, metrics: m}
 }
 
 type headInfo struct {
@@ -195,8 +208,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	defer func() {
 		if ctx.Err() != nil {
 			_ = os.Remove(part)
-			_ = e.st.DeleteChunks(url, destPath)
-			_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "canceled"})
+			_ = e.st.ClearChunksAndUpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "canceled"})
 		}
 	}()
 	f, err := os.OpenFile(part, os.O_CREATE|os.O_RDWR, 0o644)
@@ -647,7 +659,7 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 		if ctx.Err() != nil {
 			return "", "", ctx.Err()
 		}
-		final, sha, err := NewSingle(e.cfg, e.log, e.st, e.metrics).Download(ctx, url, destPath, expectedSHA, headers, noResume)
+		final, sha, err := newSingleWithClient(e.cfg, e.log, e.st, e.metrics, e.client).Download(ctx, url, destPath, expectedSHA, headers, noResume)
 		if err == nil {
 			return final, sha, nil
 		}

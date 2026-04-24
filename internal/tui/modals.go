@@ -227,6 +227,7 @@ func (m *Model) updateBatchMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	selectedKey := m.currentVisibleKey()
 	s := msg.String()
 	switch s {
 	case "enter", "ctrl+j":
@@ -237,10 +238,12 @@ func (m *Model) updateFilter(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.filterOn = false
 		m.filterInput.SetValue("")
 		m.filterInput.Blur()
+		m.restoreVisibleSelection(selectedKey)
 		return m, nil
 	}
 	var cmd tea.Cmd
 	m.filterInput, cmd = m.filterInput.Update(msg)
+	m.restoreVisibleSelection(selectedKey)
 	return m, cmd
 }
 

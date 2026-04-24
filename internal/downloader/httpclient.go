@@ -14,7 +14,15 @@ import (
 )
 
 func newHTTPClient(cfg *config.Config) *http.Client {
-	timeout := time.Duration(cfg.Network.TimeoutSeconds) * time.Second
+	timeoutSeconds := 0
+	perHost := 10
+	if cfg != nil {
+		timeoutSeconds = cfg.Network.TimeoutSeconds
+		if cfg.Concurrency.PerHostRequests > 0 {
+			perHost = cfg.Concurrency.PerHostRequests
+		}
+	}
+	timeout := time.Duration(timeoutSeconds) * time.Second
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
@@ -28,7 +36,8 @@ func newHTTPClient(cfg *config.Config) *http.Client {
 		IdleConnTimeout:       90 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   10,
+		MaxIdleConnsPerHost:   perHost,
+		MaxConnsPerHost:       perHost,
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 		},

@@ -7,7 +7,7 @@ Status key: [NEW] newly captured, [IMPL] implemented already (kept here for trac
 Priority 1 — Critical reliability and performance
 - Concurrent download recovery [NEW]
   - Persist/reattach TUI-initiated downloads after process restart; graceful recovery of work-in-progress.
-- Database transaction boundaries [NEW]
+- Database transaction boundaries [IMPL]
   - Group related state updates in transactions to avoid inconsistent rows on crashes.
 - Streaming hashing [IMPL]
   - Single and chunked downloaders perform streaming SHA256; keep for traceability.
@@ -19,7 +19,7 @@ Priority 2 — Core functionality gaps
 - Mirror/fallback URLs with ordered failover [NEW]
 - Partial verification during single-stream downloads [NEW]
   - Periodic checkpoints; chunked mode already verifies per-chunk.
-- Connection pool management [NEW]
+- Connection pool management [IMPL]
   - Reuse a shared HTTP client/transport across downloaders; per-host limits.
 
 Priority 3 — User experience
@@ -48,12 +48,12 @@ Priority 6 — Architecture
 
 Quick wins (remaining)
 - Add a flag to skip SHA256 verification intentionally for trusted sources (implemented as --force) [IMPL]
-- Fix TUI selected item persistence when filtering [NEW]
-- Fix progress bar showing 100% during chunk planning [NEW]
+- Fix TUI selected item persistence when filtering [IMPL]
+- Fix progress bar showing 100% during chunk planning [IMPL]
 
 Technical debt
 - Remove duplicate SafeFileName implementations (ensure all call util.SafeFileName) [NEW]
-- Consolidate HTTP client creation to a shared pool [NEW]
+- Consolidate HTTP client creation to a shared pool [IMPL]
 - Standardize error wrapping and logging redaction [NEW]
 - Trim dead code in legacy TUI model [NEW]
 - Audit metrics writes/guards when disabled [NEW]
@@ -98,4 +98,3 @@ Completed v0.6.0 (November 2025)
 Notes
 - README "Roadmap" bullets map to the Priority 3/4 buckets here.
 - v0.6.0 features fully documented in docs/LIBRARY.md and docs/SCANNER.md
-

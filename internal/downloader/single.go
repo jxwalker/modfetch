@@ -64,11 +64,23 @@ func NewSingle(cfg *config.Config, log *logging.Logger, st *state.DB, m interfac
 	ObserveDownloadSeconds(float64)
 	Write() error
 }) *Single {
+	return newSingleWithClient(cfg, log, st, m, newHTTPClient(cfg))
+}
+
+func newSingleWithClient(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
+	AddBytes(int64)
+	IncDownloadsSuccess()
+	ObserveDownloadSeconds(float64)
+	Write() error
+}, client *http.Client) *Single {
+	if client == nil {
+		client = newHTTPClient(cfg)
+	}
 	return &Single{
 		cfg:     cfg,
 		log:     log,
 		st:      st,
-		client:  newHTTPClient(cfg),
+		client:  client,
 		metrics: m,
 	}
 }
@@ -103,28 +115,24 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	part := stagePartPath(s.cfg, url, destPath)
 	if noResume {
 		_ = os.Remove(part)
-		_ = s.st.DeleteChunks(url, destPath)
 	}
 
 	// HEAD for metadata
 	etag, lastMod, size, rangeOK := s.head(ctx, url, headers)
 	s.log.Debugf("HEAD: etag=%s last-mod=%s size=%d range=%v", etag, lastMod, size, rangeOK)
-	_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "planning"})
+	_ = s.st.ClearChunksAndUpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "planning"})
 
 	// Cleanup on cancellation
 	defer func() {
 		if ctx.Err() != nil {
 			_ = os.Remove(part)
-			_ = s.st.DeleteChunks(url, destPath)
-			_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "canceled"})
+			_ = s.st.ClearChunksAndUpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "canceled"})
 		}
 	}()
 
 	// Prepare hasher and file
 	var hasher = sha256.New()
 	var start int64 = 0
-	// Clear any stale chunk state since we're using single-stream
-	_ = s.st.DeleteChunks(url, destPath)
 	if fi, err := os.Stat(part); err == nil {
 		start = fi.Size()
 		s.log.Infof("resuming: %s (have %d bytes)", part, start)
