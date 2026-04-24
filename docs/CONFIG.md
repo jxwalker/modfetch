@@ -22,7 +22,7 @@ Quick start: interactive wizard
   - `stage_partials`: true|false (default true). When true, .part files are written under `download_root/.parts` (or `partials_root` if set) and moved atomically on completion.
   - `partials_root`: string (optional). Directory to store .part files instead of `download_root/.parts` (useful for a faster or larger filesystem).
   - `always_no_resume`: true|false (default false). When true, every download starts fresh (ignores any .part and clears chunk state) unless overridden by CLI.
-  - `auto_recover_on_start`: true|false (default false). When true, the TUI auto-resumes downloads found in state with status `running` or `hold` on startup.
+  - `auto_recover_on_start`: true|false (default false). When true, the TUI auto-resumes downloads found in state with status `running`, `planning`, or `hold` on startup.
 - `network`
   - `timeout_seconds`, `max_redirects`, `tls_verify`, `user_agent`
   - `global_bandwidth_bytes_per_second`: optional process-wide bandwidth cap in bytes/second; 0 or omitted means unlimited.
@@ -134,4 +134,3 @@ classifier:
     - regex: "^special.*\.bin$"
       type: "llm.gguf"
 ```
-

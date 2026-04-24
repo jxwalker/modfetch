@@ -28,8 +28,7 @@ func (m *Model) recoverCmd() tea.Cmd {
 		var todo []state.DownloadRow
 		for _, r := range rows {
 			st := strings.ToLower(strings.TrimSpace(r.Status))
-			if st == "running" || st == "hold" {
-				// Skip completed
+			if st == "running" || st == "planning" || st == "hold" {
 				todo = append(todo, r)
 			}
 		}

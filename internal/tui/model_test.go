@@ -127,6 +127,43 @@ func TestComputeCurAndTotalPlanningIgnoresPreallocatedPart(t *testing.T) {
 	}
 }
 
+func TestRecoverCmdIncludesInterruptedPlanningRows(t *testing.T) {
+	tmpDir := t.TempDir()
+	db, err := state.NewDB(filepath.Join(tmpDir, "state.db"))
+	if err != nil {
+		t.Fatalf("new db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	rows := []state.DownloadRow{
+		{URL: "https://example.com/running", Dest: filepath.Join(tmpDir, "running.bin"), Status: "running"},
+		{URL: "https://example.com/planning", Dest: filepath.Join(tmpDir, "planning.bin"), Status: "planning"},
+		{URL: "https://example.com/hold", Dest: filepath.Join(tmpDir, "hold.bin"), Status: "hold"},
+		{URL: "https://example.com/pending", Dest: filepath.Join(tmpDir, "pending.bin"), Status: "pending"},
+		{URL: "https://example.com/complete", Dest: filepath.Join(tmpDir, "complete.bin"), Status: "complete"},
+	}
+	for _, row := range rows {
+		if err := db.UpsertDownload(row); err != nil {
+			t.Fatalf("upsert %s: %v", row.Status, err)
+		}
+	}
+
+	m := &Model{st: db}
+	msg := m.recoverCmd()().(recoverRowsMsg)
+	if len(msg.rows) != 3 {
+		t.Fatalf("expected running/planning/hold rows, got %d: %+v", len(msg.rows), msg.rows)
+	}
+	got := map[string]bool{}
+	for _, row := range msg.rows {
+		got[row.Status] = true
+	}
+	for _, want := range []string{"running", "planning", "hold"} {
+		if !got[want] {
+			t.Fatalf("expected recovered status %q in %+v", want, msg.rows)
+		}
+	}
+}
+
 func TestUpdateNormalQuestion(t *testing.T) {
 	m := &Model{}
 	m.updateNormal(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}, Alt: false})

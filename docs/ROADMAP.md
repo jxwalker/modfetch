@@ -5,7 +5,7 @@ This document consolidates the project backlog and roadmap from multiple sources
 Status key: [NEW] newly captured, [IMPL] implemented already (kept here for traceability), [WIP] in progress.
 
 Priority 1 — Critical reliability and performance
-- Concurrent download recovery [NEW]
+- Concurrent download recovery [IMPL]
   - Persist/reattach TUI-initiated downloads after process restart; graceful recovery of work-in-progress.
 - Database transaction boundaries [IMPL]
   - Group related state updates in transactions to avoid inconsistent rows on crashes.
@@ -25,7 +25,7 @@ Priority 2 — Core functionality gaps
 Priority 3 — User experience
 - TUI refactor and feature polish [NEW]
   - Factor large models into smaller components; refine sort/group/columns; persistence of selection when filtering; progress accuracy during planning.
-- Progress persistence across sessions [NEW]
+- Progress persistence across sessions [IMPL]
 - Adaptive retry/backoff by error type [IMPL]
 - Download queue management with priorities [NEW]
 
