@@ -69,7 +69,8 @@ Performance optimizations
 Breaking changes to consider for v1.0
 - Config schema tidy-up
 - State DB schema simplification
-- Standardize CLI flags and naming
+- Standardize CLI flags and naming [WIP]
+  - Shared config path resolution across config-backed commands; `place` now honors the documented default config path [IMPL]
 
 Completed (from prior docs)
 - CivitAI model-aware default filenames and naming patterns (sources.*.naming.pattern) [IMPL]

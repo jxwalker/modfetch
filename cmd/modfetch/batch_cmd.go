@@ -14,7 +14,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/jxwalker/modfetch/internal/batch"
-	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/downloader"
 	"github.com/jxwalker/modfetch/internal/logging"
 	"github.com/jxwalker/modfetch/internal/resolver"
@@ -51,19 +50,10 @@ func handleBatchImport(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *cfgPath == "" {
-		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
-			*cfgPath = env
-		} else {
-			if h, err := os.UserHomeDir(); err == nil && h != "" {
-				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
-			}
-		}
-	}
 	if *inPath == "" {
 		return errors.New("--input is required")
 	}
-	c, err := config.Load(*cfgPath)
+	c, _, err := loadConfig(*cfgPath)
 	if err != nil {
 		return err
 	}

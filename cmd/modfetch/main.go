@@ -129,19 +129,7 @@ func handleStatus(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *cfgPath == "" {
-		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
-			*cfgPath = env
-		} else {
-			if h, err := os.UserHomeDir(); err == nil && h != "" {
-				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
-			}
-		}
-	}
-	if _, err := os.Stat(*cfgPath); err != nil {
-		return fmt.Errorf("config file not found: %s", *cfgPath)
-	}
-	c, err := config.Load(*cfgPath)
+	c, _, err := loadConfig(*cfgPath)
 	if err != nil {
 		return err
 	}
@@ -224,17 +212,7 @@ func handleDedupe(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *cfgPath == "" {
-		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
-			*cfgPath = env
-		} else if h, err := os.UserHomeDir(); err == nil && h != "" {
-			*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
-		}
-	}
-	if _, err := os.Stat(*cfgPath); err != nil {
-		return fmt.Errorf("config file not found: %s", *cfgPath)
-	}
-	c, err := config.Load(*cfgPath)
+	c, _, err := loadConfig(*cfgPath)
 	if err != nil {
 		return err
 	}
@@ -313,19 +291,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *cfgPath == "" {
-		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
-			*cfgPath = env
-		} else {
-			if h, err := os.UserHomeDir(); err == nil && h != "" {
-				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
-			}
-		}
-	}
-	if _, err := os.Stat(*cfgPath); err != nil {
-		return fmt.Errorf("config file not found: %s", *cfgPath)
-	}
-	c, err := config.Load(*cfgPath)
+	c, _, err := loadConfig(*cfgPath)
 	if err != nil {
 		return err
 	}
@@ -923,18 +889,10 @@ func handlePlace(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *cfgPath == "" {
-		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
-			*cfgPath = env
-		}
-	}
-	if *cfgPath == "" {
-		return errors.New("--config is required or set MODFETCH_CONFIG")
-	}
 	if *filePath == "" {
 		return errors.New("--path is required")
 	}
-	c, err := config.Load(*cfgPath)
+	c, _, err := loadConfig(*cfgPath)
 	if err != nil {
 		return err
 	}
@@ -977,19 +935,7 @@ func handleClean(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *cfgPath == "" {
-		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
-			*cfgPath = env
-		} else {
-			if h, err := os.UserHomeDir(); err == nil && h != "" {
-				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
-			}
-		}
-	}
-	if _, err := os.Stat(*cfgPath); err != nil {
-		return fmt.Errorf("config file not found: %s", *cfgPath)
-	}
-	c, err := config.Load(*cfgPath)
+	c, _, err := loadConfig(*cfgPath)
 	if err != nil {
 		return err
 	}
@@ -1177,19 +1123,7 @@ func configOp(args []string, fn func(*config.Config, *logging.Logger) error) err
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *cfgPath == "" {
-		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
-			*cfgPath = env
-		} else {
-			if h, err := os.UserHomeDir(); err == nil && h != "" {
-				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
-			}
-		}
-	}
-	if _, err := os.Stat(*cfgPath); err != nil {
-		return fmt.Errorf("config file not found: %s", *cfgPath)
-	}
-	c, err := config.Load(*cfgPath)
+	c, _, err := loadConfig(*cfgPath)
 	if err != nil {
 		return err
 	}
