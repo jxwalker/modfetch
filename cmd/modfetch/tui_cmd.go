@@ -25,25 +25,18 @@ func handleTUI(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *cfgPath == "" {
-		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
-			*cfgPath = env
-		}
-	}
-	// If still empty, default to ~/.config/modfetch/config.yml
-	if *cfgPath == "" {
-		h, err := os.UserHomeDir()
-		if err != nil {
-			return errors.New("--config is required or set MODFETCH_CONFIG")
-		}
-		*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
+	resolvedCfgPath, err := resolveConfigPath(*cfgPath)
+	if err != nil {
+		return err
 	}
 	// Try to load config. If not found, offer to create via wizard with sensible defaults.
-	c, err := config.Load(*cfgPath)
+	c, err := config.Load(resolvedCfgPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Create directory and run wizard
-			_ = os.MkdirAll(filepath.Dir(*cfgPath), 0o755)
+			if err := os.MkdirAll(filepath.Dir(resolvedCfgPath), 0o755); err != nil {
+				return err
+			}
 			defaults := &config.Config{Version: 1, General: config.General{DataRoot: "~/modfetch/data", DownloadRoot: "~/modfetch/downloads", PlacementMode: "symlink"}, Concurrency: config.Concurrency{ChunkSizeMB: 8, PerFileChunks: 4}}
 			wiz := cw.New(defaults)
 			p := tea.NewProgram(wiz)
@@ -63,12 +56,12 @@ func handleTUI(ctx context.Context, args []string) error {
 			if merr != nil {
 				return merr
 			}
-			if err := os.WriteFile(*cfgPath, b, 0o644); err != nil {
+			if err := os.WriteFile(resolvedCfgPath, b, 0o644); err != nil {
 				return err
 			}
-			fmt.Printf("wrote config to %s\n", *cfgPath)
+			fmt.Printf("wrote config to %s\n", resolvedCfgPath)
 			// Reload expanded config
-			c, err = config.Load(*cfgPath)
+			c, err = config.Load(resolvedCfgPath)
 			if err != nil {
 				return err
 			}

@@ -7,10 +7,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
-	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/state"
 )
 
@@ -24,19 +22,7 @@ func handleHostCaps(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *cfgPath == "" {
-		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
-			*cfgPath = env
-		} else {
-			if h, err := os.UserHomeDir(); err == nil && h != "" {
-				*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
-			}
-		}
-	}
-	if _, err := os.Stat(*cfgPath); err != nil {
-		return fmt.Errorf("config file not found: %s", *cfgPath)
-	}
-	c, err := config.Load(*cfgPath)
+	c, _, err := loadConfig(*cfgPath)
 	if err != nil {
 		return err
 	}
