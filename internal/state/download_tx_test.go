@@ -1,6 +1,8 @@
 package state
 
 import (
+	"database/sql"
+	"errors"
 	"path/filepath"
 	"testing"
 )
@@ -160,5 +162,89 @@ func TestDeleteDownloadsAndChunksByDest(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("expected chunks to be removed, got %d", count)
+	}
+}
+
+func TestReplaceDownloadDest(t *testing.T) {
+	db := testDownloadDB(t)
+
+	url := "https://example.com/model.bin"
+	oldDest := filepath.Join(t.TempDir(), "model.bin")
+	newDest := "s3://models/model.bin"
+	if err := db.UpsertDownload(DownloadRow{URL: url, Dest: oldDest, Status: "complete", ActualSHA256: "abc"}); err != nil {
+		t.Fatalf("upsert download: %v", err)
+	}
+	if err := db.UpsertChunk(ChunkRow{URL: url, Dest: oldDest, Index: 0, Start: 0, End: 3, Size: 4, Status: "complete"}); err != nil {
+		t.Fatalf("upsert chunk: %v", err)
+	}
+
+	if err := db.ReplaceDownloadDest(url, oldDest, newDest); err != nil {
+		t.Fatalf("replace dest: %v", err)
+	}
+
+	rows, err := db.ListDownloads()
+	if err != nil {
+		t.Fatalf("list downloads: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Dest != newDest {
+		t.Fatalf("expected download dest %q, got %+v", newDest, rows)
+	}
+	chunks, err := db.ListChunks(url, newDest)
+	if err != nil {
+		t.Fatalf("list chunks: %v", err)
+	}
+	if len(chunks) != 1 {
+		t.Fatalf("expected chunk to move to new dest, got %d", len(chunks))
+	}
+}
+
+func TestReplaceDownloadDestNotFound(t *testing.T) {
+	db := testDownloadDB(t)
+
+	err := db.ReplaceDownloadDest("https://example.com/missing", "/old/path", "s3://bucket/key")
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected sql.ErrNoRows, got %v", err)
+	}
+}
+
+func TestReplaceDownloadDestNoOp(t *testing.T) {
+	db := testDownloadDB(t)
+	url := "https://example.com/model.bin"
+	dest := filepath.Join(t.TempDir(), "model.bin")
+	if err := db.UpsertDownload(DownloadRow{URL: url, Dest: dest, Status: "complete"}); err != nil {
+		t.Fatalf("upsert download: %v", err)
+	}
+	if err := db.UpsertChunk(ChunkRow{URL: url, Dest: dest, Index: 0, Start: 0, End: 3, Size: 4, Status: "complete"}); err != nil {
+		t.Fatalf("upsert chunk: %v", err)
+	}
+
+	for _, tt := range []struct {
+		name    string
+		oldDest string
+		newDest string
+	}{
+		{name: "same", oldDest: dest, newDest: dest},
+		{name: "blank old", oldDest: "", newDest: "s3://bucket/key"},
+		{name: "blank new", oldDest: dest, newDest: ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := db.ReplaceDownloadDest(url, tt.oldDest, tt.newDest); err != nil {
+				t.Fatalf("expected no-op nil error, got %v", err)
+			}
+		})
+	}
+	rows, err := db.ListDownloads()
+	if err != nil {
+		t.Fatalf("list downloads: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Dest != dest {
+		t.Fatalf("expected download dest to remain %q, got %+v", dest, rows)
+	}
+	chunks, err := db.ListChunks(url, dest)
+	if err != nil {
+		t.Fatalf("list chunks: %v", err)
+	}
+	if len(chunks) != 1 {
+		t.Fatalf("expected chunk to remain at original dest, got %d", len(chunks))
 	}
 }

@@ -40,7 +40,8 @@ Priority 5 — Advanced features
   - zip, tar, tar.gz, and tgz use native extraction; 7z uses `7zz`, `7z`, or `7za` when available on PATH.
 - Duplicate detection / content-addressable storage [IMPL]
   - Duplicate reporting by completed SHA256 is implemented; `dedupe` can replace verified duplicates with hardlinks or symlinks to canonical content.
-- S3-compatible backend for storage [NEW]
+- S3-compatible backend for storage [IMPL]
+  - Explicit `s3://bucket/key` destinations download through local resumable staging, then upload artifacts and optional `.sha256` sidecars to SigV4 S3-compatible endpoints.
 - Download scheduling (cron-like windows) [IMPL]
 
 Priority 6 — Architecture

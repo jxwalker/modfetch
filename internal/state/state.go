@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -339,6 +340,28 @@ func (db *DB) ReplaceDownloadURL(oldURL string, row DownloadRow) error {
 			}
 		}
 		return db.UpsertDownloadTx(tx, row)
+	})
+}
+
+// ReplaceDownloadDest updates a download and related rows from a local staging
+// path to a final destination identifier such as an s3:// URI.
+func (db *DB) ReplaceDownloadDest(url, oldDest, newDest string) error {
+	if strings.TrimSpace(oldDest) == "" || strings.TrimSpace(newDest) == "" || oldDest == newDest {
+		return nil
+	}
+	return db.WithTx(func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`UPDATE chunks SET dest=? WHERE url=? AND dest=?`, newDest, url, oldDest); err != nil {
+			return err
+		}
+		res, err := tx.Exec(`UPDATE downloads SET dest=?, updated_at=strftime('%s','now') WHERE url=? AND dest=?`, newDest, url, oldDest)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return sql.ErrNoRows
+		}
+		_, err = tx.Exec(`UPDATE model_metadata SET dest=? WHERE download_url=? AND dest=?`, newDest, url, oldDest)
+		return err
 	})
 }
 

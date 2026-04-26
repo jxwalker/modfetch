@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestLoadSampleConfig(t *testing.T) {
 	path := "../../assets/sample-config/config.example.yml"
@@ -49,6 +52,69 @@ func TestValidateRejectsNegativeDNSCacheTTL(t *testing.T) {
 	c.Network.DNSCacheTTLSeconds = -1
 	if err := c.Validate(); err == nil {
 		t.Fatal("expected negative DNS cache TTL to fail validation")
+	}
+}
+
+func TestValidateS3RequiresCredentialsWhenEndpointConfigured(t *testing.T) {
+	t.Setenv("MODFETCH_TEST_S3_ACCESS", "")
+	t.Setenv("MODFETCH_TEST_S3_SECRET", "")
+	c := Config{
+		Version: 1,
+		General: General{
+			DataRoot:     t.TempDir(),
+			DownloadRoot: t.TempDir(),
+		},
+		Storage: Storage{S3: S3Storage{
+			Endpoint:     "http://localhost:9000",
+			AccessKeyEnv: "MODFETCH_TEST_S3_ACCESS",
+			SecretKeyEnv: "MODFETCH_TEST_S3_SECRET",
+		}},
+	}
+	err := c.Validate()
+	if err == nil || !strings.Contains(err.Error(), "storage.s3 credentials missing") {
+		t.Fatalf("expected missing s3 credential error, got %v", err)
+	}
+}
+
+func TestValidateS3AcceptsConfiguredCredentials(t *testing.T) {
+	t.Setenv("MODFETCH_TEST_S3_ACCESS", "access")
+	t.Setenv("MODFETCH_TEST_S3_SECRET", "secret")
+	c := Config{
+		Version: 1,
+		General: General{
+			DataRoot:     t.TempDir(),
+			DownloadRoot: t.TempDir(),
+		},
+		Storage: Storage{S3: S3Storage{
+			Endpoint:     "localhost:9000",
+			UseHTTP:      true,
+			AccessKeyEnv: "MODFETCH_TEST_S3_ACCESS",
+			SecretKeyEnv: "MODFETCH_TEST_S3_SECRET",
+		}},
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("expected s3 config to validate, got %v", err)
+	}
+}
+
+func TestValidateS3RejectsInvalidEndpoint(t *testing.T) {
+	t.Setenv("MODFETCH_TEST_S3_ACCESS", "access")
+	t.Setenv("MODFETCH_TEST_S3_SECRET", "secret")
+	c := Config{
+		Version: 1,
+		General: General{
+			DataRoot:     t.TempDir(),
+			DownloadRoot: t.TempDir(),
+		},
+		Storage: Storage{S3: S3Storage{
+			Endpoint:     "ftp://example.com",
+			AccessKeyEnv: "MODFETCH_TEST_S3_ACCESS",
+			SecretKeyEnv: "MODFETCH_TEST_S3_SECRET",
+		}},
+	}
+	err := c.Validate()
+	if err == nil || !strings.Contains(err.Error(), "storage.s3.endpoint") {
+		t.Fatalf("expected invalid s3 endpoint error, got %v", err)
 	}
 }
 
