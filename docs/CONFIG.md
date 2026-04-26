@@ -23,6 +23,14 @@ Quick start: interactive wizard
   - `partials_root`: string (optional). Directory to store .part files instead of `download_root/.parts` (useful for a faster or larger filesystem).
   - `always_no_resume`: true|false (default false). When true, every download starts fresh (ignores any .part and clears chunk state) unless overridden by CLI.
   - `auto_recover_on_start`: true|false (default false). When true, the TUI auto-resumes downloads found in state with status `running`, `planning`, or `hold` on startup.
+- `storage.s3`
+  - `endpoint`: S3-compatible endpoint, for example `https://s3.amazonaws.com` or `http://localhost:9000`. Can also be supplied with `MODFETCH_S3_ENDPOINT`.
+  - `region`: signing region (defaults to `AWS_REGION`, `AWS_DEFAULT_REGION`, then `us-east-1`).
+  - `use_http`: true when an endpoint without a scheme should use HTTP instead of HTTPS.
+  - `path_style`: true for path-style S3-compatible services such as many MinIO deployments.
+  - `access_key_env`, `secret_key_env`, `session_token_env`: environment variable names for credentials; defaults are `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN`.
+  - `upload_sha256_file`: when true, upload the generated `.sha256` sidecar next to the object.
+  - Use an explicit destination like `--dest s3://bucket/path/model.gguf`; modfetch downloads to a resumable local staging path under `data_root/s3-staging`, verifies locally, uploads the artifact, and records the final `s3://` URI in state.
 - `network`
   - `timeout_seconds`, `max_redirects`, `tls_verify`, `user_agent`
   - `global_bandwidth_bytes_per_second`: optional process-wide bandwidth cap in bytes/second; 0 or omitted means unlimited.

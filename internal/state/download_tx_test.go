@@ -162,3 +162,36 @@ func TestDeleteDownloadsAndChunksByDest(t *testing.T) {
 		t.Fatalf("expected chunks to be removed, got %d", count)
 	}
 }
+
+func TestReplaceDownloadDest(t *testing.T) {
+	db := testDownloadDB(t)
+
+	url := "https://example.com/model.bin"
+	oldDest := filepath.Join(t.TempDir(), "model.bin")
+	newDest := "s3://models/model.bin"
+	if err := db.UpsertDownload(DownloadRow{URL: url, Dest: oldDest, Status: "complete", ActualSHA256: "abc"}); err != nil {
+		t.Fatalf("upsert download: %v", err)
+	}
+	if err := db.UpsertChunk(ChunkRow{URL: url, Dest: oldDest, Index: 0, Start: 0, End: 3, Size: 4, Status: "complete"}); err != nil {
+		t.Fatalf("upsert chunk: %v", err)
+	}
+
+	if err := db.ReplaceDownloadDest(url, oldDest, newDest); err != nil {
+		t.Fatalf("replace dest: %v", err)
+	}
+
+	rows, err := db.ListDownloads()
+	if err != nil {
+		t.Fatalf("list downloads: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Dest != newDest {
+		t.Fatalf("expected download dest %q, got %+v", newDest, rows)
+	}
+	chunks, err := db.ListChunks(url, newDest)
+	if err != nil {
+		t.Fatalf("list chunks: %v", err)
+	}
+	if len(chunks) != 1 {
+		t.Fatalf("expected chunk to move to new dest, got %d", len(chunks))
+	}
+}

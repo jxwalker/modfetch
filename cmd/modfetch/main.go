@@ -30,6 +30,7 @@ import (
 	"github.com/jxwalker/modfetch/internal/placer"
 	"github.com/jxwalker/modfetch/internal/resolver"
 	"github.com/jxwalker/modfetch/internal/state"
+	"github.com/jxwalker/modfetch/internal/storage"
 	"github.com/jxwalker/modfetch/internal/util"
 )
 
@@ -335,6 +336,9 @@ func handleDownload(ctx context.Context, args []string) error {
 		}
 		*sha = v
 	}
+	if storage.IsS3URI(strings.TrimSpace(*dest)) && (*extractFlag || *placeFlag) {
+		return errors.New("s3 destinations cannot be combined with --extract or --place")
+	}
 	// quiet forces log level to error unless JSON is requested
 	if *quiet && !*jsonOut {
 		*logLevel = "error"
@@ -486,6 +490,9 @@ func handleDownload(ctx context.Context, args []string) error {
 								logMu.Unlock()
 								continue
 							}
+						}
+						if storage.IsS3URI(destCandidate) && (job.Extract || *extractFlag || job.Place || *placeFlag) {
+							return fmt.Errorf("job %d: s3 destinations cannot be combined with extract or place", it.idx)
 						}
 						// Allow global --force to skip expected SHA verification even if job specifies one
 						expected := job.SHA256
@@ -829,6 +836,9 @@ func handleDownload(ctx context.Context, args []string) error {
 			}
 		}
 	}
+	if storage.IsS3URI(destArg) && (*extractFlag || *placeFlag) {
+		return errors.New("s3 destinations cannot be combined with --extract or --place")
+	}
 	expected := *sha
 	if *forceSkip {
 		expected = ""
@@ -853,6 +863,11 @@ func handleDownload(ctx context.Context, args []string) error {
 	}
 	// Final summary
 	fi, _ := os.Stat(final)
+	if fi == nil && storage.IsS3URI(final) {
+		if local, err := storage.StagingPath(c, final, resolvedURL); err == nil {
+			fi, _ = os.Stat(local)
+		}
+	}
 	size := int64(0)
 	if fi != nil {
 		size = fi.Size()

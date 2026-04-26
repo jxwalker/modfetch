@@ -25,6 +25,7 @@ type Config struct {
 	Logging     Logging          `yaml:"logging"`
 	Metrics     Metrics          `yaml:"metrics"`
 	Validation  Validation       `yaml:"validation"`
+	Storage     Storage          `yaml:"storage"`
 	UI          UIOptions        `yaml:"ui"`
 }
 
@@ -152,6 +153,21 @@ type Validation struct {
 	RequireSHA256                      bool `yaml:"require_sha256"`
 	AcceptMD5SHA1IfProvided            bool `yaml:"accept_md5_sha1_if_provided"`
 	SafetensorsDeepVerifyAfterDownload bool `yaml:"safetensors_deep_verify_after_download"`
+}
+
+type Storage struct {
+	S3 S3Storage `yaml:"s3"`
+}
+
+type S3Storage struct {
+	Endpoint         string `yaml:"endpoint"`
+	Region           string `yaml:"region"`
+	UseHTTP          bool   `yaml:"use_http"`
+	AccessKeyEnv     string `yaml:"access_key_env"`
+	SecretKeyEnv     string `yaml:"secret_key_env"`
+	SessionTokenEnv  string `yaml:"session_token_env"`
+	PathStyle        bool   `yaml:"path_style"`
+	UploadSHA256File bool   `yaml:"upload_sha256_file"`
 }
 
 type UIOptions struct {
