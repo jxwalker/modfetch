@@ -16,7 +16,7 @@ Quick start: interactive wizard
 - `general`
   - `data_root`: State DB, logs, metrics root
   - `download_root`: Where partial and finished downloads are staged before placement
-  - `placement_mode`: `symlink` | `hardlink` | `copy`
+  - `placement_mode`: `symlink` | `hardlink` | `copy` (optional for configs that do not use placement; provide `--mode` when placing if omitted)
   - `quarantine`: true|false (quarantine until checksum verified)
   - `allow_overwrite`: true|false
   - `stage_partials`: true|false (default true). When true, .part files are written under `download_root/.parts` (or `partials_root` if set) and moved atomically on completion.
@@ -32,7 +32,7 @@ Quick start: interactive wizard
   - `upload_sha256_file`: when true, upload the generated `.sha256` sidecar next to the object.
   - Use an explicit destination like `--dest s3://bucket/path/model.gguf`; modfetch downloads to a resumable local staging path under `data_root/s3-staging`, verifies locally, uploads the artifact, and records the final `s3://` URI in state.
 - `network`
-  - `timeout_seconds`, `max_redirects`, `tls_verify`, `user_agent`
+  - `timeout_seconds`, `max_redirects`, `tls_verify`, `user_agent` (`timeout_seconds` and `max_redirects` must be >= 0; `max_redirects: 0` uses the default limit)
   - `global_bandwidth_bytes_per_second`: optional process-wide bandwidth cap in bytes/second; 0 or omitted means unlimited.
   - `per_download_bandwidth_bytes_per_second`: optional per-download bandwidth cap in bytes/second; 0 or omitted means unlimited.
   - `dns_cache_ttl_seconds`: optional DNS cache TTL in seconds for repeated hosts; 0 or omitted disables caching.
@@ -59,7 +59,7 @@ Quick start: interactive wizard
   - `require_sha256`, `accept_md5_sha1_if_provided`
   - `safetensors_deep_verify_after_download`: when true, perform deep coverage/length verification of .safetensors files immediately after download; fail the command if invalid
 - `ui`
-  - `refresh_hz`, `column_mode`, `compact`, `theme`
+  - `refresh_hz`, `column_mode`, `compact`, `theme` (`refresh_hz` must be >= 0; `column_mode` may be omitted or set to `dest`, `url`, or `host`)
 
 See `assets/sample-config/config.example.yml` for a full example.
 

@@ -84,6 +84,96 @@ func TestValidateRejectsNegativeDNSCacheTTL(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsInvalidDocumentedSchemaValues(t *testing.T) {
+	base := Config{
+		Version: 1,
+		General: General{
+			DataRoot:     t.TempDir(),
+			DownloadRoot: t.TempDir(),
+		},
+	}
+
+	tests := []struct {
+		name string
+		edit func(*Config)
+		want string
+	}{
+		{
+			name: "placement mode",
+			edit: func(c *Config) { c.General.PlacementMode = "move" },
+			want: "general.placement_mode invalid",
+		},
+		{
+			name: "network timeout",
+			edit: func(c *Config) { c.Network.TimeoutSeconds = -1 },
+			want: "network.timeout_seconds must be >= 0",
+		},
+		{
+			name: "network redirects",
+			edit: func(c *Config) { c.Network.MaxRedirects = -1 },
+			want: "network.max_redirects must be >= 0",
+		},
+		{
+			name: "ui column mode",
+			edit: func(c *Config) { c.UI.ColumnMode = "filename" },
+			want: "ui.column_mode invalid",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := base
+			tt.edit(&c)
+			err := c.Validate()
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("expected %q validation error, got %v", tt.want, err)
+			}
+		})
+	}
+}
+
+func TestValidateAcceptsDocumentedSchemaValues(t *testing.T) {
+	for _, placementMode := range []string{"", "symlink", "hardlink", "copy"} {
+		for _, columnMode := range []string{"", "dest", "url", "host"} {
+			t.Run(placementMode+"/"+columnMode, func(t *testing.T) {
+				c := Config{
+					Version: 1,
+					General: General{
+						DataRoot:      t.TempDir(),
+						DownloadRoot:  t.TempDir(),
+						PlacementMode: placementMode,
+					},
+					UI: UIOptions{ColumnMode: columnMode},
+				}
+				if err := c.Validate(); err != nil {
+					t.Fatalf("expected documented values to validate, got %v", err)
+				}
+			})
+		}
+	}
+}
+
+func TestValidateNormalizesDocumentedSchemaValues(t *testing.T) {
+	c := Config{
+		Version: 1,
+		General: General{
+			DataRoot:      t.TempDir(),
+			DownloadRoot:  t.TempDir(),
+			PlacementMode: " HardLink ",
+		},
+		UI: UIOptions{ColumnMode: " URL "},
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("expected mixed-case documented values to validate, got %v", err)
+	}
+	if c.General.PlacementMode != "hardlink" {
+		t.Fatalf("expected normalized placement mode, got %q", c.General.PlacementMode)
+	}
+	if c.UI.ColumnMode != "url" {
+		t.Fatalf("expected normalized column mode, got %q", c.UI.ColumnMode)
+	}
+}
+
 func TestValidateS3RequiresCredentialsWhenEndpointConfigured(t *testing.T) {
 	t.Setenv("MODFETCH_TEST_S3_ACCESS", "")
 	t.Setenv("MODFETCH_TEST_S3_SECRET", "")

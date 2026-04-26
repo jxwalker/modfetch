@@ -69,6 +69,7 @@ Performance optimizations
 Breaking changes to consider for v1.0
 - Config schema tidy-up [WIP]
   - `modfetch config validate --strict` rejects unknown YAML fields before strict validation becomes a v1.0 default candidate [IMPL]
+  - Documented enum/range values are validated for placement mode, network timeout/redirect settings, and TUI column mode [IMPL]
 - State DB schema simplification [WIP]
   - State DB bootstrap is centralized and stamps SQLite `user_version` as the v1.0 migration baseline [IMPL]
 - Standardize CLI flags and naming [WIP]
