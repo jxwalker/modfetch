@@ -61,7 +61,7 @@ Technical debt
 - Audit metrics writes/guards when disabled [IMPL]
 
 Performance optimizations
-- Pre-allocate/truncate files in chunked mode (done) and consider parallel chunk verification [NEW]
+- Pre-allocate/truncate files in chunked mode and parallel chunk verification [IMPL]
 - DNS result caching for repeated hosts [IMPL]
 - Adaptive chunk size based on throughput [NEW]
 
