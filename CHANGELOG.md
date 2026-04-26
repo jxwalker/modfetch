@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+Added
+- S3-compatible storage destinations using local resumable staging plus SigV4 upload.
+- Archive extraction support for zip, tar, tar.gz, tgz, and optional 7z backends.
+- Duplicate reporting and `dedupe` link modes for verified duplicate artifacts.
+- Event-driven TUI state refresh with polling fallback.
+- Strict config validation mode and documented enum/range validation.
+- SQLite schema version baseline with explicit legacy v0-to-v1 migration.
+
+Changed
+- Centralized config path resolution and common CLI flag registration.
+- Synced shell completions with current commands and flags.
+- Improved chunked download verification, adaptive chunk sizing, and downloader HTTP client behavior.
+- Refined TUI state helpers, grouping/preferences, filter selection persistence, and progress reporting.
+
+Testing
+- Expanded resolver, state, placer, downloader, metrics, config, completion, S3, archive, and TUI test coverage.
+- Added migration, schema validation, completion, rate-limit, and race-suite coverage.
+
+Docs
+- Closed out the consolidated roadmap and marked old sprint/test status reports as historical.
+- Added database schema documentation and refreshed config, completion, batch, and CLI docs.
+
+## v0.6.1 — 2025-11-11
+
+Testing
+- Added real Hugging Face and CivitAI API integration tests with retry/backoff handling.
+- Expanded TUI navigation and inspector test coverage.
+- Added test guidance for manual TUI validation and external API behavior.
+
+Fixes
+- Fixed resolver path parsing, scanner version extraction, scanner format detection, state timestamp precision, and TUI test fixtures.
+- Improved test reliability for flaky external API calls.
+
 ## v0.5.2 — 2025-09-26
 
 Fixes
@@ -125,4 +158,3 @@ Assets
 ## v0.1.0 — 2025-08-20
 
 - Initial release: CLI download, verify, placement; hf:// and civitai:// resolvers; chunked + single-stream fallback
-
