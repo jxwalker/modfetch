@@ -36,8 +36,8 @@ Priority 4 — Quality improvements
 - Configuration validation hardening [IMPL]
 
 Priority 5 — Advanced features
-- Archive extraction post-download (zip/tar/7z) [WIP]
-  - zip, tar, tar.gz, and tgz are implemented; 7z reports a clear unsupported-format error until a 7z backend is selected.
+- Archive extraction post-download (zip/tar/7z) [IMPL]
+  - zip, tar, tar.gz, and tgz use native extraction; 7z uses `7zz`, `7z`, or `7za` when available on PATH.
 - Duplicate detection / content-addressable storage [WIP]
   - Duplicate reporting by completed SHA256 is implemented; content-addressable storage/linking remains open.
 - S3-compatible backend for storage [NEW]

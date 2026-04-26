@@ -244,7 +244,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	dryRun := fs.Bool("dry-run", false, "plan only: resolve URL/URI and compute default destination; no download")
 	forceSkip := fs.Bool("force", false, "skip SHA256 verification even if --sha256/--sha256-file is provided")
 	noAuthPreflight := fs.Bool("no-auth-preflight", false, "skip auth preflight probe")
-	extractFlag := fs.Bool("extract", false, "extract zip/tar/tar.gz archives after download")
+	extractFlag := fs.Bool("extract", false, "extract zip/tar/tar.gz/7z archives after download")
 	extractDir := fs.String("extract-dir", "", "directory for extracted archives (default: archive path without extension)")
 	quant := fs.String("quant", "", "HuggingFace quantization to download (e.g., Q4_K_M, fp16)")
 	listQuants := fs.Bool("list-quants", false, "list available quantizations for HuggingFace URI and exit")

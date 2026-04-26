@@ -84,7 +84,7 @@ modfetch download --url URL [OPTIONS]
 - `--sha256-file PATH` - File containing expected hash (`.sha256` format)
 - `--batch PATH` - YAML file with multiple downloads (see [BATCH.md](BATCH.md))
 - `--place` - Automatically place files after download (with `--batch`)
-- `--extract` - Extract `.zip`, `.tar`, `.tar.gz`, or `.tgz` archives after download
+- `--extract` - Extract `.zip`, `.tar`, `.tar.gz`, `.tgz`, or `.7z` archives after download. 7z archives require `7zz`, `7z`, or `7za` on `PATH`.
 - `--extract-dir PATH` - Directory for extracted archive contents
 - `--batch-parallel N` - Concurrent downloads in batch mode
 - `--dry-run` - Preview download without actually downloading

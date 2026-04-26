@@ -5,6 +5,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -67,5 +69,65 @@ func TestExtractRejectsTraversal(t *testing.T) {
 
 	if _, err := Extract(context.Background(), src, filepath.Join(dir, "out")); err == nil {
 		t.Fatal("expected traversal error")
+	}
+}
+
+func TestExtract7zUsesExternalBackend(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script fake")
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fake := filepath.Join(binDir, "7zz")
+	script := `#!/bin/sh
+set -eu
+out=""
+for arg in "$@"; do
+  case "$arg" in
+    -o*) out="${arg#-o}" ;;
+  esac
+done
+mkdir -p "$out/nested"
+printf model > "$out/nested/model.bin"
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+"/bin"+string(os.PathListSeparator)+"/usr/bin")
+
+	src := filepath.Join(dir, "model.7z")
+	if err := os.WriteFile(src, []byte("fake archive"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outDir := filepath.Join(dir, "out")
+	files, err := Extract(context.Background(), src, outDir)
+	if err != nil {
+		t.Fatalf("extract 7z: %v", err)
+	}
+	if len(files) != 1 || files[0] != filepath.Join(outDir, "nested", "model.bin") {
+		t.Fatalf("unexpected extracted files: %+v", files)
+	}
+	got, err := os.ReadFile(files[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "model" {
+		t.Fatalf("unexpected extracted content: %q", string(got))
+	}
+}
+
+func TestExtract7zReportsMissingBackend(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", filepath.Join(dir, "empty-bin"))
+	src := filepath.Join(dir, "model.7z")
+	if err := os.WriteFile(src, []byte("fake archive"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Extract(context.Background(), src, filepath.Join(dir, "out"))
+	if err == nil || !strings.Contains(err.Error(), "requires 7zz, 7z, or 7za") {
+		t.Fatalf("expected missing 7z backend error, got %v", err)
 	}
 }

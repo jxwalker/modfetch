@@ -136,7 +136,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from download" -l sha256 -d "Exp
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l sha256-file -d "File containing expected hash"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l batch -d "Batch file"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l place -d "Place after download"
-complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract -d "Extract archive after download"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract -d "Extract zip/tar/tar.gz/7z archive after download"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract-dir -d "Extraction directory"
 # batch import flags
 complete -c modfetch -n "__fish_seen_subcommand_from batch" -a "import" -d "Import URLs to YAML batch"

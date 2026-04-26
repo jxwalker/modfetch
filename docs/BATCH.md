@@ -6,7 +6,7 @@ Key properties:
 - YAML-driven; versioned schema (current version: 1)
 - No secrets in YAML; tokens must be provided via environment variables (HF_TOKEN, CIVITAI_TOKEN) when the corresponding sources are enabled in config
 - Per-job or global placement control
-- Per-job archive extraction for `.zip`, `.tar`, `.tar.gz`, and `.tgz`
+- Per-job archive extraction for `.zip`, `.tar`, `.tar.gz`, `.tgz`, and `.7z` when a 7z backend is installed
 - Optional local daily schedule windows for jobs
 
 ## Schema (version 1)
@@ -37,7 +37,7 @@ BatchJob fields:
 - mode: string (optional)
   - Placement mode override: `symlink` | `hardlink` | `copy`. If omitted, falls back to `general.placement_mode` from your config.
 - extract: boolean (optional; default false)
-  - Extract the downloaded file after it completes. Supported formats are `.zip`, `.tar`, `.tar.gz`, and `.tgz`. `.7z` currently returns a clear unsupported-format error.
+  - Extract the downloaded file after it completes. Supported formats are `.zip`, `.tar`, `.tar.gz`, `.tgz`, and `.7z` when `7zz`, `7z`, or `7za` is available on `PATH`.
 - extract_dir: string (optional)
   - Directory for extracted files. If omitted, modfetch uses the archive path without its extension.
 - schedule_window: string (optional)
