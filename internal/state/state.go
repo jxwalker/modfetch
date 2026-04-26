@@ -14,6 +14,8 @@ import (
 	"github.com/jxwalker/modfetch/internal/config"
 )
 
+const SchemaVersion = 1
+
 type DB struct {
 	SQL  *sql.DB
 	Path string
@@ -117,35 +119,27 @@ func Open(cfg *config.Config) (*DB, error) {
 		return nil, err
 	}
 	path := filepath.Join(cfg.General.DataRoot, "state.db")
-	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout=5000&_pragma=journal_mode(WAL)&_fk=1", path)
-	sqldb, err := sql.Open("sqlite", dsn)
-	if err != nil {
-		return nil, err
-	}
-	if err := initSchema(sqldb); err != nil {
-		return nil, err
-	}
-	db := &DB{SQL: sqldb, Path: path}
-	if err := db.prepareStatements(); err != nil {
-		return nil, err
-	}
-	if err := db.InitChunksTable(); err != nil {
-		return nil, err
-	}
-	if err := db.InitHostCapsTable(); err != nil {
-		return nil, err
-	}
-	if err := db.InitMetadataTable(); err != nil {
-		return nil, err
-	}
-	return db, nil
+	return openAtPath(path)
 }
 
 // NewDB opens a database at the specified path (for testing)
 func NewDB(path string) (*DB, error) {
+	return openAtPath(path)
+}
+
+func openAtPath(path string) (*DB, error) {
 	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout=5000&_pragma=journal_mode(WAL)&_fk=1", path)
 	sqldb, err := sql.Open("sqlite", dsn)
 	if err != nil {
+		return nil, err
+	}
+	ready := false
+	defer func() {
+		if !ready {
+			_ = sqldb.Close()
+		}
+	}()
+	if err := rejectNewerSchemaVersion(sqldb); err != nil {
 		return nil, err
 	}
 	if err := initSchema(sqldb); err != nil {
@@ -164,6 +158,10 @@ func NewDB(path string) (*DB, error) {
 	if err := db.InitMetadataTable(); err != nil {
 		return nil, err
 	}
+	if err := ensureSchemaVersion(sqldb); err != nil {
+		return nil, err
+	}
+	ready = true
 	return db, nil
 }
 
@@ -195,9 +193,52 @@ func initSchema(db *sql.DB) error {
 		}
 	}
 	// Try to add new columns in case of existing DB without them
-	_, _ = db.Exec(`ALTER TABLE downloads ADD COLUMN actual_sha256 TEXT`)
-	_, _ = db.Exec(`ALTER TABLE downloads ADD COLUMN retries INTEGER DEFAULT 0`)
-	_, _ = db.Exec(`ALTER TABLE downloads ADD COLUMN last_error TEXT`)
+	if err := addColumnIfNotExists(db, `ALTER TABLE downloads ADD COLUMN actual_sha256 TEXT`); err != nil {
+		return err
+	}
+	if err := addColumnIfNotExists(db, `ALTER TABLE downloads ADD COLUMN retries INTEGER DEFAULT 0`); err != nil {
+		return err
+	}
+	if err := addColumnIfNotExists(db, `ALTER TABLE downloads ADD COLUMN last_error TEXT`); err != nil {
+		return err
+	}
+	return nil
+}
+
+func addColumnIfNotExists(db *sql.DB, stmt string) error {
+	_, err := db.Exec(stmt)
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
+		return nil
+	}
+	return err
+}
+
+func rejectNewerSchemaVersion(db *sql.DB) error {
+	var current int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&current); err != nil {
+		return err
+	}
+	if current > SchemaVersion {
+		return fmt.Errorf("database schema version %d is newer than supported version %d", current, SchemaVersion)
+	}
+	return nil
+}
+
+func ensureSchemaVersion(db *sql.DB) error {
+	var current int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&current); err != nil {
+		return err
+	}
+	if current > SchemaVersion {
+		return fmt.Errorf("database schema version %d is newer than supported version %d", current, SchemaVersion)
+	}
+	if current < SchemaVersion {
+		_, err := db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, SchemaVersion))
+		return err
+	}
 	return nil
 }
 

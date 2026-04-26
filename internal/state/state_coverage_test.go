@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -65,6 +66,41 @@ func TestChunkLifecycleTxAndDirectUpdates(t *testing.T) {
 	}
 	if len(chunks) != 0 {
 		t.Fatalf("expected chunks deleted, got %+v", chunks)
+	}
+}
+
+func TestNewDBInitializesSchemaVersion(t *testing.T) {
+	db := testDownloadDB(t)
+	var got int
+	if err := db.SQL.QueryRow(`PRAGMA user_version`).Scan(&got); err != nil {
+		t.Fatalf("query user_version: %v", err)
+	}
+	if got != SchemaVersion {
+		t.Fatalf("schema version = %d; want %d", got, SchemaVersion)
+	}
+}
+
+func TestNewDBRejectsNewerSchemaVersion(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	raw, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`PRAGMA user_version = 999`); err != nil {
+		_ = raw.Close()
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := NewDB(path)
+	if err == nil {
+		_ = db.Close()
+		t.Fatal("expected newer schema version to be rejected")
+	}
+	if !strings.Contains(err.Error(), "newer than supported") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
