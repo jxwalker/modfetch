@@ -22,6 +22,37 @@ func (m *Model) visibleRows() []state.DownloadRow {
 	return rows
 }
 
+func (m *Model) currentVisibleKey() string {
+	rows := m.visibleRows()
+	if m.selected >= 0 && m.selected < len(rows) {
+		return keyFor(rows[m.selected])
+	}
+	return ""
+}
+
+func (m *Model) restoreVisibleSelection(selectedKey string) {
+	rows := m.visibleRows()
+	if len(rows) == 0 {
+		m.selected = 0
+		return
+	}
+	if selectedKey != "" {
+		for i, r := range rows {
+			if keyFor(r) == selectedKey {
+				m.selected = i
+				return
+			}
+		}
+	}
+	if m.selected < 0 {
+		m.selected = 0
+		return
+	}
+	if m.selected >= len(rows) {
+		m.selected = len(rows) - 1
+	}
+}
+
 func (m *Model) filterRows(tab int) []state.DownloadRow {
 	var out []state.DownloadRow
 	for _, r := range m.rows {
@@ -365,6 +396,9 @@ func (m *Model) computeCurAndTotal(r state.DownloadRow) (cur int64, total int64)
 			}
 		}
 		return cur, total
+	}
+	if strings.EqualFold(strings.TrimSpace(r.Status), "planning") {
+		return 0, total
 	}
 	if r.Dest != "" {
 		p := downloader.StagePartPath(m.cfg, r.URL, r.Dest)

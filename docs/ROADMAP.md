@@ -5,9 +5,9 @@ This document consolidates the project backlog and roadmap from multiple sources
 Status key: [NEW] newly captured, [IMPL] implemented already (kept here for traceability), [WIP] in progress.
 
 Priority 1 — Critical reliability and performance
-- Concurrent download recovery [NEW]
+- Concurrent download recovery [IMPL]
   - Persist/reattach TUI-initiated downloads after process restart; graceful recovery of work-in-progress.
-- Database transaction boundaries [NEW]
+- Database transaction boundaries [IMPL]
   - Group related state updates in transactions to avoid inconsistent rows on crashes.
 - Streaming hashing [IMPL]
   - Single and chunked downloaders perform streaming SHA256; keep for traceability.
@@ -15,52 +15,54 @@ Priority 1 — Critical reliability and performance
   - Self-check and targeted re-fetch of dirty chunks is implemented in chunked downloader.
 
 Priority 2 — Core functionality gaps
-- Bandwidth throttling (per-download and global) [NEW]
-- Mirror/fallback URLs with ordered failover [NEW]
-- Partial verification during single-stream downloads [NEW]
+- Bandwidth throttling (per-download and global) [IMPL]
+- Mirror/fallback URLs with ordered failover [IMPL]
+- Partial verification during single-stream downloads [IMPL]
   - Periodic checkpoints; chunked mode already verifies per-chunk.
-- Connection pool management [NEW]
+- Connection pool management [IMPL]
   - Reuse a shared HTTP client/transport across downloaders; per-host limits.
 
 Priority 3 — User experience
 - TUI refactor and feature polish [NEW]
   - Factor large models into smaller components; refine sort/group/columns; persistence of selection when filtering; progress accuracy during planning.
-- Progress persistence across sessions [NEW]
-- Adaptive retry/backoff by error type [NEW]
-- Download queue management with priorities [NEW]
+- Progress persistence across sessions [IMPL]
+- Adaptive retry/backoff by error type [IMPL]
+- Download queue management with priorities [IMPL]
 
 Priority 4 — Quality improvements
-- Rich, structured error context with remediation hints [NEW]
+- Rich, structured error context with remediation hints [IMPL]
 - Test coverage expansion (resolvers/state/placer/downloaders) [NEW]
-- Metrics expansion (per-download stats, percentiles) [NEW]
-- Configuration validation hardening [NEW]
+- Metrics expansion (per-download stats, percentiles) [IMPL]
+- Configuration validation hardening [IMPL]
 
 Priority 5 — Advanced features
-- Archive extraction post-download (zip/tar/7z) [NEW]
-- Duplicate detection / content-addressable storage [NEW]
+- Archive extraction post-download (zip/tar/7z) [WIP]
+  - zip, tar, tar.gz, and tgz are implemented; 7z reports a clear unsupported-format error until a 7z backend is selected.
+- Duplicate detection / content-addressable storage [WIP]
+  - Duplicate reporting by completed SHA256 is implemented; content-addressable storage/linking remains open.
 - S3-compatible backend for storage [NEW]
-- Download scheduling (cron-like windows) [NEW]
+- Download scheduling (cron-like windows) [IMPL]
 
 Priority 6 — Architecture
-- Context propagation pattern improvements [NEW]
-- Plugin architecture for resolvers [NEW]
+- Context propagation pattern improvements [IMPL]
+- Plugin architecture for resolvers [IMPL]
 - Event-driven updates vs polling [NEW]
 
 Quick wins (remaining)
 - Add a flag to skip SHA256 verification intentionally for trusted sources (implemented as --force) [IMPL]
-- Fix TUI selected item persistence when filtering [NEW]
-- Fix progress bar showing 100% during chunk planning [NEW]
+- Fix TUI selected item persistence when filtering [IMPL]
+- Fix progress bar showing 100% during chunk planning [IMPL]
 
 Technical debt
-- Remove duplicate SafeFileName implementations (ensure all call util.SafeFileName) [NEW]
-- Consolidate HTTP client creation to a shared pool [NEW]
-- Standardize error wrapping and logging redaction [NEW]
+- Remove duplicate SafeFileName implementations (ensure all call util.SafeFileName) [IMPL]
+- Consolidate HTTP client creation to a shared pool [IMPL]
+- Standardize error wrapping and logging redaction [IMPL]
 - Trim dead code in legacy TUI model [NEW]
-- Audit metrics writes/guards when disabled [NEW]
+- Audit metrics writes/guards when disabled [IMPL]
 
 Performance optimizations
 - Pre-allocate/truncate files in chunked mode (done) and consider parallel chunk verification [NEW]
-- DNS result caching for repeated hosts [NEW]
+- DNS result caching for repeated hosts [IMPL]
 - Adaptive chunk size based on throughput [NEW]
 
 Breaking changes to consider for v1.0
@@ -98,4 +100,3 @@ Completed v0.6.0 (November 2025)
 Notes
 - README "Roadmap" bullets map to the Priority 3/4 buckets here.
 - v0.6.0 features fully documented in docs/LIBRARY.md and docs/SCANNER.md
-

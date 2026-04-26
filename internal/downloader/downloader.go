@@ -2,6 +2,7 @@ package downloader
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/logging"
@@ -17,10 +18,12 @@ type Interface interface {
 // already contains robust fallback to the single-stream downloader.
 // This centralizes the selection logic behind Interface.
 type Auto struct {
-	c  *config.Config
-	l  *logging.Logger
-	st *state.DB
-	m  interface {
+	c             *config.Config
+	l             *logging.Logger
+	st            *state.DB
+	client        *http.Client
+	globalLimiter *bandwidthLimiter
+	m             interface {
 		AddBytes(int64)
 		IncRetries(int64)
 		IncDownloadsSuccess()
@@ -36,10 +39,11 @@ func NewAuto(c *config.Config, l *logging.Logger, st *state.DB, m interface {
 	ObserveDownloadSeconds(float64)
 	Write() error
 }) *Auto {
-	return &Auto{c: c, l: l, st: st, m: m}
+	global, _ := configuredBandwidthLimiters(c)
+	return &Auto{c: c, l: l, st: st, client: newHTTPClient(c), globalLimiter: global, m: m}
 }
 
 func (a *Auto) Download(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string, noResume bool) (string, string, error) {
 	// Delegate to chunked downloader which handles head probe and fallback.
-	return NewChunked(a.c, a.l, a.st, a.m).Download(ctx, url, destPath, expectedSHA, headers, noResume)
+	return newChunkedWithClientAndLimiters(a.c, a.l, a.st, a.m, a.client, a.globalLimiter, nil).Download(ctx, url, destPath, expectedSHA, headers, noResume)
 }

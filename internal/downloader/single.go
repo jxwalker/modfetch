@@ -10,7 +10,6 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -22,8 +21,8 @@ import (
 )
 
 // local helper to probe size and range via GET bytes=0-0
-func probeRangeGET(client *http.Client, url string, headers map[string]string, ua string) (size int64, ok bool) {
-	req, _ := http.NewRequest(http.MethodGet, url, nil)
+func probeRangeGET(ctx context.Context, client *http.Client, url string, headers map[string]string, ua string) (size int64, ok bool) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	req.Header.Set("User-Agent", ua)
 	for k, v := range headers {
 		req.Header.Set(k, v)
@@ -46,11 +45,13 @@ func probeRangeGET(client *http.Client, url string, headers map[string]string, u
 }
 
 type Single struct {
-	cfg     *config.Config
-	log     *logging.Logger
-	client  *http.Client
-	st      *state.DB
-	metrics interface {
+	cfg                *config.Config
+	log                *logging.Logger
+	client             *http.Client
+	st                 *state.DB
+	globalLimiter      *bandwidthLimiter
+	perDownloadLimiter *bandwidthLimiter
+	metrics            interface {
 		AddBytes(int64)
 		IncDownloadsSuccess()
 		ObserveDownloadSeconds(float64)
@@ -64,12 +65,37 @@ func NewSingle(cfg *config.Config, log *logging.Logger, st *state.DB, m interfac
 	ObserveDownloadSeconds(float64)
 	Write() error
 }) *Single {
+	global, _ := configuredBandwidthLimiters(cfg)
+	return newSingleWithClientAndLimiters(cfg, log, st, m, newHTTPClient(cfg), global, nil)
+}
+
+func newSingleWithClient(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
+	AddBytes(int64)
+	IncDownloadsSuccess()
+	ObserveDownloadSeconds(float64)
+	Write() error
+}, client *http.Client) *Single {
+	global, _ := configuredBandwidthLimiters(cfg)
+	return newSingleWithClientAndLimiters(cfg, log, st, m, client, global, nil)
+}
+
+func newSingleWithClientAndLimiters(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
+	AddBytes(int64)
+	IncDownloadsSuccess()
+	ObserveDownloadSeconds(float64)
+	Write() error
+}, client *http.Client, globalLimiter, perDownloadLimiter *bandwidthLimiter) *Single {
+	if client == nil {
+		client = newHTTPClient(cfg)
+	}
 	return &Single{
-		cfg:     cfg,
-		log:     log,
-		st:      st,
-		client:  newHTTPClient(cfg),
-		metrics: m,
+		cfg:                cfg,
+		log:                log,
+		st:                 st,
+		client:             client,
+		globalLimiter:      globalLimiter,
+		perDownloadLimiter: perDownloadLimiter,
+		metrics:            m,
 	}
 }
 
@@ -79,12 +105,12 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	if url == "" {
 		return "", "", errors.New("url required")
 	}
+	perDownloadLimiter := s.perDownloadLimiter
+	if perDownloadLimiter == nil {
+		perDownloadLimiter = newPerDownloadBandwidthLimiter(s.cfg)
+	}
 	if destPath == "" {
-		seg := lastURLSegment(url)
-		if seg == "" {
-			return "", "", errors.New("cannot infer destination filename")
-		}
-		destPath = filepath.Join(s.cfg.General.DownloadRoot, seg)
+		destPath = filepath.Join(s.cfg.General.DownloadRoot, util.SafeFileName(util.URLPathBase(url)))
 	}
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 		return "", "", err
@@ -103,28 +129,25 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	part := stagePartPath(s.cfg, url, destPath)
 	if noResume {
 		_ = os.Remove(part)
-		_ = s.st.DeleteChunks(url, destPath)
 	}
 
 	// HEAD for metadata
 	etag, lastMod, size, rangeOK := s.head(ctx, url, headers)
 	s.log.Debugf("HEAD: etag=%s last-mod=%s size=%d range=%v", etag, lastMod, size, rangeOK)
-	_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "planning"})
+	_ = s.st.ClearChunksAndUpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "planning"})
 
+	completed := false
 	// Cleanup on cancellation
 	defer func() {
-		if ctx.Err() != nil {
+		if ctx.Err() != nil && !completed {
 			_ = os.Remove(part)
-			_ = s.st.DeleteChunks(url, destPath)
-			_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "canceled"})
+			_ = s.st.ClearChunksAndUpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "canceled"})
 		}
 	}()
 
 	// Prepare hasher and file
 	var hasher = sha256.New()
 	var start int64 = 0
-	// Clear any stale chunk state since we're using single-stream
-	_ = s.st.DeleteChunks(url, destPath)
 	if fi, err := os.Stat(part); err == nil {
 		start = fi.Size()
 		s.log.Infof("resuming: %s (have %d bytes)", part, start)
@@ -227,6 +250,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 				return "", "", err
 			}
 			_ = fsyncDir(filepath.Dir(destPath))
+			completed = true
 			_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "complete"})
 			if s.metrics != nil {
 				s.metrics.IncDownloadsSuccess()
@@ -246,12 +270,13 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		}
 		msg := friendlyHTTPStatusMessage(s.cfg, host, resp.StatusCode, resp.Status, hadAuth)
 		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error", LastError: msg})
-		return "", "", errors.New(msg)
+		return "", "", httpStatusError{statusCode: resp.StatusCode, msg: msg}
 	}
 
 	// Do not preallocate for single-stream so that .part size reflects real progress
 	mw := io.MultiWriter(f, hasher)
-	nWritten, err := io.Copy(mw, resp.Body)
+	body := newThrottledReader(ctx, resp.Body, perDownloadLimiter, s.globalLimiter)
+	nWritten, err := io.Copy(mw, body)
 	if s.metrics != nil && nWritten > 0 {
 		s.metrics.AddBytes(nWritten)
 	}
@@ -263,6 +288,17 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error", LastError: ioMsg})
 		return "", "", errors.New(ioMsg)
 	}
+	if size > 0 {
+		fi, statErr := f.Stat()
+		if statErr != nil {
+			return "", "", statErr
+		}
+		if fi.Size() != size {
+			msg := fmt.Sprintf("download size mismatch: expected=%d actual=%d", size, fi.Size())
+			_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "error", LastError: msg})
+			return "", "", errors.New(msg)
+		}
+	}
 	// Ensure file data is durable before rename
 	_ = f.Sync()
 	if ctx.Err() != nil {
@@ -272,7 +308,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	actualSHA := hex.EncodeToString(hasher.Sum(nil))
 	if expectedSHA != "" && !equalSHA(expectedSHA, actualSHA) {
 		_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "checksum_mismatch"})
-		return "", actualSHA, fmt.Errorf("sha256 mismatch: expected=%s actual=%s", expectedSHA, actualSHA)
+		return "", actualSHA, checksumMismatchError{msg: fmt.Sprintf("sha256 mismatch: expected=%s actual=%s", expectedSHA, actualSHA)}
 	}
 
 	// Move to final (cross-filesystem safe)
@@ -306,6 +342,7 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	}
 	// Fsync parent directory to persist rename and sidecar
 	_ = fsyncDir(filepath.Dir(destPath))
+	completed = true
 	_ = s.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: actualSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "complete"})
 	if s.metrics != nil {
 		s.metrics.IncDownloadsSuccess()
@@ -335,22 +372,12 @@ func (s *Single) head(ctx context.Context, url string, headers map[string]string
 	}
 	// Fallback: if HEAD failed or size/range not known, try a 0-0 Range GET to infer
 	if size <= 0 || !rangeOK {
-		if sz, ok := probeRangeGET(s.client, url, headers, userAgent(s.cfg)); ok && sz > 0 {
+		if sz, ok := probeRangeGET(ctx, s.client, url, headers, userAgent(s.cfg)); ok && sz > 0 {
 			size = sz
 			rangeOK = true
 		}
 	}
 	return
-}
-
-func lastURLSegment(uStr string) string {
-	if u, err := neturl.Parse(uStr); err == nil {
-		b := path.Base(u.Path)
-		if b != "/" && b != "." && b != "" {
-			return b
-		}
-	}
-	return ""
 }
 
 func equalSHA(exp, got string) bool {

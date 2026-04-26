@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -8,29 +9,66 @@ import (
 	neturl "net/url"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jxwalker/modfetch/internal/config"
 )
 
+type dnsCacheEntry struct {
+	addrs   []net.IPAddr
+	expires time.Time
+}
+
+type cachingDialer struct {
+	base     *net.Dialer
+	resolver *net.Resolver
+	ttl      time.Duration
+	mu       sync.Mutex
+	cache    map[string]dnsCacheEntry
+}
+
 func newHTTPClient(cfg *config.Config) *http.Client {
-	timeout := time.Duration(cfg.Network.TimeoutSeconds) * time.Second
+	timeoutSeconds := 0
+	perHost := 10
+	tlsVerify := true
+	if cfg != nil {
+		timeoutSeconds = cfg.Network.TimeoutSeconds
+		tlsVerify = cfg.Network.TLSVerify
+		if cfg.Concurrency.PerHostRequests > 0 {
+			perHost = cfg.Concurrency.PerHostRequests
+		}
+	}
+	timeout := time.Duration(timeoutSeconds) * time.Second
 	if timeout <= 0 {
 		timeout = 60 * time.Second
 	}
+	baseDialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+	}
+	dialContext := baseDialer.DialContext
+	if cfg != nil && cfg.Network.DNSCacheTTLSeconds > 0 {
+		dialContext = (&cachingDialer{
+			base:     baseDialer,
+			resolver: net.DefaultResolver,
+			ttl:      time.Duration(cfg.Network.DNSCacheTTLSeconds) * time.Second,
+			cache:    map[string]dnsCacheEntry{},
+		}).DialContext
+	}
+
 	tr := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           dialContext,
 		TLSHandshakeTimeout:   10 * time.Second,
 		IdleConnTimeout:       90 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
 		MaxIdleConns:          100,
-		MaxIdleConnsPerHost:   10,
+		MaxIdleConnsPerHost:   perHost,
+		MaxConnsPerHost:       perHost,
 		TLSClientConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: !tlsVerify,
 		},
 	}
 	client := &http.Client{Transport: tr, Timeout: timeout}
@@ -60,6 +98,63 @@ func newHTTPClient(cfg *config.Config) *http.Client {
 	return client
 }
 
+func (d *cachingDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if d == nil {
+		return (&net.Dialer{}).DialContext(ctx, network, address)
+	}
+	if err != nil || d.ttl <= 0 || net.ParseIP(host) != nil {
+		return d.base.DialContext(ctx, network, address)
+	}
+	addrs, err := d.lookup(ctx, network, host)
+	if err != nil || len(addrs) == 0 {
+		return d.base.DialContext(ctx, network, address)
+	}
+	var lastErr error
+	for _, addr := range addrs {
+		ip := addr.IP
+		if network == "tcp4" && ip.To4() == nil {
+			continue
+		}
+		if network == "tcp6" && ip.To4() != nil {
+			continue
+		}
+		conn, err := d.base.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+		if err == nil {
+			return conn, nil
+		}
+		lastErr = err
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return d.base.DialContext(ctx, network, address)
+}
+
+func (d *cachingDialer) lookup(ctx context.Context, network, host string) ([]net.IPAddr, error) {
+	key := network + "|" + strings.ToLower(host)
+	now := time.Now()
+	d.mu.Lock()
+	if entry, ok := d.cache[key]; ok {
+		if now.Before(entry.expires) {
+			addrs := append([]net.IPAddr(nil), entry.addrs...)
+			d.mu.Unlock()
+			return addrs, nil
+		}
+		delete(d.cache, key)
+	}
+	d.mu.Unlock()
+
+	addrs, err := d.resolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil, err
+	}
+	d.mu.Lock()
+	d.cache[key] = dnsCacheEntry{addrs: append([]net.IPAddr(nil), addrs...), expires: now.Add(d.ttl)}
+	d.mu.Unlock()
+	return addrs, nil
+}
+
 // userAgent returns the configured User-Agent, or a sensible default
 // like "github.com/jxwalker/modfetch/<version> (<goos>/<goarch>)" when not set.
 func userAgent(cfg *config.Config) string {
@@ -80,11 +175,11 @@ var defaultVersion = "dev"
 
 // resolveRedirectURL performs a single GET without following redirects to capture the Location.
 // Returns the absolute redirected URL if present.
-func resolveRedirectURL(baseClient *http.Client, rawURL string, headers map[string]string, ua string) (string, bool) {
+func resolveRedirectURL(ctx context.Context, baseClient *http.Client, rawURL string, headers map[string]string, ua string) (string, bool) {
 	// clone client with redirect disabled
 	cl := *baseClient
 	cl.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
-	req, _ := http.NewRequest(http.MethodGet, rawURL, nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	req.Header.Set("User-Agent", ua)
 	for k, v := range headers {
 		req.Header.Set(k, v)

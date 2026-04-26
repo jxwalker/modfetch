@@ -28,8 +28,7 @@ func (m *Model) recoverCmd() tea.Cmd {
 		var todo []state.DownloadRow
 		for _, r := range rows {
 			st := strings.ToLower(strings.TrimSpace(r.Status))
-			if st == "running" || st == "hold" {
-				// Skip completed
+			if st == "running" || st == "planning" || st == "hold" {
 				todo = append(todo, r)
 			}
 		}
@@ -256,8 +255,16 @@ func (m *Model) downloadOrHoldCmd(ctx context.Context, urlStr, dest string, star
 			// Mark that placement data needs to be remapped in Update()
 			needsMap = true
 			// Remove the old pending row and create/refresh the resolved one as pending
-			_ = m.st.DeleteDownload(urlStr, dest)
-			_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "pending"})
+			if err := m.st.ReplaceDownloadURL(urlStr, state.DownloadRow{URL: resolved, Dest: dest, Status: "pending"}); err != nil {
+				if m.log != nil {
+					m.log.Errorf("state remap failed for %s: %v", logging.SanitizeURL(resolved), logging.SanitizeError(err))
+				}
+				_ = m.st.UpsertDownload(state.DownloadRow{URL: resolved, Dest: dest, Status: "error", LastError: "state remap failed: " + err.Error()})
+				return dlDoneMsg{
+					url: resolved, dest: dest, path: "", err: fmt.Errorf("state remap failed: %w", err),
+					origKey: origKey, resKey: resKey, autoPlace: autoPlaceVal, placeType: placeTypeVal, needsPlaceMap: false,
+				}
+			}
 		}
 		if start {
 			if !m.cfg.Network.DisableAuthPreflight {
@@ -344,7 +351,7 @@ func (m *Model) fetchAndStoreMetadataCmd(url, dest, path string) tea.Cmd {
 		if err != nil {
 			// Log error but don't fail - metadata is optional
 			if m.log != nil {
-				m.log.Debugf("metadata fetch failed for %s: %v", url, err)
+				m.log.Debugf("metadata fetch failed for %s: %v", logging.SanitizeURL(url), logging.SanitizeError(err))
 			}
 			return nil
 		}
@@ -363,13 +370,13 @@ func (m *Model) fetchAndStoreMetadataCmd(url, dest, path string) tea.Cmd {
 		// Store metadata in database
 		if err := m.st.UpsertMetadata(meta); err != nil {
 			if m.log != nil {
-				m.log.Debugf("metadata storage failed for %s: %v", url, err)
+				m.log.Debugf("metadata storage failed for %s: %v", logging.SanitizeURL(url), logging.SanitizeError(err))
 			}
 			return nil
 		}
 
 		if m.log != nil {
-			m.log.Debugf("stored metadata for %s (%s)", meta.ModelName, url)
+			m.log.Debugf("stored metadata for %s (%s)", meta.ModelName, logging.SanitizeURL(url))
 		}
 
 		return metadataStoredMsg{url: url, modelName: meta.ModelName}

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -19,6 +20,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"golang.org/x/sync/errgroup"
 
+	mfarchive "github.com/jxwalker/modfetch/internal/archive"
 	"github.com/jxwalker/modfetch/internal/batch"
 	"github.com/jxwalker/modfetch/internal/classifier"
 	"github.com/jxwalker/modfetch/internal/config"
@@ -119,6 +121,7 @@ func handleStatus(ctx context.Context, args []string) error {
 	jsonOut := fs.Bool("json", false, "json logs")
 	onlyErrors := fs.Bool("only-errors", false, "show only rows with error-like statuses (error, checksum_mismatch, verify_failed)")
 	summary := fs.Bool("summary", false, "print totals and error count")
+	duplicates := fs.Bool("duplicates", false, "show completed downloads with duplicate SHA256 content")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -149,6 +152,24 @@ func handleStatus(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if *duplicates {
+		groups := duplicateDownloadGroups(rows)
+		if *jsonOut {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(groups)
+		}
+		for _, group := range groups {
+			log.Infof("duplicate sha256=%s count=%d", group.SHA256, len(group.Rows))
+			for _, r := range group.Rows {
+				log.Infof("  %s", r.Dest)
+			}
+		}
+		if *summary {
+			fmt.Printf("Summary: duplicate_groups=%d duplicate_files=%d\n", len(groups), countDuplicateFiles(groups))
+		}
+		return nil
+	}
 	if *onlyErrors {
 		var filt []state.DownloadRow
 		for _, r := range rows {
@@ -174,6 +195,11 @@ func handleStatus(ctx context.Context, args []string) error {
 		fmt.Printf("Summary: total=%d errors=%d\n", len(rows), countErrors(rows))
 	}
 	return nil
+}
+
+type duplicateGroup struct {
+	SHA256 string              `json:"sha256"`
+	Rows   []state.DownloadRow `json:"rows"`
 }
 
 func handleConfig(ctx context.Context, args []string) error {
@@ -218,6 +244,8 @@ func handleDownload(ctx context.Context, args []string) error {
 	dryRun := fs.Bool("dry-run", false, "plan only: resolve URL/URI and compute default destination; no download")
 	forceSkip := fs.Bool("force", false, "skip SHA256 verification even if --sha256/--sha256-file is provided")
 	noAuthPreflight := fs.Bool("no-auth-preflight", false, "skip auth preflight probe")
+	extractFlag := fs.Bool("extract", false, "extract zip/tar/tar.gz archives after download")
+	extractDir := fs.String("extract-dir", "", "directory for extracted archives (default: archive path without extension)")
 	quant := fs.String("quant", "", "HuggingFace quantization to download (e.g., Q4_K_M, fp16)")
 	listQuants := fs.Bool("list-quants", false, "list available quantizations for HuggingFace URI and exit")
 	if err := fs.Parse(args); err != nil {
@@ -340,6 +368,20 @@ func handleDownload(ctx context.Context, args []string) error {
 							return nil
 						}
 						job := it.job
+						if delay, err := scheduleWindowDelay(time.Now(), job.ScheduleWindow); err != nil {
+							return fmt.Errorf("job %d schedule_window: %w", it.idx, err)
+						} else if delay > 0 {
+							logMu.Lock()
+							log.Infof("job %d: waiting %s for schedule window %s", it.idx, delay.Round(time.Second), job.ScheduleWindow)
+							logMu.Unlock()
+							timer := time.NewTimer(delay)
+							select {
+							case <-gctx.Done():
+								timer.Stop()
+								return gctx.Err()
+							case <-timer.C:
+							}
+						}
 						resolvedURL := job.URI
 						headers := map[string]string{}
 						destCandidate := strings.TrimSpace(job.Dest)
@@ -389,9 +431,66 @@ func handleDownload(ctx context.Context, args []string) error {
 						if *forceSkip {
 							expected = ""
 						}
-						final, sum, err := dl.Download(gctx, resolvedURL, destCandidate, expected, headers, false)
+						type downloadCandidate struct {
+							url     string
+							headers map[string]string
+						}
+						sources := append([]string{job.URI}, job.Mirrors...)
+						candidates := make([]downloadCandidate, 0, len(sources))
+						for _, source := range sources {
+							source = strings.TrimSpace(source)
+							if source == "" {
+								continue
+							}
+							candidateURL, candidateHeaders, err := resolveBatchDownloadCandidate(gctx, c, source)
+							if err != nil {
+								logMu.Lock()
+								log.Warnf("job %d: skipping source %q: %v", it.idx, logging.SanitizeURL(source), logging.SanitizeError(err))
+								logMu.Unlock()
+								continue
+							}
+							candidates = append(candidates, downloadCandidate{url: candidateURL, headers: candidateHeaders})
+						}
+						if len(candidates) == 0 {
+							return fmt.Errorf("job %d: no valid download candidates", it.idx)
+						}
+						var final, sum string
+						var err error
+						baseNoResume := *noResume || c.General.AlwaysNoResume
+						for attempt, candidate := range candidates {
+							final, sum, err = dl.Download(gctx, candidate.url, destCandidate, expected, candidate.headers, baseNoResume || attempt > 0)
+							if err == nil {
+								if attempt > 0 {
+									logMu.Lock()
+									log.Infof("job %d: mirror succeeded after %d failed source(s): %s", it.idx, attempt, logging.SanitizeURL(candidate.url))
+									logMu.Unlock()
+								}
+								break
+							}
+							if attempt < len(candidates)-1 {
+								_ = st.DeleteDownloadsAndChunksByDest(destCandidate)
+								next := logging.SanitizeURL(candidates[attempt+1].url)
+								logMu.Lock()
+								log.Warnf("job %d: source failed: %s (%v); trying next source: %s", it.idx, logging.SanitizeURL(candidate.url), logging.SanitizeError(err), next)
+								logMu.Unlock()
+							}
+						}
 						if err != nil {
 							return fmt.Errorf("job %d download: %w", it.idx, err)
+						}
+						var extracted []string
+						if job.Extract || *extractFlag {
+							outDir := strings.TrimSpace(job.ExtractDir)
+							if outDir == "" {
+								outDir = strings.TrimSpace(*extractDir)
+							}
+							if outDir == "" {
+								outDir = defaultExtractDir(final)
+							}
+							extracted, err = mfarchive.Extract(gctx, final, outDir)
+							if err != nil {
+								return fmt.Errorf("job %d extract: %w", it.idx, err)
+							}
 						}
 						var placed []string
 						if job.Place || *placeFlag {
@@ -403,6 +502,9 @@ func handleDownload(ctx context.Context, args []string) error {
 						}
 						logMu.Lock()
 						log.Infof("downloaded: %s (sha256=%s)", final, sum)
+						if len(extracted) > 0 {
+							log.Infof("extracted: %d file(s)", len(extracted))
+						}
 						for _, p := range placed {
 							log.Infof("placed: %s", p)
 						}
@@ -410,11 +512,12 @@ func handleDownload(ctx context.Context, args []string) error {
 							enc := json.NewEncoder(os.Stdout)
 							enc.SetIndent("", "  ")
 							_ = enc.Encode(map[string]any{
-								"url":    logging.SanitizeURL(resolvedURL),
-								"dest":   final,
-								"sha256": sum,
-								"placed": placed,
-								"status": "ok",
+								"url":       logging.SanitizeURL(resolvedURL),
+								"dest":      final,
+								"sha256":    sum,
+								"placed":    placed,
+								"extracted": extracted,
+								"status":    "ok",
 							})
 						}
 						logMu.Unlock()
@@ -425,11 +528,18 @@ func handleDownload(ctx context.Context, args []string) error {
 
 		go func() {
 			defer close(jobs)
+			items := make([]jobItem, 0, len(bf.Jobs))
 			for i, job := range bf.Jobs {
+				items = append(items, jobItem{idx: i, job: job})
+			}
+			sort.SliceStable(items, func(i, j int) bool {
+				return items[i].job.Priority > items[j].job.Priority
+			})
+			for _, item := range items {
 				select {
 				case <-gctx.Done():
 					return
-				case jobs <- jobItem{idx: i, job: job}:
+				case jobs <- item:
 				}
 			}
 		}()
@@ -669,6 +779,17 @@ func handleDownload(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	var extracted []string
+	if *extractFlag {
+		outDir := strings.TrimSpace(*extractDir)
+		if outDir == "" {
+			outDir = defaultExtractDir(final)
+		}
+		extracted, err = mfarchive.Extract(ctx, final, outDir)
+		if err != nil {
+			return fmt.Errorf("extract: %w", err)
+		}
+	}
 	// Final summary
 	fi, _ := os.Stat(final)
 	size := int64(0)
@@ -680,13 +801,14 @@ func handleDownload(ctx context.Context, args []string) error {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		_ = enc.Encode(map[string]any{
-			"url":      logging.SanitizeURL(resolvedURL),
-			"dest":     final,
-			"size":     size,
-			"duration": dur,
-			"avg_bps":  float64(size) / dur,
-			"sha256":   sum,
-			"status":   "ok",
+			"url":       logging.SanitizeURL(resolvedURL),
+			"dest":      final,
+			"size":      size,
+			"duration":  dur,
+			"avg_bps":   float64(size) / dur,
+			"sha256":    sum,
+			"status":    "ok",
+			"extracted": extracted,
 		})
 	} else if !*jsonOut && !*quiet {
 		var rate string
@@ -698,6 +820,9 @@ func handleDownload(ctx context.Context, args []string) error {
 		fmt.Printf("\nDownloaded: %s\nDest: %s\nSHA256: %s\nSize: %s\nDuration: %.1fs  Avg: %s\n", logging.SanitizeURL(resolvedURL), final, sum, humanize.Bytes(uint64(size)), dur, rate)
 	}
 	log.Infof("downloaded: %s (sha256=%s)", final, sum)
+	if len(extracted) > 0 {
+		log.Infof("extracted: %d file(s)", len(extracted))
+	}
 	if *placeFlag {
 		placed, err := placer.Place(c, final, "", "")
 		if err != nil {
@@ -935,6 +1060,39 @@ func handleClean(ctx context.Context, args []string) error {
 	return nil
 }
 
+func resolveBatchDownloadCandidate(ctx context.Context, c *config.Config, uri string) (string, map[string]string, error) {
+	headers := map[string]string{}
+	if strings.HasPrefix(uri, "hf://") || strings.HasPrefix(uri, "civitai://") {
+		res, err := resolver.Resolve(ctx, uri, c)
+		if err != nil {
+			return "", nil, err
+		}
+		return res.URL, res.Headers, nil
+	}
+	if u, err := neturl.Parse(uri); err == nil {
+		h := strings.ToLower(u.Hostname())
+		if hostIs(h, "civitai.com") && c.Sources.CivitAI.Enabled {
+			env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv)
+			if env == "" {
+				env = "CIVITAI_TOKEN"
+			}
+			if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+				headers["Authorization"] = "Bearer " + tok
+			}
+		}
+		if hostIs(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
+			env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv)
+			if env == "" {
+				env = "HF_TOKEN"
+			}
+			if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+				headers["Authorization"] = "Bearer " + tok
+			}
+		}
+	}
+	return uri, headers, nil
+}
+
 func configOp(args []string, fn func(*config.Config, *logging.Logger) error) error {
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
 	cfgPath := fs.String("config", "", "Path to YAML config file")
@@ -1009,6 +1167,106 @@ func isHex(s string) bool {
 		}
 	}
 	return true
+}
+
+func defaultExtractDir(path string) string {
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	lower := strings.ToLower(base)
+	switch {
+	case strings.HasSuffix(lower, ".tar.gz"):
+		base = base[:len(base)-len(".tar.gz")]
+	case strings.HasSuffix(lower, ".tgz"):
+		base = base[:len(base)-len(".tgz")]
+	default:
+		base = strings.TrimSuffix(base, filepath.Ext(base))
+	}
+	if strings.TrimSpace(base) == "" {
+		base = "extracted"
+	}
+	return filepath.Join(dir, base)
+}
+
+func scheduleWindowDelay(now time.Time, window string) (time.Duration, error) {
+	window = strings.TrimSpace(window)
+	if window == "" {
+		return 0, nil
+	}
+	parts := strings.Split(window, "-")
+	if len(parts) != 2 {
+		return 0, fmt.Errorf("expected HH:MM-HH:MM")
+	}
+	start, err := parseClock(parts[0])
+	if err != nil {
+		return 0, err
+	}
+	end, err := parseClock(parts[1])
+	if err != nil {
+		return 0, err
+	}
+	minute := now.Hour()*60 + now.Minute()
+	if start == end {
+		return 0, nil
+	}
+	if start < end {
+		if minute >= start && minute < end {
+			return 0, nil
+		}
+		target := time.Date(now.Year(), now.Month(), now.Day(), start/60, start%60, 0, 0, now.Location())
+		if !target.After(now) {
+			target = target.Add(24 * time.Hour)
+		}
+		return target.Sub(now), nil
+	}
+	if minute >= start || minute < end {
+		return 0, nil
+	}
+	target := time.Date(now.Year(), now.Month(), now.Day(), start/60, start%60, 0, 0, now.Location())
+	if !target.After(now) {
+		target = target.Add(24 * time.Hour)
+	}
+	return target.Sub(now), nil
+}
+
+func parseClock(s string) (int, error) {
+	t, err := time.Parse("15:04", strings.TrimSpace(s))
+	if err != nil {
+		return 0, fmt.Errorf("invalid clock time %q", strings.TrimSpace(s))
+	}
+	return t.Hour()*60 + t.Minute(), nil
+}
+
+func duplicateDownloadGroups(rows []state.DownloadRow) []duplicateGroup {
+	bySHA := map[string][]state.DownloadRow{}
+	for _, r := range rows {
+		sha := strings.ToLower(strings.TrimSpace(r.ActualSHA256))
+		if sha == "" || !strings.EqualFold(strings.TrimSpace(r.Status), "complete") {
+			continue
+		}
+		bySHA[sha] = append(bySHA[sha], r)
+	}
+	groups := make([]duplicateGroup, 0)
+	for sha, rs := range bySHA {
+		if len(rs) < 2 {
+			continue
+		}
+		sort.Slice(rs, func(i, j int) bool {
+			return rs[i].Dest < rs[j].Dest
+		})
+		groups = append(groups, duplicateGroup{SHA256: sha, Rows: rs})
+	}
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].SHA256 < groups[j].SHA256
+	})
+	return groups
+}
+
+func countDuplicateFiles(groups []duplicateGroup) int {
+	total := 0
+	for _, group := range groups {
+		total += len(group.Rows)
+	}
+	return total
 }
 
 func countErrors(rows []state.DownloadRow) int {

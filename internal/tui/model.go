@@ -697,8 +697,7 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				cancel()
 				delete(m.running, key)
 			}
-			_ = m.st.DeleteChunks(r.URL, r.Dest)
-			if err := m.st.DeleteDownload(r.URL, r.Dest); err == nil {
+			if err := m.st.DeleteDownloadAndChunks(r.URL, r.Dest); err == nil {
 				deleted++
 			}
 			delete(m.selectedKeys, key)

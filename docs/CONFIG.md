@@ -22,9 +22,12 @@ Quick start: interactive wizard
   - `stage_partials`: true|false (default true). When true, .part files are written under `download_root/.parts` (or `partials_root` if set) and moved atomically on completion.
   - `partials_root`: string (optional). Directory to store .part files instead of `download_root/.parts` (useful for a faster or larger filesystem).
   - `always_no_resume`: true|false (default false). When true, every download starts fresh (ignores any .part and clears chunk state) unless overridden by CLI.
-  - `auto_recover_on_start`: true|false (default false). When true, the TUI auto-resumes downloads found in state with status `running` or `hold` on startup.
+  - `auto_recover_on_start`: true|false (default false). When true, the TUI auto-resumes downloads found in state with status `running`, `planning`, or `hold` on startup.
 - `network`
   - `timeout_seconds`, `max_redirects`, `tls_verify`, `user_agent`
+  - `global_bandwidth_bytes_per_second`: optional process-wide bandwidth cap in bytes/second; 0 or omitted means unlimited.
+  - `per_download_bandwidth_bytes_per_second`: optional per-download bandwidth cap in bytes/second; 0 or omitted means unlimited.
+  - `dns_cache_ttl_seconds`: optional DNS cache TTL in seconds for repeated hosts; 0 or omitted disables caching.
   - `retry_on_rate_limit`: true|false. When true, honor HTTP 429 Retry-After to determine wait between retries.
   - `rate_limit_max_delay_seconds`: integer (>=0). Caps the wait derived from Retry-After (default cap 600s if unset).
   - `disable_auth_preflight`: true|false. When true, skip the early HEAD/0–0 preflight in CLI and TUI v2 (default is enabled; disable to avoid HEAD on some hosts).
@@ -132,5 +135,3 @@ classifier:
     - regex: "^special.*\.bin$"
       type: "llm.gguf"
 ```
-
-

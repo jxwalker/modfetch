@@ -11,7 +11,6 @@ import (
 	"net/http"
 	neturl "net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -26,11 +25,13 @@ import (
 )
 
 type Chunked struct {
-	cfg     *config.Config
-	log     *logging.Logger
-	client  *http.Client
-	st      *state.DB
-	metrics interface {
+	cfg                *config.Config
+	log                *logging.Logger
+	client             *http.Client
+	st                 *state.DB
+	globalLimiter      *bandwidthLimiter
+	perDownloadLimiter *bandwidthLimiter
+	metrics            interface {
 		AddBytes(int64)
 		IncRetries(int64)
 		IncDownloadsSuccess()
@@ -46,7 +47,32 @@ func NewChunked(cfg *config.Config, log *logging.Logger, st *state.DB, m interfa
 	ObserveDownloadSeconds(float64)
 	Write() error
 }) *Chunked {
-	return &Chunked{cfg: cfg, log: log, st: st, client: newHTTPClient(cfg), metrics: m}
+	global, _ := configuredBandwidthLimiters(cfg)
+	return newChunkedWithClientAndLimiters(cfg, log, st, m, newHTTPClient(cfg), global, nil)
+}
+
+func newChunkedWithClient(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
+	AddBytes(int64)
+	IncRetries(int64)
+	IncDownloadsSuccess()
+	ObserveDownloadSeconds(float64)
+	Write() error
+}, client *http.Client) *Chunked {
+	global, _ := configuredBandwidthLimiters(cfg)
+	return newChunkedWithClientAndLimiters(cfg, log, st, m, client, global, nil)
+}
+
+func newChunkedWithClientAndLimiters(cfg *config.Config, log *logging.Logger, st *state.DB, m interface {
+	AddBytes(int64)
+	IncRetries(int64)
+	IncDownloadsSuccess()
+	ObserveDownloadSeconds(float64)
+	Write() error
+}, client *http.Client, globalLimiter, perDownloadLimiter *bandwidthLimiter) *Chunked {
+	if client == nil {
+		client = newHTTPClient(cfg)
+	}
+	return &Chunked{cfg: cfg, log: log, st: st, client: client, globalLimiter: globalLimiter, perDownloadLimiter: perDownloadLimiter, metrics: m}
 }
 
 type headInfo struct {
@@ -92,6 +118,10 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	if url == "" {
 		return "", "", errors.New("url required")
 	}
+	perDownloadLimiter := e.perDownloadLimiter
+	if perDownloadLimiter == nil {
+		perDownloadLimiter = newPerDownloadBandwidthLimiter(e.cfg)
+	}
 	// Ensure download root exists; we will finalize destPath after probing headers
 	if err := os.MkdirAll(e.cfg.General.DownloadRoot, 0o755); err != nil {
 		return "", "", err
@@ -116,12 +146,13 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 			err = nil
 		} else {
 			// As a last resort, resolve signed redirect then retry probe on the final URL
-			if ru, ok := resolveRedirectURL(e.client, url, headers, userAgent(e.cfg)); ok {
-				e.log.Debugf("resolved redirect -> %s", ru)
+			if ru, ok := resolveRedirectURL(ctx, e.client, url, headers, userAgent(e.cfg)); ok {
+				prevURL := url
+				e.log.Debugf("resolved redirect -> %s", logging.SanitizeURL(ru))
 				url = ru
 				// Do not forward Authorization to different host
 				if u1, _ := neturl.Parse(ru); u1 != nil {
-					if u0, _ := neturl.Parse(url); u0 == nil || !strings.EqualFold(u0.Host, u1.Host) {
+					if u0, _ := neturl.Parse(prevURL); u0 == nil || !strings.EqualFold(u0.Host, u1.Host) {
 						delete(headers, "Authorization")
 					}
 				}
@@ -146,10 +177,10 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 			name = h.filename
 		}
 		if name == "" && h.finalURL != "" {
-			name = baseNameFromURL(h.finalURL)
+			name = util.URLPathBase(h.finalURL)
 		}
 		if name == "" {
-			name = baseNameFromURL(url)
+			name = util.URLPathBase(url)
 		}
 		name = util.SafeFileName(name)
 		destPath = filepath.Join(e.cfg.General.DownloadRoot, name)
@@ -169,10 +200,10 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		}
 	}
 	if err != nil || h.size <= 0 || !h.acceptRange {
-		e.log.WarnfThrottled(fmt.Sprintf("fallback:%s|%s", url, destPath), 2*time.Second, "chunked: falling back to single: %v", err)
+		e.log.WarnfThrottled(fmt.Sprintf("fallback:%s|%s", url, destPath), 2*time.Second, "chunked: falling back to single: %v", logging.SanitizeError(err))
 		// Clear any stale chunk state so progress doesn't show bogus completed bytes
 		_ = e.st.DeleteChunks(url, destPath)
-		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers, noResume)
+		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers, noResume, perDownloadLimiter)
 	}
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "planning"})
 
@@ -191,12 +222,12 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		}
 	}
 
+	completed := false
 	// Cleanup on cancellation
 	defer func() {
-		if ctx.Err() != nil {
+		if ctx.Err() != nil && !completed {
 			_ = os.Remove(part)
-			_ = e.st.DeleteChunks(url, destPath)
-			_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "canceled"})
+			_ = e.st.ClearChunksAndUpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "canceled"})
 		}
 	}()
 	f, err := os.OpenFile(part, os.O_CREATE|os.O_RDWR, 0o644)
@@ -308,7 +339,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 			setErr(&dErr, &dMu, err)
 			return
 		}
-		sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
+		sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers, perDownloadLimiter)
 		if err != nil {
 			setErr(&dErr, &dMu, err)
 			return
@@ -328,7 +359,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	if dErr != nil {
 		// Fallback to single-stream with retry if chunked failed (e.g., server ignored Range)
 		_ = f.Close()
-		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers, noResume)
+		return e.singleWithRetry(ctx, url, destPath, expectedSHA, headers, noResume, perDownloadLimiter)
 	}
 
 	// Self-consistency check: ensure each written chunk matches its recorded SHA even without an expected file SHA
@@ -349,7 +380,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 			// re-download this chunk
 			e.log.WarnfThrottled(fmt.Sprintf("repair:%s|%s", url, destPath), 2*time.Second, "chunk %d sha mismatch on self-check; re-fetching", c.Index)
 			_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
-			sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
+			sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers, perDownloadLimiter)
 			if err != nil {
 				return "", "", err
 			}
@@ -383,7 +414,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 				// re-download this chunk
 				e.log.Debugf("chunk %d sha mismatch; re-fetching", c.Index)
 				_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
-				sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers)
+				sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers, perDownloadLimiter)
 				if err != nil {
 					return "", "", err
 				}
@@ -443,6 +474,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		return "", "", err
 	}
 	_ = fsyncDir(filepath.Dir(destPath))
+	completed = true
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: finalSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "complete"})
 	if e.metrics != nil {
 		e.metrics.IncDownloadsSuccess()
@@ -452,7 +484,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	return destPath, finalSHA, nil
 }
 
-func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string) (string, error) {
+func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string, perDownloadLimiter *bandwidthLimiter) (string, error) {
 	// retry loop
 	max := e.cfg.Concurrency.MaxRetries
 	if max <= 0 {
@@ -463,7 +495,7 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		sha, err := e.tryFetchChunk(ctx, url, h, f, c, headers)
+		sha, err := e.tryFetchChunk(ctx, url, h, f, c, headers, perDownloadLimiter)
 		if err == nil {
 			return sha, nil
 		}
@@ -471,12 +503,12 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 			return "", ctx.Err()
 		}
 		lastErr = err
-		if e.metrics != nil {
-			e.metrics.IncRetries(1)
-		}
-		_ = e.st.IncDownloadRetries(url, destPath, 1)
 		// backoff or honor Retry-After for 429 if enabled
 		if rle, ok := err.(rateLimitedError); ok && e.cfg.Network.RetryOnRateLimit {
+			if e.metrics != nil {
+				e.metrics.IncRetries(1)
+			}
+			_ = e.st.IncDownloadRetries(url, destPath, 1)
 			wait := rle.after
 			capSec := e.cfg.Network.RateLimitMaxDelaySeconds
 			if capSec <= 0 {
@@ -512,6 +544,13 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 			_ = e.st.UpdateDownloadStatus(url, destPath, "running", "")
 			continue
 		}
+		if !isRetryableDownloadError(err) {
+			return "", err
+		}
+		if e.metrics != nil {
+			e.metrics.IncRetries(1)
+		}
+		_ = e.st.IncDownloadRetries(url, destPath, 1)
 		// default backoff
 		b := e.cfg.Concurrency.Backoff
 		min := b.MinMS
@@ -538,7 +577,7 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 	return "", lastErr
 }
 
-func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string) (string, error) {
+func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string, perDownloadLimiter *bandwidthLimiter) (string, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	req.Header.Set("User-Agent", userAgent(e.cfg))
 	for k, v := range headers {
@@ -558,7 +597,7 @@ func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *
 	// Require 206 for partial ranges; allow 200 only if the requested range is the entire file
 	if resp.StatusCode == http.StatusOK {
 		if c.Start != 0 || c.End != h.size-1 {
-			return "", fmt.Errorf("chunk %d: server ignored Range; got 200 for partial request", c.Index)
+			return "", nonRetryableError{err: fmt.Errorf("chunk %d: server ignored Range; got 200 for partial request", c.Index)}
 		}
 	} else if resp.StatusCode != http.StatusPartialContent {
 		// Friendly error for common cases; include chunk index for context
@@ -578,13 +617,14 @@ func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *
 			hadAuth = true
 		}
 		msg := friendlyHTTPStatusMessage(e.cfg, host, resp.StatusCode, resp.Status, hadAuth)
-		return "", fmt.Errorf("chunk %d: %s", c.Index, msg)
+		return "", httpStatusError{statusCode: resp.StatusCode, msg: fmt.Sprintf("chunk %d: %s", c.Index, msg)}
 	}
 	// Write this chunk using a WriteAt-backed offset writer to avoid concurrent Seek/Write races
 	hasher := sha256.New()
 	ow := &offsetWriterAt{w: f, off: c.Start}
 	mw := io.MultiWriter(ow, hasher)
-	written, err := io.CopyN(mw, resp.Body, c.Size)
+	body := newThrottledReader(ctx, resp.Body, perDownloadLimiter, e.globalLimiter)
+	written, err := io.CopyN(mw, body, c.Size)
 	if e.metrics != nil && written > 0 {
 		e.metrics.AddBytes(written)
 	}
@@ -637,7 +677,7 @@ func (e *Chunked) probeRangeGET(ctx context.Context, url string, headers map[str
 	return h, nil
 }
 
-func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string, noResume bool) (string, string, error) {
+func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSHA string, headers map[string]string, noResume bool, perDownloadLimiter *bandwidthLimiter) (string, string, error) {
 	max := e.cfg.Concurrency.MaxRetries
 	if max <= 0 {
 		max = 8
@@ -647,7 +687,8 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 		if ctx.Err() != nil {
 			return "", "", ctx.Err()
 		}
-		final, sha, err := NewSingle(e.cfg, e.log, e.st, e.metrics).Download(ctx, url, destPath, expectedSHA, headers, noResume)
+		single := newSingleWithClientAndLimiters(e.cfg, e.log, e.st, e.metrics, e.client, e.globalLimiter, perDownloadLimiter)
+		final, sha, err := single.Download(ctx, url, destPath, expectedSHA, headers, noResume)
 		if err == nil {
 			return final, sha, nil
 		}
@@ -655,9 +696,9 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 			return "", "", ctx.Err()
 		}
 		lastErr = err
-		_ = e.st.IncDownloadRetries(url, destPath, 1)
 		// backoff between attempts; honor Retry-After if enabled
 		if rle, ok := err.(rateLimitedError); ok && e.cfg.Network.RetryOnRateLimit {
+			_ = e.st.IncDownloadRetries(url, destPath, 1)
 			wait := rle.after
 			capSec := e.cfg.Network.RateLimitMaxDelaySeconds
 			if capSec <= 0 {
@@ -678,6 +719,10 @@ func (e *Chunked) singleWithRetry(ctx context.Context, url, destPath, expectedSH
 				continue
 			}
 		}
+		if !isRetryableDownloadError(err) {
+			return "", "", err
+		}
+		_ = e.st.IncDownloadRetries(url, destPath, 1)
 		b := e.cfg.Concurrency.Backoff
 		min := b.MinMS
 		if min <= 0 {
@@ -733,19 +778,6 @@ func parseDispositionFilename(cd string) string {
 		}
 	}
 	return ""
-}
-
-// baseNameFromURL returns the last path segment from a URL, ignoring query/fragments.
-func baseNameFromURL(uStr string) string {
-	u, err := neturl.Parse(uStr)
-	if err != nil || u.Path == "" {
-		return "download"
-	}
-	b := path.Base(u.Path)
-	if b == "/" || b == "." || b == "" {
-		return "download"
-	}
-	return b
 }
 
 func hashRange(f *os.File, start, size int64) (string, error) {

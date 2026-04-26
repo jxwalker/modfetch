@@ -39,17 +39,17 @@ _modfetch_completions()
         COMPREPLY=( $(compgen -W "${cmds}" -- "$cur") )
         return
     fi
-    case ${words[1]} in
+	case ${words[1]} in
         config)
             COMPREPLY=( $(compgen -W "validate print wizard --config --log-level --json" -- "$cur") ) ;;
         download)
-            COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --url --dest --sha256 --sha256-file --batch --place" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --url --dest --sha256 --sha256-file --batch --place --extract --extract-dir" -- "$cur") ) ;;
         place)
             COMPREPLY=( $(compgen -W "--config --log-level --json --path --type --mode" -- "$cur") ) ;;
         verify)
             COMPREPLY=( $(compgen -W "--config --path --all --safetensors --safetensors-deep --scan-dir --repair --quarantine-incomplete --only-errors --summary --fix-sidecar --log-level --json" -- "$cur") ) ;;
         status)
-            COMPREPLY=( $(compgen -W "--config --log-level --json --only-errors --summary" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --only-errors --summary --duplicates" -- "$cur") ) ;;
         tui)
             COMPREPLY=( $(compgen -W "--config --log-level --v1 --v2" -- "$cur") ) ;;
         clean)
@@ -78,7 +78,7 @@ _modfetch() {
       _arguments '*:options:(--config --log-level --json validate print wizard)'
       ;;
     download)
-      _arguments '*:options:(--config --log-level --json --quiet --url --dest --sha256 --sha256-file --batch --place)'
+      _arguments '*:options:(--config --log-level --json --quiet --url --dest --sha256 --sha256-file --batch --place --extract --extract-dir)'
       ;;
     place)
       _arguments '*:options:(--config --log-level --json --path --type --mode)'
@@ -87,7 +87,7 @@ _modfetch() {
       _arguments '*:options:(--config --path --all --safetensors --safetensors-deep --scan-dir --repair --quarantine-incomplete --only-errors --summary --fix-sidecar --log-level --json)'
       ;;
     status)
-      _arguments '*:options:(--config --log-level --json --only-errors --summary)'
+      _arguments '*:options:(--config --log-level --json --only-errors --summary --duplicates)'
       ;;
     tui)
       _arguments '*:options:(--config --log-level --v1 --v2)'
@@ -114,6 +114,7 @@ complete -c modfetch -f -n "__fish_use_subcommand" -a "verify" -d "verify checks
 complete -c modfetch -f -n "__fish_use_subcommand" -a "status" -d "show status"
 complete -c modfetch -n "__fish_seen_subcommand_from status" -l only-errors -d "Only error rows"
 complete -c modfetch -n "__fish_seen_subcommand_from status" -l summary -d "Print totals and errors"
+complete -c modfetch -n "__fish_seen_subcommand_from status" -l duplicates -d "Show duplicate completed downloads"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "tui" -d "dashboard"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "version" -d "print version"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "completion" -d "shell completions"
@@ -135,6 +136,8 @@ complete -c modfetch -n "__fish_seen_subcommand_from download" -l sha256 -d "Exp
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l sha256-file -d "File containing expected hash"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l batch -d "Batch file"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l place -d "Place after download"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract -d "Extract archive after download"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract-dir -d "Extraction directory"
 # batch import flags
 complete -c modfetch -n "__fish_seen_subcommand_from batch" -a "import" -d "Import URLs to YAML batch"
 complete -c modfetch -n "__fish_seen_subcommand_from batch" -l input -d "Text file with URLs"
