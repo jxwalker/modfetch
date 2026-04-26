@@ -2,7 +2,9 @@
 
 This document consolidates the project backlog and roadmap from multiple sources into a single, prioritized list. Source docs: docs/BACKLOG.md, docs/TODO.md, docs/TODO_NEXT.md, README.md (Roadmap), docs/PRD.md, docs/backlog/.
 
-Status key: [NEW] newly captured, [IMPL] implemented already (kept here for traceability), [WIP] in progress.
+Status key: [IMPL] implemented already (kept here for traceability).
+
+Current state: all consolidated roadmap items below are implemented as of 2026-04-26.
 
 Priority 1 — Critical reliability and performance
 - Concurrent download recovery [IMPL]
@@ -49,7 +51,7 @@ Priority 6 — Architecture
 - Plugin architecture for resolvers [IMPL]
 - Event-driven TUI updates with polling fallback [IMPL]
 
-Quick wins (remaining)
+Quick wins
 - Add a flag to skip SHA256 verification intentionally for trusted sources (implemented as --force) [IMPL]
 - Fix TUI selected item persistence when filtering [IMPL]
 - Fix progress bar showing 100% during chunk planning [IMPL]
@@ -67,13 +69,13 @@ Performance optimizations
 - Adaptive chunk size based on configured throughput and file size [IMPL]
 
 Breaking changes to consider for v1.0
-- Config schema tidy-up [WIP]
+- Config schema tidy-up [IMPL]
   - `modfetch config validate --strict` rejects unknown YAML fields before strict validation becomes a v1.0 default candidate [IMPL]
   - Documented enum/range values are validated for placement mode, network timeout/redirect settings, and TUI column mode [IMPL]
-- State DB schema simplification [WIP]
+- State DB schema simplification [IMPL]
   - State DB bootstrap is centralized and stamps SQLite `user_version` as the v1.0 migration baseline [IMPL]
   - Legacy version-0 download schemas migrate through an explicit v0-to-v1 path for missing compatibility columns [IMPL]
-- Standardize CLI flags and naming [WIP]
+- Standardize CLI flags and naming [IMPL]
   - Shared config path resolution across config-backed commands; `place` now honors the documented default config path [IMPL]
   - Shell completions are aligned with current commands and flags, including `hostcaps`, strict config validation, quantization selection, and dry-run variants [IMPL]
   - Common `--config`, `--log-level`, and `--json` flag registration is centralized for config-backed commands [IMPL]

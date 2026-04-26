@@ -4,6 +4,15 @@
 **Branch:** claude/model-library-implementation-011CUy54B8AorE9DLQcQsn4m
 **Focus:** TUI, Metadata, and Library Features
 
+## Current Status
+
+This report is historical. The network/dependency limitations described below no
+longer apply to the current local checkout: on 2026-04-26, `go test ./... -timeout 180s`
+and `go test ./... -race -timeout 240s` both passed. The Library View is implemented
+and covered by unit and integration tests. The remaining sections preserve the
+original test results and environment constraints from the time this report was
+written.
+
 ## Executive Summary
 
 ✅ **11/11 offline tests passing (100%)**
@@ -141,14 +150,14 @@
 - ✅ Full-text search
 - ✅ Sort by last_used, name, size, rating, created_at
 
-### 🚧 Library View (Not Yet Implemented)
+### ✅ Library View (Implemented)
 
-Tests are ready for when implemented:
-- 📋 Browse downloaded models
-- 📋 Display rich metadata
-- 📋 Search functionality
-- 📋 Filter by type
-- 📋 Model detail view
+Coverage includes:
+- Browse downloaded models
+- Display rich metadata
+- Search functionality
+- Filter by type and source
+- Model detail view
 
 ## Test Infrastructure
 
@@ -268,7 +277,7 @@ Expected output shows table with 30+ columns including:
 - download_count, times_used, last_used
 - user_rating, favorite, user_notes
 
-## Known Issues
+## Historical Known Issues
 
 ### Sandboxed Environment Limitations
 
@@ -278,26 +287,26 @@ Expected output shows table with 30+ columns including:
 ❌ **Some resolver tests make real API calls** - Needs refactoring
 ✅ **Workaround:** Skip HuggingFace resolver tests
 
-### Recommendations
+### Historical Recommendations
 
 1. **For CI/CD:** Pre-cache Go dependencies in Docker image
 2. **For development:** Run full test suite locally with network
 3. **For sandboxes:** Use `./scripts/test-offline.sh` for quick validation
 
-## Next Steps
+## Historical Next Steps
 
 ### Immediate
 - ✅ All metadata system tests passing
 - ✅ TUI integration tested
 - ✅ Documentation complete
 
-### Future Testing Needs
-- [ ] Integration tests for full download→metadata flow
-- [ ] Library view UI tests (when implemented)
-- [ ] Performance tests with large metadata databases
-- [ ] Concurrent access safety tests
-- [ ] Token validation tests
-- [ ] VPN detection tests
+### Future Testing Needs From Original Report
+- [x] Integration tests for full download to metadata flow
+- [x] Library view UI tests
+- [x] Performance tests with large metadata databases
+- [x] Concurrent access safety checks through the race suite
+- [x] Token validation coverage in resolver/auth status tests
+- [x] VPN/restricted-access guidance coverage in CivitAI tests and docs
 
 ## Summary
 
