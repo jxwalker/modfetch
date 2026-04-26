@@ -74,6 +74,8 @@ func run(ctx context.Context, args []string) error {
 		return handleHostCaps(ctx, args[1:])
 	case "clean":
 		return handleClean(ctx, args[1:])
+	case "dedupe":
+		return handleDedupe(ctx, args[1:])
 	case "batch":
 		return handleBatch(ctx, args[1:])
 	case "help", "-h", "--help":
@@ -106,6 +108,7 @@ Commands:
   completion        Generate shell completion scripts (bash|zsh|fish)
   hostcaps          Manage host capability cache (list/clear)
   clean             Prune staged partials and other cached artifacts
+  dedupe            Replace duplicate completed downloads with hardlinks or symlinks
 
 Flags:
   --config PATH     Path to YAML config file (or MODFETCH_CONFIG env var; default: ~/.config/modfetch/config.yml)
@@ -200,6 +203,64 @@ func handleStatus(ctx context.Context, args []string) error {
 type duplicateGroup struct {
 	SHA256 string              `json:"sha256"`
 	Rows   []state.DownloadRow `json:"rows"`
+}
+
+type dedupeResult struct {
+	SHA256    string `json:"sha256"`
+	Canonical string `json:"canonical"`
+	Dest      string `json:"dest"`
+	Action    string `json:"action"`
+	Error     string `json:"error,omitempty"`
+}
+
+func handleDedupe(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("dedupe", flag.ContinueOnError)
+	cfgPath := fs.String("config", "", "Path to YAML config file")
+	logLevel := fs.String("log-level", "info", "log level")
+	jsonOut := fs.Bool("json", false, "json logs")
+	mode := fs.String("mode", "hardlink", "dedupe mode: hardlink|symlink")
+	dryRun := fs.Bool("dry-run", false, "show changes without modifying files")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *cfgPath == "" {
+		if env := os.Getenv("MODFETCH_CONFIG"); env != "" {
+			*cfgPath = env
+		} else if h, err := os.UserHomeDir(); err == nil && h != "" {
+			*cfgPath = filepath.Join(h, ".config", "modfetch", "config.yml")
+		}
+	}
+	if _, err := os.Stat(*cfgPath); err != nil {
+		return fmt.Errorf("config file not found: %s", *cfgPath)
+	}
+	c, err := config.Load(*cfgPath)
+	if err != nil {
+		return err
+	}
+	log := logging.New(*logLevel, *jsonOut)
+	st, err := state.Open(c)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = st.SQL.Close() }()
+	rows, err := st.ListDownloads()
+	if err != nil {
+		return err
+	}
+	results := dedupeDuplicateGroups(duplicateDownloadGroups(rows), strings.ToLower(strings.TrimSpace(*mode)), *dryRun)
+	if *jsonOut {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(results)
+	}
+	for _, r := range results {
+		if r.Error != "" {
+			log.Warnf("dedupe %s: %s", r.Dest, r.Error)
+			continue
+		}
+		log.Infof("dedupe %s: %s -> %s", r.Action, r.Dest, r.Canonical)
+	}
+	return nil
 }
 
 func handleConfig(ctx context.Context, args []string) error {
@@ -1259,6 +1320,126 @@ func duplicateDownloadGroups(rows []state.DownloadRow) []duplicateGroup {
 		return groups[i].SHA256 < groups[j].SHA256
 	})
 	return groups
+}
+
+func dedupeDuplicateGroups(groups []duplicateGroup, mode string, dryRun bool) []dedupeResult {
+	if mode == "" {
+		mode = "hardlink"
+	}
+	var results []dedupeResult
+	for _, group := range groups {
+		canonical, canonInfo, err := chooseCanonicalDuplicate(group)
+		if err != nil {
+			for _, row := range group.Rows {
+				results = append(results, dedupeResult{SHA256: group.SHA256, Dest: row.Dest, Action: "skipped", Error: err.Error()})
+			}
+			continue
+		}
+		for _, row := range group.Rows {
+			if row.Dest == canonical {
+				results = append(results, dedupeResult{SHA256: group.SHA256, Canonical: canonical, Dest: row.Dest, Action: "canonical"})
+				continue
+			}
+			results = append(results, dedupeOne(row.Dest, group.SHA256, canonical, canonInfo, mode, dryRun))
+		}
+	}
+	return results
+}
+
+func chooseCanonicalDuplicate(group duplicateGroup) (string, os.FileInfo, error) {
+	for _, row := range group.Rows {
+		info, err := os.Stat(row.Dest)
+		if err != nil {
+			continue
+		}
+		if info.Mode().IsRegular() {
+			return row.Dest, info, nil
+		}
+	}
+	return "", nil, fmt.Errorf("no existing regular canonical file for sha256=%s", group.SHA256)
+}
+
+func dedupeOne(dest, sha, canonical string, canonInfo os.FileInfo, mode string, dryRun bool) dedupeResult {
+	res := dedupeResult{SHA256: sha, Canonical: canonical, Dest: dest}
+	info, err := os.Stat(dest)
+	if err != nil {
+		res.Action = "skipped"
+		res.Error = err.Error()
+		return res
+	}
+	if !info.Mode().IsRegular() {
+		res.Action = "skipped"
+		res.Error = "destination is not a regular file"
+		return res
+	}
+	if os.SameFile(canonInfo, info) {
+		res.Action = "already_linked"
+		return res
+	}
+	actual, err := util.HashFileSHA256(dest)
+	if err != nil {
+		res.Action = "skipped"
+		res.Error = err.Error()
+		return res
+	}
+	if !strings.EqualFold(strings.TrimSpace(actual), strings.TrimSpace(sha)) {
+		res.Action = "skipped"
+		res.Error = fmt.Sprintf("sha256 mismatch: state=%s actual=%s", sha, actual)
+		return res
+	}
+	switch mode {
+	case "hardlink", "symlink":
+	default:
+		res.Action = "skipped"
+		res.Error = fmt.Sprintf("unknown dedupe mode: %s", mode)
+		return res
+	}
+	if dryRun {
+		res.Action = "would_" + mode
+		return res
+	}
+	if err := replaceWithLink(dest, canonical, mode); err != nil {
+		res.Action = "skipped"
+		res.Error = err.Error()
+		return res
+	}
+	res.Action = mode
+	return res
+}
+
+func replaceWithLink(dest, canonical, mode string) error {
+	dir := filepath.Dir(dest)
+	tmp, err := os.CreateTemp(dir, ".modfetch-dedupe-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Remove(tmpPath); err != nil {
+		return err
+	}
+	switch mode {
+	case "hardlink":
+		if err := os.Link(canonical, tmpPath); err != nil {
+			return err
+		}
+	case "symlink":
+		target := canonical
+		if rel, err := filepath.Rel(dir, canonical); err == nil && rel != "" && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			target = rel
+		}
+		if err := os.Symlink(target, tmpPath); err != nil {
+			return err
+		}
+	}
+	if err := os.Rename(tmpPath, dest); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 func countDuplicateFiles(groups []duplicateGroup) int {
