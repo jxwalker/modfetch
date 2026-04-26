@@ -457,7 +457,7 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch s {
 	case "q", "ctrl+c":
-		m.saveUIStateIfConfigured()
+		m.saveUIState()
 		return m, tea.Quit
 	case "/":
 		if m.activeTab == 4 {
@@ -491,19 +491,19 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "s":
 		m.sortMode = "speed"
-		m.saveUIStateIfConfigured()
+		m.saveUIState()
 		return m, nil
 	case "e":
 		m.sortMode = "eta"
-		m.saveUIStateIfConfigured()
+		m.saveUIState()
 		return m, nil
 	case "o":
 		m.sortMode = ""
-		m.saveUIStateIfConfigured()
+		m.saveUIState()
 		return m, nil
 	case "R":
 		m.sortMode = "rem"
-		m.saveUIStateIfConfigured()
+		m.saveUIState()
 		return m, nil
 	case "g":
 		if m.groupBy == "host" {
@@ -511,7 +511,7 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.groupBy = "host"
 		}
-		m.saveUIStateIfConfigured()
+		m.saveUIState()
 		return m, nil
 	case "t":
 		switch m.columnMode {
@@ -951,8 +951,4 @@ func (m *Model) saveUIState() {
 	st := uiState{ThemeIndex: m.themeIndex, ShowURL: m.columnMode == "url", ColumnMode: m.columnMode, Compact: m.cfg.UI.Compact, GroupBy: m.groupBy, SortMode: m.sortMode}
 	b, _ := json.MarshalIndent(st, "", "  ")
 	_ = os.WriteFile(p, b, 0o644)
-}
-
-func (m *Model) saveUIStateIfConfigured() {
-	m.saveUIState()
 }
