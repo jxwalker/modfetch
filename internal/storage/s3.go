@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -79,7 +78,7 @@ func StagingPath(cfg *config.Config, uri, sourceURL string) (string, error) {
 	if root == "" {
 		return "", errors.New("general.data_root or general.download_root is required for s3 staging")
 	}
-	h := sha1.Sum([]byte(sourceURL + "|" + uri))
+	h := sha256.Sum256([]byte(sourceURL + "|" + uri))
 	base := util.SafeFileName(filepath.Base(key))
 	if base == "" || base == "." {
 		base = "object"
@@ -129,7 +128,7 @@ func NewS3ClientFromConfig(cfg *config.Config) (*S3Client, error) {
 		secretKey:    secretKey,
 		sessionToken: strings.TrimSpace(os.Getenv(sessionEnv)),
 		pathStyle:    s3.PathStyle,
-		httpClient:   http.DefaultClient,
+		httpClient:   newS3HTTPClient(cfg),
 	}, nil
 }
 
@@ -177,13 +176,36 @@ func (c *S3Client) PutFile(ctx context.Context, uri, path, contentType string) e
 	return fmt.Errorf("s3 put %s failed: %s %s", uri, resp.Status, strings.TrimSpace(string(b)))
 }
 
+func (c *S3Client) DeleteObject(ctx context.Context, uri string) error {
+	bucket, key, err := ParseS3URI(uri)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, c.objectURL(bucket, key), nil)
+	if err != nil {
+		return err
+	}
+	emptyHash := sha256.Sum256(nil)
+	c.sign(req, hex.EncodeToString(emptyHash[:]), time.Now().UTC())
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	return fmt.Errorf("s3 delete %s failed: %s %s", uri, resp.Status, strings.TrimSpace(string(b)))
+}
+
 func (c *S3Client) objectURL(bucket, key string) string {
 	u := *c.endpoint
 	u.RawQuery = ""
 	u.Fragment = ""
 	escapedKey := escapeS3Key(key)
 	if c.pathStyle || isLocalHost(u.Hostname()) {
-		u.Path = joinURLPath(u.Path, neturl.PathEscape(bucket), escapedKey)
+		u.Path = joinURLPath(u.Path, bucket, escapedKey)
 		return u.String()
 	}
 	u.Host = bucket + "." + u.Host
@@ -292,7 +314,11 @@ func joinURLPath(parts ...string) string {
 
 func isLocalHost(host string) bool {
 	host = strings.ToLower(strings.TrimSpace(host))
-	return host == "localhost" || net.ParseIP(host) != nil
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func firstNonEmpty(values ...string) string {
@@ -302,4 +328,21 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func newS3HTTPClient(cfg *config.Config) *http.Client {
+	timeout := 6 * time.Hour
+	if cfg != nil && cfg.Network.TimeoutSeconds > 0 {
+		timeout = time.Duration(cfg.Network.TimeoutSeconds) * time.Second
+	}
+	return &http.Client{
+		Timeout: timeout,
+		Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+			TLSHandshakeTimeout:   30 * time.Second,
+			ResponseHeaderTimeout: 30 * time.Second,
+			IdleConnTimeout:       90 * time.Second,
+		},
+	}
 }

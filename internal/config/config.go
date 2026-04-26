@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -268,6 +270,9 @@ func (c *Config) Validate() error {
 	if c.Network.DNSCacheTTLSeconds < 0 {
 		return fmt.Errorf("network.dns_cache_ttl_seconds must be >= 0")
 	}
+	if err := c.validateS3(); err != nil {
+		return err
+	}
 	if c.Concurrency.GlobalFiles < 0 {
 		return fmt.Errorf("concurrency.global_files must be >= 0")
 	}
@@ -315,6 +320,40 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("ui.refresh_hz must be >= 0")
 	}
 	return nil
+}
+
+func (c *Config) validateS3() error {
+	s3 := c.Storage.S3
+	endpoint := strings.TrimSpace(s3.Endpoint)
+	if endpoint == "" {
+		return nil
+	}
+	if !strings.Contains(endpoint, "://") {
+		scheme := "https"
+		if s3.UseHTTP {
+			scheme = "http"
+		}
+		endpoint = scheme + "://" + endpoint
+	}
+	u, err := neturl.Parse(endpoint)
+	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return fmt.Errorf("storage.s3.endpoint must be a valid http or https endpoint")
+	}
+	accessEnv := firstNonEmpty(s3.AccessKeyEnv, "AWS_ACCESS_KEY_ID")
+	secretEnv := firstNonEmpty(s3.SecretKeyEnv, "AWS_SECRET_ACCESS_KEY")
+	if strings.TrimSpace(os.Getenv(accessEnv)) == "" || strings.TrimSpace(os.Getenv(secretEnv)) == "" {
+		return fmt.Errorf("storage.s3 credentials missing: set %s and %s", accessEnv, secretEnv)
+	}
+	return nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 func expandTilde(p string) (string, error) {

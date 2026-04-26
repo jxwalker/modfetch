@@ -77,6 +77,17 @@ func (a *Auto) Download(ctx context.Context, url, destPath, expectedSHA string, 
 	}
 	if a.st != nil {
 		if err := a.st.ReplaceDownloadDest(url, finalLocal, destPath); err != nil {
+			if a.l != nil {
+				a.l.Warnf("s3 upload complete but state update failed url=%s local=%s remote=%s: %v; attempting remote cleanup", logging.SanitizeURL(url), finalLocal, destPath, err)
+			}
+			if delErr := client.DeleteObject(ctx, destPath); delErr != nil && a.l != nil {
+				a.l.Warnf("s3 cleanup failed for %s after state update failure: %v; remove the object manually before retrying", destPath, delErr)
+			}
+			if _, statErr := os.Stat(finalLocal + ".sha256"); statErr == nil && a.c.Storage.S3.UploadSHA256File {
+				if delErr := client.DeleteObject(ctx, destPath+".sha256"); delErr != nil && a.l != nil {
+					a.l.Warnf("s3 checksum cleanup failed for %s after state update failure: %v; remove the object manually before retrying", destPath+".sha256", delErr)
+				}
+			}
 			return "", "", err
 		}
 	}

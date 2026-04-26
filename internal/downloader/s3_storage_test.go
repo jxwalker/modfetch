@@ -30,7 +30,11 @@ func TestAutoDownloadsToS3Destination(t *testing.T) {
 
 	objects := map[string]string{}
 	s3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		objects[r.URL.EscapedPath()] = string(b)
 		w.WriteHeader(http.StatusOK)
 	}))
