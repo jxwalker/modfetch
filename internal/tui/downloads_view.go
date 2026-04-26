@@ -148,17 +148,24 @@ func (m *Model) applyGrouping(in []state.DownloadRow) []state.DownloadRow {
 	if m.groupBy != "host" || len(in) < 2 {
 		return in
 	}
-	out := make([]state.DownloadRow, len(in))
-	copy(out, in)
-	sort.SliceStable(out, func(i, j int) bool {
-		hi := hostOf(out[i].URL)
-		hj := hostOf(out[j].URL)
+	hosts := make(map[string]string, len(in))
+	hostFor := func(url string) string {
+		if host, ok := hosts[url]; ok {
+			return host
+		}
+		host := hostOf(url)
+		hosts[url] = host
+		return host
+	}
+	sort.SliceStable(in, func(i, j int) bool {
+		hi := hostFor(in[i].URL)
+		hj := hostFor(in[j].URL)
 		if hi == hj {
 			return false
 		}
 		return hi < hj
 	})
-	return out
+	return in
 }
 
 type downloadTableLayout struct {
@@ -307,6 +314,9 @@ func percentLabel(cur, total int64, status string) string {
 
 func completedAwareSpeed(r state.DownloadRow, rate float64) string {
 	if !strings.EqualFold(strings.TrimSpace(r.Status), "complete") {
+		if rate <= 0 {
+			return "0 B/s"
+		}
 		return humanize.Bytes(uint64(rate)) + "/s"
 	}
 	if r.Size <= 0 || r.UpdatedAt <= 0 || r.CreatedAt <= 0 || r.UpdatedAt < r.CreatedAt {

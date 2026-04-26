@@ -1,9 +1,9 @@
 package tui
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -157,11 +157,22 @@ func TestSortAndGroupKeysPersistUIState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read ui state: %v", err)
 	}
-	got := string(b)
-	for _, want := range []string{`"sort_mode": "speed"`, `"group_by": "host"`} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("expected saved UI state to contain %s, got %s", want, got)
-		}
+	var st uiState
+	if err := json.Unmarshal(b, &st); err != nil {
+		t.Fatalf("unmarshal ui state: %v; raw=%s", err, string(b))
+	}
+	if st.SortMode != "speed" {
+		t.Fatalf("expected sort_mode=speed, got %q", st.SortMode)
+	}
+	if st.GroupBy != "host" {
+		t.Fatalf("expected group_by=host, got %q", st.GroupBy)
+	}
+}
+
+func TestCompletedAwareSpeedClampsNegativeRate(t *testing.T) {
+	got := completedAwareSpeed(state.DownloadRow{Status: "running"}, -1)
+	if got != "0 B/s" {
+		t.Fatalf("expected negative rate to render as 0 B/s, got %q", got)
 	}
 }
 

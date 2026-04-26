@@ -436,7 +436,7 @@ func TestSettings_UIPreferences(t *testing.T) {
 		t.Error("Should show sort mode")
 	}
 
-	if !strings.Contains(output, "remaining") {
+	if !strings.Contains(output, "Sort Mode: remaining") {
 		t.Error("Should show sort mode value")
 	}
 
@@ -444,7 +444,7 @@ func TestSettings_UIPreferences(t *testing.T) {
 		t.Error("Should show group by")
 	}
 
-	if !strings.Contains(output, "host") {
+	if !strings.Contains(output, "Group By: host") {
 		t.Error("Should show group by value")
 	}
 
@@ -492,8 +492,12 @@ func TestSettings_UIPreferences_Defaults(t *testing.T) {
 		t.Error("Should show default column mode")
 	}
 
-	if !strings.Contains(output, "none") {
-		t.Error("Should show default sort/group mode")
+	if !strings.Contains(output, "Sort Mode: none") {
+		t.Error("Should show default sort mode")
+	}
+
+	if !strings.Contains(output, "Group By: none") {
+		t.Error("Should show default group mode")
 	}
 }
 

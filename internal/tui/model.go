@@ -943,6 +943,9 @@ func (m *Model) loadUIState() {
 }
 
 func (m *Model) saveUIState() {
+	if m.cfg == nil {
+		return
+	}
 	p := m.uiStatePath()
 	_ = os.MkdirAll(filepath.Dir(p), 0o755)
 	st := uiState{ThemeIndex: m.themeIndex, ShowURL: m.columnMode == "url", ColumnMode: m.columnMode, Compact: m.cfg.UI.Compact, GroupBy: m.groupBy, SortMode: m.sortMode}
@@ -951,8 +954,5 @@ func (m *Model) saveUIState() {
 }
 
 func (m *Model) saveUIStateIfConfigured() {
-	if m.cfg == nil {
-		return
-	}
 	m.saveUIState()
 }
