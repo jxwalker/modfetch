@@ -94,7 +94,6 @@ type Model struct {
 	filterInput     textinput.Model
 	sortMode        string // ""|"speed"|"eta"|"rem"
 	groupBy         string // ""|"host"
-	lastRefresh     time.Time
 	prog            progress.Model
 	prev            map[string]obs
 	prevStatus      map[string]string
@@ -114,7 +113,6 @@ type Model struct {
 	newAutoSuggested string // latest auto-suggested dest (to avoid overriding manual edits)
 	newTypeDetected  string // detected artifact type (from civitai or heuristics)
 	newTypeSource    string // e.g., "civitai", "heuristic"
-	newDetectedName  string // suggested filename/name from resolver (for display)
 	// Extension suggestion when filename lacks suffix (e.g., .safetensors, .gguf)
 	newSuggestExt string
 	// Quantization selection state (HuggingFace)
@@ -169,7 +167,6 @@ type Model struct {
 	librarySearchInput   textinput.Model // Search input for library
 	librarySearchActive  bool            // Search input is active
 	libraryScanning      bool            // Currently scanning directories
-	libraryScanProgress  string          // Scan progress message
 	log                  *logging.Logger
 }
 
@@ -309,7 +306,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case metaMsg:
 		if m.newJob && strings.TrimSpace(m.newURL) == strings.TrimSpace(msg.url) {
-			m.newDetectedName = msg.suggested
 			// Map civitai type to artifact type; fallback to heuristic from filename
 			t := mapCivitFileType(msg.civType, msg.fileName)
 			m.newTypeDetected = t
@@ -362,7 +358,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case scanCompleteMsg:
 		// Handle directory scan completion
 		m.libraryScanning = false
-		m.libraryScanProgress = ""
 
 		if msg.err != nil {
 			m.addToast(fmt.Sprintf("scan error: %v", msg.err))
@@ -833,7 +828,6 @@ func (m *Model) refresh() tea.Cmd {
 		_ = logging.New("error", false)
 	}
 	m.rows = rows
-	m.lastRefresh = time.Now()
 	m.gcToasts()
 	// determine visible keys to focus updates
 	vis := map[string]struct{}{}
