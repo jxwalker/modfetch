@@ -144,6 +144,18 @@ Show rows from the download state database.
 - `--duplicates` - Group completed downloads by matching SHA256 content
 - `--json` - Emit machine-readable JSON
 
+### dedupe
+
+Replace verified duplicate downloads with links to the canonical copy:
+
+```bash
+modfetch dedupe --config ~/.config/modfetch/config.yml --dry-run
+modfetch dedupe --config ~/.config/modfetch/config.yml --mode hardlink
+modfetch dedupe --config ~/.config/modfetch/config.yml --mode symlink
+```
+
+The command uses completed rows with matching SHA256 values, re-hashes each duplicate before modifying it, and atomically swaps duplicate paths to hardlinks or symlinks.
+
 **Output:**
 
 Human-readable (default):

@@ -38,8 +38,8 @@ Priority 4 — Quality improvements
 Priority 5 — Advanced features
 - Archive extraction post-download (zip/tar/7z) [IMPL]
   - zip, tar, tar.gz, and tgz use native extraction; 7z uses `7zz`, `7z`, or `7za` when available on PATH.
-- Duplicate detection / content-addressable storage [WIP]
-  - Duplicate reporting by completed SHA256 is implemented; content-addressable storage/linking remains open.
+- Duplicate detection / content-addressable storage [IMPL]
+  - Duplicate reporting by completed SHA256 is implemented; `dedupe` can replace verified duplicates with hardlinks or symlinks to canonical content.
 - S3-compatible backend for storage [NEW]
 - Download scheduling (cron-like windows) [IMPL]
 

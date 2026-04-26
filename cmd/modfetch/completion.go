@@ -34,7 +34,7 @@ _modfetch_completions()
 {
     local cur prev words cword
     _init_completion || return
-    local cmds="config download place verify status tui batch version help completion"
+    local cmds="config download place verify status tui batch dedupe version help completion"
     if [[ ${cword} -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${cmds}" -- "$cur") )
         return
@@ -44,6 +44,8 @@ _modfetch_completions()
             COMPREPLY=( $(compgen -W "validate print wizard --config --log-level --json" -- "$cur") ) ;;
         download)
             COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --url --dest --sha256 --sha256-file --batch --place --extract --extract-dir" -- "$cur") ) ;;
+        dedupe)
+            COMPREPLY=( $(compgen -W "--config --log-level --json --mode --dry-run" -- "$cur") ) ;;
         place)
             COMPREPLY=( $(compgen -W "--config --log-level --json --path --type --mode" -- "$cur") ) ;;
         verify)
@@ -68,7 +70,7 @@ const zshCompletion = `#compdef modfetch
 # zsh completion for modfetch (basic)
 _modfetch() {
   local -a cmds
-  cmds=(config download place verify status tui batch version help completion)
+  cmds=(config download place verify status tui batch dedupe version help completion)
   if (( CURRENT == 2 )); then
     _describe 'command' cmds
     return
@@ -79,6 +81,9 @@ _modfetch() {
       ;;
     download)
       _arguments '*:options:(--config --log-level --json --quiet --url --dest --sha256 --sha256-file --batch --place --extract --extract-dir)'
+      ;;
+    dedupe)
+      _arguments '*:options:(--config --log-level --json --mode --dry-run)'
       ;;
     place)
       _arguments '*:options:(--config --log-level --json --path --type --mode)'
@@ -109,6 +114,7 @@ compdef _modfetch modfetch
 const fishCompletion = `# fish completion for modfetch
 complete -c modfetch -f -n "__fish_use_subcommand" -a "config" -d "config ops"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "download" -d "download assets"
+complete -c modfetch -f -n "__fish_use_subcommand" -a "dedupe" -d "dedupe duplicate downloads"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "place" -d "place files"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "verify" -d "verify checksums"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "status" -d "show status"
@@ -126,7 +132,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from clean" -l include-next-to-d
 complete -c modfetch -n "__fish_seen_subcommand_from clean" -l sidecars -d "Remove orphan .sha256"
 
 # Common flags
-for cmd in config download place verify status tui batch
+for cmd in config download place verify status tui batch dedupe
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l config -d "Path to config"
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l log-level -d "Log level"
 end
@@ -138,6 +144,8 @@ complete -c modfetch -n "__fish_seen_subcommand_from download" -l batch -d "Batc
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l place -d "Place after download"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract -d "Extract zip/tar/tar.gz/tgz/7z archive after download"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract-dir -d "Extraction directory"
+complete -c modfetch -n "__fish_seen_subcommand_from dedupe" -l mode -d "hardlink|symlink"
+complete -c modfetch -n "__fish_seen_subcommand_from dedupe" -l dry-run -d "Show dedupe changes without modifying files"
 # batch import flags
 complete -c modfetch -n "__fish_seen_subcommand_from batch" -a "import" -d "Import URLs to YAML batch"
 complete -c modfetch -n "__fish_seen_subcommand_from batch" -l input -d "Text file with URLs"
