@@ -12,6 +12,7 @@ import (
 	neturl "net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -282,20 +283,15 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 
 	// Preflight: verify any previously complete chunks before writing further
 	if len(chunks) > 0 {
-		markedDirty := 0
-		for _, c := range chunks {
-			if strings.EqualFold(c.Status, "complete") {
-				sha2, err := hashRange(f, c.Start, c.Size)
-				if err != nil {
-					return "", "", err
-				}
-				if !stringsEqualHex(sha2, c.SHA256) {
-					e.log.Debugf("chunk %d sha mismatch on resume; marking dirty", c.Index)
-					_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
-					markedDirty++
-				}
-			}
+		dirty, err := verifyCompleteChunks(ctx, part, chunks, e.cfg.Concurrency.PerFileChunks)
+		if err != nil {
+			return "", "", err
 		}
+		for _, c := range dirty {
+			e.log.Debugf("chunk %d sha mismatch on resume; marking dirty", c.Index)
+			_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
+		}
+		markedDirty := len(dirty)
 		if markedDirty > 0 {
 			key := fmt.Sprintf("dirty:%s|%s", url, destPath)
 			e.log.WarnfThrottled(key, 2*time.Second, "resume verification: %d chunk(s) marked dirty; will refetch", markedDirty)
@@ -365,29 +361,21 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	// Self-consistency check: ensure each written chunk matches its recorded SHA even without an expected file SHA
 	chunks, _ = e.st.ListChunks(url, destPath)
 	repaired := false
-	for _, c := range chunks {
-		if ctx.Err() != nil {
-			return "", "", ctx.Err()
-		}
-		if !strings.EqualFold(c.Status, "complete") {
-			continue
-		}
-		sha2, err := hashRange(f, c.Start, c.Size)
+	dirty, err := verifyCompleteChunks(ctx, part, chunks, e.cfg.Concurrency.PerFileChunks)
+	if err != nil {
+		return "", "", err
+	}
+	for _, c := range dirty {
+		// re-download this chunk
+		e.log.WarnfThrottled(fmt.Sprintf("repair:%s|%s", url, destPath), 2*time.Second, "chunk %d sha mismatch on self-check; re-fetching", c.Index)
+		_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
+		sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers, perDownloadLimiter)
 		if err != nil {
 			return "", "", err
 		}
-		if c.SHA256 != "" && !stringsEqualHex(sha2, c.SHA256) {
-			// re-download this chunk
-			e.log.WarnfThrottled(fmt.Sprintf("repair:%s|%s", url, destPath), 2*time.Second, "chunk %d sha mismatch on self-check; re-fetching", c.Index)
-			_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
-			sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers, perDownloadLimiter)
-			if err != nil {
-				return "", "", err
-			}
-			_ = e.st.UpdateChunkSHA(url, destPath, c.Index, sha3)
-			_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "complete")
-			repaired = true
-		}
+		_ = e.st.UpdateChunkSHA(url, destPath, c.Index, sha3)
+		_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "complete")
+		repaired = true
 	}
 	// Verify final SHA by streaming the part file
 	hasher := sha256.New()
@@ -402,26 +390,21 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		e.log.Warnf("final sha mismatch; scanning chunks for corruption")
 		// Re-hash each chunk and compare with recorded chunk sha
 		chunks, _ = e.st.ListChunks(url, destPath)
-		for _, c := range chunks {
-			if ctx.Err() != nil {
-				return "", "", ctx.Err()
-			}
-			sha2, err := hashRange(f, c.Start, c.Size)
+		dirty, err := verifyCompleteChunks(ctx, part, chunks, e.cfg.Concurrency.PerFileChunks)
+		if err != nil {
+			return "", "", err
+		}
+		for _, c := range dirty {
+			// re-download this chunk
+			e.log.Debugf("chunk %d sha mismatch; re-fetching", c.Index)
+			_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
+			sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers, perDownloadLimiter)
 			if err != nil {
 				return "", "", err
 			}
-			if !stringsEqualHex(sha2, c.SHA256) {
-				// re-download this chunk
-				e.log.Debugf("chunk %d sha mismatch; re-fetching", c.Index)
-				_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
-				sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers, perDownloadLimiter)
-				if err != nil {
-					return "", "", err
-				}
-				_ = e.st.UpdateChunkSHA(url, destPath, c.Index, sha3)
-				_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "complete")
-				repaired = true
-			}
+			_ = e.st.UpdateChunkSHA(url, destPath, c.Index, sha3)
+			_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "complete")
+			repaired = true
 		}
 		if repaired {
 			// re-hash full file
@@ -789,6 +772,71 @@ func hashRange(f *os.File, start, size int64) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func hashRangePath(path string, start, size int64) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	return hashRange(f, start, size)
+}
+
+func verifyCompleteChunks(ctx context.Context, path string, chunks []state.ChunkRow, parallel int) ([]state.ChunkRow, error) {
+	if parallel <= 0 {
+		parallel = 1
+	}
+	sem := make(chan struct{}, parallel)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var dirty []state.ChunkRow
+	var firstErr error
+
+	for _, c := range chunks {
+		if !strings.EqualFold(c.Status, "complete") {
+			continue
+		}
+		if strings.TrimSpace(c.SHA256) == "" {
+			mu.Lock()
+			dirty = append(dirty, c)
+			mu.Unlock()
+			continue
+		}
+		c := c
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case <-ctx.Done():
+				setErr(&firstErr, &mu, ctx.Err())
+				return
+			case sem <- struct{}{}:
+			}
+			defer func() { <-sem }()
+
+			if err := ctx.Err(); err != nil {
+				setErr(&firstErr, &mu, err)
+				return
+			}
+			sha, err := hashRangePath(path, c.Start, c.Size)
+			if err != nil {
+				setErr(&firstErr, &mu, err)
+				return
+			}
+			if !stringsEqualHex(sha, c.SHA256) {
+				mu.Lock()
+				dirty = append(dirty, c)
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	sort.Slice(dirty, func(i, j int) bool { return dirty[i].Index < dirty[j].Index })
+	return dirty, nil
 }
 
 func setErr(dst *error, mu *sync.Mutex, err error) {
