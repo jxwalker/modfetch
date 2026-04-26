@@ -295,6 +295,7 @@ modfetch download --batch jobs.yml --place
 - Validate config:
   
   modfetch config validate --config /path/to/config.yml
+  modfetch config validate --config /path/to/config.yml --strict
   
 - Download with live progress (speed, ETA):
   

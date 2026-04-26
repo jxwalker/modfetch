@@ -67,7 +67,8 @@ Performance optimizations
 - Adaptive chunk size based on configured throughput and file size [IMPL]
 
 Breaking changes to consider for v1.0
-- Config schema tidy-up
+- Config schema tidy-up [WIP]
+  - `modfetch config validate --strict` rejects unknown YAML fields before strict validation becomes a v1.0 default candidate [IMPL]
 - State DB schema simplification
 - Standardize CLI flags and naming [WIP]
   - Shared config path resolution across config-backed commands; `place` now honors the documented default config path [IMPL]

@@ -348,7 +348,7 @@ Configuration management commands.
 
 **1. Validate config:**
 ```bash
-modfetch config validate [--config PATH]
+modfetch config validate [--config PATH] [--strict]
 ```
 
 **2. Generate config wizard:**
@@ -361,6 +361,9 @@ modfetch config wizard --out PATH
 ```bash
 # Validate config
 modfetch config validate --config ~/modfetch/config.yml
+
+# Validate config and reject unknown YAML fields
+modfetch config validate --config ~/modfetch/config.yml --strict
 
 # Interactive config wizard
 modfetch config wizard --out ~/.config/modfetch/config.yml

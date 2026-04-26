@@ -63,6 +63,16 @@ Quick start: interactive wizard
 
 See `assets/sample-config/config.example.yml` for a full example.
 
+## Strict validation
+
+Use strict validation to catch misspelled or unsupported YAML fields:
+
+```bash
+modfetch config validate --config ~/modfetch/config.yml --strict
+```
+
+Strict validation is intended as a v1.0 readiness check. Regular validation remains backward-compatible and continues to ignore unknown YAML fields for now.
+
 ## Tokens / environment variables
 - Set in environment, not in YAML:
   - `HF_TOKEN`: Hugging Face token (Bearer), used when sources.huggingface.enabled is true
