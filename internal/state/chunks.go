@@ -42,6 +42,9 @@ func (db *DB) UpsertChunk(c ChunkRow) error {
 	_, err := db.SQL.Exec(`INSERT INTO chunks(url,dest,idx,start,end,size,sha256,status,updated_at) VALUES(?,?,?,?,?,?,?,?,strftime('%s','now'))
 ON CONFLICT(url,dest,idx) DO UPDATE SET start=excluded.start,end=excluded.end,size=excluded.size,sha256=COALESCE(NULLIF(excluded.sha256, ''), chunks.sha256),status=excluded.status,updated_at=strftime('%s','now')`,
 		c.URL, c.Dest, c.Index, c.Start, c.End, c.Size, c.SHA256, c.Status)
+	if err == nil {
+		db.NotifyChange()
+	}
 	return err
 }
 
@@ -87,16 +90,25 @@ func (db *DB) ListChunks(url, dest string) ([]ChunkRow, error) {
 
 func (db *DB) UpdateChunkStatus(url, dest string, idx int, status string) error {
 	_, err := db.SQL.Exec(`UPDATE chunks SET status=?, updated_at=strftime('%s','now') WHERE url=? AND dest=? AND idx=?`, status, url, dest, idx)
+	if err == nil {
+		db.NotifyChange()
+	}
 	return err
 }
 
 func (db *DB) UpdateChunkSHA(url, dest string, idx int, sha string) error {
 	_, err := db.SQL.Exec(`UPDATE chunks SET sha256=?, updated_at=strftime('%s','now') WHERE url=? AND dest=? AND idx=?`, sha, url, dest, idx)
+	if err == nil {
+		db.NotifyChange()
+	}
 	return err
 }
 
 // DeleteChunks removes all chunk rows for a given url+dest pair.
 func (db *DB) DeleteChunks(url, dest string) error {
 	_, err := db.SQL.Exec(`DELETE FROM chunks WHERE url=? AND dest=?`, url, dest)
+	if err == nil {
+		db.NotifyChange()
+	}
 	return err
 }

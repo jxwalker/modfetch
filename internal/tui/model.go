@@ -36,6 +36,8 @@ type Theme struct {
 
 type tickMsg time.Time
 
+type stateChangedMsg struct{}
+
 type dlDoneMsg struct {
 	url, dest, path string
 	err             error
@@ -167,6 +169,8 @@ type Model struct {
 	librarySearchInput   textinput.Model // Search input for library
 	librarySearchActive  bool            // Search input is active
 	libraryScanning      bool            // Currently scanning directories
+	stateEvents          <-chan struct{}
+	stopStateEvents      func()
 	log                  *logging.Logger
 }
 
@@ -230,19 +234,23 @@ func New(cfg *config.Config, st *state.DB, version string) tea.Model {
 		}
 	}
 	m.configTypes = computeTypesFromConfig(cfg)
+	if st != nil {
+		m.stateEvents, m.stopStateEvents = st.Subscribe()
+	}
 	// Load UI state overrides if present
 	m.loadUIState()
 	return m
 }
 
 func (m *Model) Init() tea.Cmd {
-	if m.cfg != nil && m.cfg.General.AutoRecoverOnStart {
-		return tea.Batch(
-			tea.Tick(m.tickEvery, func(t time.Time) tea.Msg { return tickMsg(t) }),
-			m.recoverCmd(),
-		)
+	cmds := []tea.Cmd{
+		tea.Tick(m.tickEvery, func(t time.Time) tea.Msg { return tickMsg(t) }),
+		m.stateEventsCmd(),
 	}
-	return tea.Tick(m.tickEvery, func(t time.Time) tea.Msg { return tickMsg(t) })
+	if m.cfg != nil && m.cfg.General.AutoRecoverOnStart {
+		cmds = append(cmds, m.recoverCmd())
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -266,6 +274,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateNormal(msg)
 	case tickMsg:
 		return m, m.refresh()
+	case stateChangedMsg:
+		m.libraryNeedsRefresh = true
+		m.refreshNow()
+		return m, m.stateEventsCmd()
 	case recoverRowsMsg:
 		// Start downloads for rows that appear to have been running previously
 		rows := msg.rows
@@ -452,6 +464,10 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch s {
 	case "q", "ctrl+c":
+		if m.stopStateEvents != nil {
+			m.stopStateEvents()
+			m.stopStateEvents = nil
+		}
 		m.saveUIState()
 		return m, tea.Quit
 	case "/":
@@ -821,6 +837,11 @@ func (m *Model) View() string {
 }
 
 func (m *Model) refresh() tea.Cmd {
+	m.refreshNow()
+	return tea.Tick(m.tickEvery, func(t time.Time) tea.Msg { return tickMsg(t) })
+}
+
+func (m *Model) refreshNow() {
 	// Update token env presence status on each refresh tick
 	m.updateTokenEnvStatus()
 	rows, err := m.st.ListDownloads()
@@ -888,7 +909,19 @@ func (m *Model) refresh() tea.Cmd {
 			m.addRateSample(key, rate)
 		}
 	}
-	return tea.Tick(m.tickEvery, func(t time.Time) tea.Msg { return tickMsg(t) })
+}
+
+func (m *Model) stateEventsCmd() tea.Cmd {
+	ch := m.stateEvents
+	if ch == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		if _, ok := <-ch; !ok {
+			return nil
+		}
+		return stateChangedMsg{}
+	}
 }
 
 func (m *Model) compactToggle()  { m.cfg.UI.Compact = !m.cfg.UI.Compact }

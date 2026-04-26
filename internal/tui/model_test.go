@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -25,6 +26,56 @@ func TestUpdateBatchModeEsc(t *testing.T) {
 	m.updateBatchMode(tea.KeyMsg{Type: tea.KeyEsc})
 	if m.batchMode {
 		t.Fatalf("batchMode should be false after esc")
+	}
+}
+
+func TestStateChangedMessageRefreshesRows(t *testing.T) {
+	tmpDir := t.TempDir()
+	db, err := state.NewDB(filepath.Join(tmpDir, "state.db"))
+	if err != nil {
+		t.Fatalf("new db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	cfg := &config.Config{General: config.General{DataRoot: tmpDir, DownloadRoot: tmpDir}}
+	m := New(cfg, db, "test").(*Model)
+	if m.stateEvents == nil {
+		t.Fatal("expected TUI model to subscribe to state events")
+	}
+	if err := db.UpsertDownload(state.DownloadRow{URL: "https://example.com/a", Dest: "/tmp/a", Status: "pending"}); err != nil {
+		t.Fatalf("upsert download: %v", err)
+	}
+
+	msg := receiveStateEventMsg(t, m)
+	if _, ok := msg.(stateChangedMsg); !ok {
+		t.Fatalf("expected stateChangedMsg, got %T", msg)
+	}
+	m.libraryNeedsRefresh = false
+	m.Update(msg)
+	if len(m.rows) != 1 || m.rows[0].URL != "https://example.com/a" {
+		t.Fatalf("expected rows to refresh from state event, got %+v", m.rows)
+	}
+	if !m.libraryNeedsRefresh {
+		t.Fatal("expected state event to invalidate library data")
+	}
+}
+
+func receiveStateEventMsg(t *testing.T, m *Model) tea.Msg {
+	t.Helper()
+	cmd := m.stateEventsCmd()
+	if cmd == nil {
+		t.Fatal("expected state event command")
+	}
+	msgs := make(chan tea.Msg, 1)
+	go func() {
+		msgs <- cmd()
+	}()
+	select {
+	case msg := <-msgs:
+		return msg
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for state event")
+		return nil
 	}
 }
 

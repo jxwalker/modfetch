@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestChunkLifecycleTxAndDirectUpdates(t *testing.T) {
@@ -204,5 +205,37 @@ func TestGetMetadataByDestAndUsage(t *testing.T) {
 	}
 	if err := db.UpdateMetadataUsage("missing"); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("expected sql.ErrNoRows for missing usage update, got %v", err)
+	}
+}
+
+func TestSubscribeReceivesCoalescedStateChanges(t *testing.T) {
+	db := testDownloadDB(t)
+	events, cancel := db.Subscribe()
+	defer cancel()
+
+	if err := db.UpsertDownload(DownloadRow{URL: "https://example.com/a", Dest: "/tmp/a", Status: "pending"}); err != nil {
+		t.Fatalf("upsert download: %v", err)
+	}
+	expectEvent(t, events)
+
+	if err := db.WithTx(func(tx *sql.Tx) error {
+		return db.UpsertDownloadTx(tx, DownloadRow{URL: "https://example.com/b", Dest: "/tmp/b", Status: "pending"})
+	}); err != nil {
+		t.Fatalf("tx upsert: %v", err)
+	}
+	expectEvent(t, events)
+
+	cancel()
+	if _, ok := <-events; ok {
+		t.Fatal("expected subscription channel to close after cancel")
+	}
+}
+
+func expectEvent(t *testing.T, events <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-events:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for state event")
 	}
 }
