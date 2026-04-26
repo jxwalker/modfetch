@@ -1,7 +1,6 @@
 package state
 
 import (
-	"database/sql"
 	"path/filepath"
 	"testing"
 )
@@ -117,7 +116,7 @@ func TestReplaceDownloadURL(t *testing.T) {
 	}
 
 	var count int
-	if err := db.SQL.QueryRow(`SELECT COUNT(*) FROM downloads WHERE url=? AND dest=?`, oldURL, dest).Scan(&count); err != nil && err != sql.ErrNoRows {
+	if err := db.SQL.QueryRow(`SELECT COUNT(*) FROM downloads WHERE url=? AND dest=?`, oldURL, dest).Scan(&count); err != nil {
 		t.Fatalf("count old row: %v", err)
 	}
 	if count != 0 {
@@ -129,5 +128,37 @@ func TestReplaceDownloadURL(t *testing.T) {
 	}
 	if len(chunks) != 0 {
 		t.Fatalf("expected old chunks to be removed, got %d", len(chunks))
+	}
+}
+
+func TestDeleteDownloadsAndChunksByDest(t *testing.T) {
+	db := testDownloadDB(t)
+
+	dest := filepath.Join(t.TempDir(), "file.gguf")
+	for _, url := range []string{"https://example.com/a", "https://cdn.example.com/a"} {
+		if err := db.UpsertDownload(DownloadRow{URL: url, Dest: dest, Status: "error"}); err != nil {
+			t.Fatalf("upsert download: %v", err)
+		}
+		if err := db.UpsertChunk(ChunkRow{URL: url, Dest: dest, Index: 0, Start: 0, End: 9, Size: 10, Status: "dirty"}); err != nil {
+			t.Fatalf("upsert chunk: %v", err)
+		}
+	}
+
+	if err := db.DeleteDownloadsAndChunksByDest(dest); err != nil {
+		t.Fatalf("delete by dest: %v", err)
+	}
+
+	var count int
+	if err := db.SQL.QueryRow(`SELECT COUNT(*) FROM downloads WHERE dest=?`, dest).Scan(&count); err != nil {
+		t.Fatalf("count downloads: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected downloads to be removed, got %d", count)
+	}
+	if err := db.SQL.QueryRow(`SELECT COUNT(*) FROM chunks WHERE dest=?`, dest).Scan(&count); err != nil {
+		t.Fatalf("count chunks: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected chunks to be removed, got %d", count)
 	}
 }

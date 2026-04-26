@@ -254,6 +254,16 @@ func (db *DB) DeleteDownloadAndChunks(url, dest string) error {
 	})
 }
 
+func (db *DB) DeleteDownloadsAndChunksByDest(dest string) error {
+	return db.WithTx(func(tx *sql.Tx) error {
+		if _, err := tx.Exec(`DELETE FROM chunks WHERE dest=?`, dest); err != nil {
+			return err
+		}
+		_, err := tx.Exec(`DELETE FROM downloads WHERE dest=?`, dest)
+		return err
+	})
+}
+
 func (db *DB) ReplaceDownloadURL(oldURL string, row DownloadRow) error {
 	return db.WithTx(func(tx *sql.Tx) error {
 		if oldURL != row.URL {

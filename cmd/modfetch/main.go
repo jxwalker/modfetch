@@ -468,7 +468,7 @@ func handleDownload(ctx context.Context, args []string) error {
 								break
 							}
 							if attempt < len(candidates)-1 {
-								_ = st.DeleteDownloadAndChunks(candidate.url, destCandidate)
+								_ = st.DeleteDownloadsAndChunksByDest(destCandidate)
 								next := logging.SanitizeURL(candidates[attempt+1].url)
 								logMu.Lock()
 								log.Warnf("job %d: source failed: %s (%v); trying next source: %s", it.idx, logging.SanitizeURL(candidate.url), logging.SanitizeError(err), next)

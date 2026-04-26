@@ -137,7 +137,11 @@ func safeArchivePath(destDir, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if target != cleanDest && !strings.HasPrefix(target, cleanDest+string(os.PathSeparator)) {
+	rel, err := filepath.Rel(cleanDest, target)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || filepath.IsAbs(rel) {
 		return "", fmt.Errorf("archive entry escapes destination: %s", name)
 	}
 	return target, nil
