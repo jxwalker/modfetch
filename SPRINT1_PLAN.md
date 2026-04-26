@@ -1,10 +1,16 @@
 # Sprint 1: Foundation & Testing - Execution Plan
 
 **Duration:** 2 weeks
-**Status:** IN PROGRESS
+**Status:** Historical plan; completed and superseded by `SPRINT1_COMPLETE.md`
 **Branch:** claude/model-library-implementation-011CUy54B8AorE9DLQcQsn4m
 
 ---
+
+## Current Status
+
+This file is retained as a historical execution plan. The sprint work is complete:
+scanner/library/settings tests exist, the TUI was split into focused files, and the
+current consolidated roadmap is tracked in `docs/ROADMAP.md`.
 
 ## ✅ Completed (Days 1-2)
 

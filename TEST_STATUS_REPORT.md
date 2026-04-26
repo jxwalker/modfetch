@@ -9,6 +9,15 @@
 
 ---
 
+## Current Status
+
+This report is historical. The gaps listed below were later closed: scanner,
+library, settings, integration, and benchmark tests now exist. On 2026-04-26,
+`go test ./... -timeout 180s` and `go test ./... -race -timeout 240s` passed on
+the local development machine.
+
+---
+
 ## Testing Environment Status
 
 ### ✅ What We CAN Test (Sandboxed Environment)
@@ -52,67 +61,67 @@
 
 ---
 
-## New Features Requiring Tests
+## Historical Test Gaps (Closed)
 
-### ❌ Scanner Package (MISSING TESTS)
-**File:** internal/scanner/scanner.go (302 lines)
-**Test File:** internal/scanner/scanner_test.go (NOT CREATED)
+### ✅ Scanner Package (CLOSED)
+**File:** internal/scanner/scanner.go
+**Test File:** internal/scanner/scanner_test.go
 
-**Required Test Coverage:**
-- [ ] TestScanner_ScanDirectories - Basic directory scanning
-- [ ] TestScanner_FileTypeDetection - Recognize .gguf, .safetensors, .ckpt, etc.
-- [ ] TestScanner_MetadataExtraction - Extract name, version, quantization from filename
-- [ ] TestScanner_QuantizationParsing - Q4_K_M, Q5_K_S, FP16, INT8, etc.
-- [ ] TestScanner_ParameterCountExtraction - 7B, 13B, 70B patterns
-- [ ] TestScanner_ModelTypeInference - LLM, LoRA, VAE detection
-- [ ] TestScanner_DuplicateSkipping - Avoid re-adding existing models
-- [ ] TestScanner_ErrorHandling - Permission denied, invalid paths
-- [ ] TestScanner_RecursiveScanning - Nested directories
-- [ ] TestScanner_SymlinkHandling - Follow/ignore symlinks
-
-**Priority:** HIGH (Core new feature)
-**Estimated Effort:** 2-3 days
-
-### ❌ Library View (MISSING TESTS)
-**File:** internal/tui/model.go (library view sections, ~400 lines)
-**Test File:** internal/tui/library_test.go (NOT CREATED)
-
-**Required Test Coverage:**
-- [ ] TestLibrary_RenderView - Basic library view rendering
-- [ ] TestLibrary_Navigation - j/k navigation, selection
-- [ ] TestLibrary_DetailView - Enter to view details, Esc to go back
-- [ ] TestLibrary_Search - / to search, filter results
-- [ ] TestLibrary_Pagination - Handle 0, 1, 10, 100, 1000+ models
-- [ ] TestLibrary_EmptyState - Display when no models
-- [ ] TestLibrary_FilterByType - Filter by LLM, LoRA, etc.
-- [ ] TestLibrary_FilterBySource - Filter by HuggingFace, CivitAI, local
-- [ ] TestLibrary_ToggleFavorite - f key to toggle favorite
-- [ ] TestLibrary_SortOptions - Sort by name, size, usage
+**Implemented Test Coverage:**
+- [x] TestScanner_ScanDirectories - Basic directory scanning
+- [x] TestScanner_FileTypeDetection - Recognize .gguf, .safetensors, .ckpt, etc.
+- [x] TestScanner_MetadataExtraction - Extract name, version, quantization from filename
+- [x] TestScanner_QuantizationParsing - Q4_K_M, Q5_K_S, FP16, INT8, etc.
+- [x] TestScanner_ParameterCountExtraction - 7B, 13B, 70B patterns
+- [x] TestScanner_ModelTypeInference - LLM, LoRA, VAE detection
+- [x] TestScanner_DuplicateSkipping - Avoid re-adding existing models
+- [x] TestScanner_ErrorHandling - Permission denied, invalid paths
+- [x] TestScanner_RecursiveScanning - Nested directories
+- [x] TestScanner_SymlinkHandling - Follow/ignore symlinks
 
 **Priority:** HIGH (Core new feature)
 **Estimated Effort:** 2-3 days
 
-### ❌ Settings Tab (MISSING TESTS)
-**File:** internal/tui/model.go (settings view section, ~160 lines)
-**Test File:** internal/tui/settings_test.go (NOT CREATED)
+### ✅ Library View (CLOSED)
+**File:** internal/tui/library_view.go
+**Test File:** internal/tui/library_test.go
 
-**Required Test Coverage:**
-- [ ] TestSettings_RenderView - Basic settings view rendering
-- [ ] TestSettings_TokenStatusDisplay - HF/CivitAI token indicators
-- [ ] TestSettings_DirectoryPaths - Display all configured paths
-- [ ] TestSettings_PlacementRules - Show app placement configurations
-- [ ] TestSettings_DownloadSettings - Network and concurrency settings
-- [ ] TestSettings_ValidationSettings - SHA256, safetensors checks
-- [ ] TestSettings_Navigation - Tab switching
+**Implemented Test Coverage:**
+- [x] TestLibrary_RenderView - Basic library view rendering
+- [x] TestLibrary_Navigation - j/k navigation, selection
+- [x] TestLibrary_DetailView - Enter to view details, Esc to go back
+- [x] TestLibrary_Search - / to search, filter results
+- [x] TestLibrary_Pagination - Handle 0, 1, 10, 100, 1000+ models
+- [x] TestLibrary_EmptyState - Display when no models
+- [x] TestLibrary_FilterByType - Filter by LLM, LoRA, etc.
+- [x] TestLibrary_FilterBySource - Filter by HuggingFace, CivitAI, local
+- [x] TestLibrary_ToggleFavorite - f key to toggle favorite
+- [x] TestLibrary_SortOptions - Sort by name, size, usage
+
+**Priority:** HIGH (Core new feature)
+**Estimated Effort:** 2-3 days
+
+### ✅ Settings Tab (CLOSED)
+**File:** internal/tui/settings_view.go
+**Test File:** internal/tui/settings_test.go
+
+**Implemented Test Coverage:**
+- [x] TestSettings_RenderView - Basic settings view rendering
+- [x] TestSettings_TokenStatusDisplay - HF/CivitAI token indicators
+- [x] TestSettings_DirectoryPaths - Display all configured paths
+- [x] TestSettings_PlacementRules - Show app placement configurations
+- [x] TestSettings_DownloadSettings - Network and concurrency settings
+- [x] TestSettings_ValidationSettings - SHA256, safetensors checks
+- [x] TestSettings_Navigation - Tab switching
 
 **Priority:** MEDIUM (Nice to have)
 **Estimated Effort:** 1 day
 
 ---
 
-## Known Issues Identified
+## Historical Issues Identified
 
-### 🔴 CRITICAL: Performance Issue in Scanner
+### ✅ CLOSED: Performance Issue in Scanner
 **File:** internal/scanner/scanner.go, lines 122-142
 **Function:** `findExistingMetadata()`
 
