@@ -112,7 +112,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 
 ---
 
-## What's new in v0.6.0
+## What's new in v0.6.x
 - **Library View**: Browse all your downloaded models with rich metadata, search, and filters
   - View model details: type, quantization, size, source, tags, descriptions
   - Search by name, filter by type (LLM, LoRA, VAE, etc.) and source (HuggingFace, CivitAI, local)
@@ -132,6 +132,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 - **Documentation**: Complete user guides for Library (docs/LIBRARY.md) and Scanner (docs/SCANNER.md)
 
 Previous releases:
+- v0.6.1: Testing reliability, real API integration coverage, and TUI test expansion
 - v0.5.2: Enhanced TUI with rich UI elements and vibrant colors
 - v0.5.1: Critical installer and TUI navigation fixes
 - v0.5.0: Comprehensive installation package with guided setup experience
