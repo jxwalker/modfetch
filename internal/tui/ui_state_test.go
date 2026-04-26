@@ -30,3 +30,28 @@ func TestLoadUIStateRestoresCompactFalse(t *testing.T) {
 		t.Fatal("expected persisted compact=false to override config compact=true")
 	}
 }
+
+func TestLoadUIStateIgnoresInvalidThemeAndColumnMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmpDir, "ui_state_v2.json"), []byte(`{"theme_index":999,"column_mode":"bad"}`), 0o644); err != nil {
+		t.Fatalf("write ui state: %v", err)
+	}
+	db, err := state.NewDB(filepath.Join(tmpDir, "state.db"))
+	if err != nil {
+		t.Fatalf("new db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	cfg := &config.Config{
+		General: config.General{DataRoot: tmpDir, DownloadRoot: tmpDir},
+		UI:      config.UIOptions{ColumnMode: "host", ShowURL: false},
+	}
+	m := New(cfg, db, "test").(*Model)
+
+	if m.themeIndex != 0 {
+		t.Fatalf("expected invalid theme index to preserve default 0, got %d", m.themeIndex)
+	}
+	if m.columnMode != "host" {
+		t.Fatalf("expected invalid column mode to preserve configured host mode, got %q", m.columnMode)
+	}
+}

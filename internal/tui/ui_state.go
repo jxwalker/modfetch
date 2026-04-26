@@ -39,12 +39,12 @@ func (m *Model) loadUIState() {
 	if err := json.Unmarshal(b, &st); err != nil {
 		return
 	}
-	m.themeIndex = st.ThemeIndex
 	presets := themePresets()
-	if m.themeIndex >= 0 && m.themeIndex < len(presets) {
-		m.th = presets[m.themeIndex]
+	if st.ThemeIndex >= 0 && st.ThemeIndex < len(presets) {
+		m.themeIndex = st.ThemeIndex
+		m.th = presets[st.ThemeIndex]
 	}
-	if st.ColumnMode != "" {
+	if validColumnMode(st.ColumnMode) {
 		m.columnMode = st.ColumnMode
 	} else if st.ShowURL {
 		m.columnMode = "url"
@@ -85,4 +85,8 @@ func (m *Model) logUIStateError(msg, path string, err error) {
 		return
 	}
 	m.log.Debugf("%s %s: %v", msg, path, err)
+}
+
+func validColumnMode(mode string) bool {
+	return mode == "dest" || mode == "url" || mode == "host"
 }
