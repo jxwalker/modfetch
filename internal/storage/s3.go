@@ -109,8 +109,8 @@ func NewS3ClientFromConfig(cfg *config.Config) (*S3Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("storage.s3.endpoint: %w", err)
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, fmt.Errorf("storage.s3.endpoint must use http or https")
+	if u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return nil, fmt.Errorf("storage.s3.endpoint must be a valid http or https endpoint with a host")
 	}
 	region := firstNonEmpty(s3.Region, os.Getenv("AWS_REGION"), os.Getenv("AWS_DEFAULT_REGION"), defaultRegion)
 	accessEnv := firstNonEmpty(s3.AccessKeyEnv, defaultAccessKeyEnv)

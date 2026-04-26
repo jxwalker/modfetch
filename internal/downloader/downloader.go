@@ -71,6 +71,9 @@ func (a *Auto) Download(ctx context.Context, url, destPath, expectedSHA string, 
 	}
 	if _, err := os.Stat(finalLocal + ".sha256"); err == nil && a.c.Storage.S3.UploadSHA256File {
 		if err := client.PutFile(ctx, destPath+".sha256", finalLocal+".sha256", "text/plain; charset=utf-8"); err != nil {
+			if delErr := client.DeleteObject(ctx, destPath); delErr != nil && a.l != nil {
+				a.l.Warnf("s3 cleanup failed for %s after checksum upload failure: %v; remove the object manually before retrying", destPath, delErr)
+			}
 			a.markS3UploadError(url, finalLocal, fmt.Errorf("checksum: %w", err))
 			return "", "", err
 		}

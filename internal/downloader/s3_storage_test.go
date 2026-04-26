@@ -90,3 +90,65 @@ func TestAutoDownloadsToS3Destination(t *testing.T) {
 		t.Fatalf("expected complete s3 state row, got %+v", rows)
 	}
 }
+
+func TestAutoRollsBackS3ObjectWhenChecksumUploadFails(t *testing.T) {
+	payload := []byte("model payload")
+	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Length", "13")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		w.Header().Set("Content-Length", "13")
+		_, _ = w.Write(payload)
+	}))
+	defer source.Close()
+
+	deletedMain := false
+	s3 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete && r.URL.EscapedPath() == "/models/remote.bin" {
+			deletedMain = true
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if strings.HasSuffix(r.URL.EscapedPath(), ".sha256") {
+			http.Error(w, "sidecar failed", http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer s3.Close()
+	t.Setenv("AWS_ACCESS_KEY_ID", "test-access")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
+
+	tmp := t.TempDir()
+	cfg := &config.Config{
+		General: config.General{DataRoot: filepath.Join(tmp, "data"), DownloadRoot: filepath.Join(tmp, "downloads"), StagePartials: true},
+		Storage: config.Storage{S3: config.S3Storage{
+			Endpoint:         s3.URL,
+			UseHTTP:          true,
+			PathStyle:        true,
+			UploadSHA256File: true,
+		}},
+	}
+	db, err := state.NewDB(filepath.Join(tmp, "state.db"))
+	if err != nil {
+		t.Fatalf("new db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	_, _, err = NewAuto(cfg, logging.New("error", false), db, nil).Download(context.Background(), source.URL+"/model.bin", "s3://models/remote.bin", "", nil, false)
+	if err == nil {
+		t.Fatal("expected checksum upload failure")
+	}
+	if !deletedMain {
+		t.Fatal("expected main S3 object to be deleted after checksum upload failure")
+	}
+	rows, err := db.ListDownloads()
+	if err != nil {
+		t.Fatalf("list downloads: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Status != "error" || !strings.Contains(rows[0].LastError, "s3 upload") {
+		t.Fatalf("expected local state row marked with s3 upload error, got %+v", rows)
+	}
+}

@@ -71,3 +71,12 @@ func TestStagingPathIsStableForS3Destination(t *testing.T) {
 		t.Fatalf("expected staging path under s3-staging bucket dir, got %q", a)
 	}
 }
+
+func TestNewS3ClientRejectsEndpointWithoutHost(t *testing.T) {
+	t.Setenv("AWS_ACCESS_KEY_ID", "test-access")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test-secret")
+	_, err := NewS3ClientFromConfig(&config.Config{Storage: config.Storage{S3: config.S3Storage{Endpoint: "http://"}}})
+	if err == nil || !strings.Contains(err.Error(), "storage.s3.endpoint") {
+		t.Fatalf("expected endpoint validation error, got %v", err)
+	}
+}
