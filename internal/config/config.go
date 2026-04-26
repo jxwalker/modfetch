@@ -271,6 +271,19 @@ func (c *Config) Validate() error {
 	if c.General.DownloadRoot == "" {
 		return errors.New("general.download_root is required")
 	}
+	placementMode := stringsLower(strings.TrimSpace(c.General.PlacementMode))
+	switch placementMode {
+	case "", "symlink", "hardlink", "copy":
+		c.General.PlacementMode = placementMode
+	default:
+		return fmt.Errorf("general.placement_mode invalid: %s", c.General.PlacementMode)
+	}
+	if c.Network.TimeoutSeconds < 0 {
+		return fmt.Errorf("network.timeout_seconds must be >= 0")
+	}
+	if c.Network.MaxRedirects < 0 {
+		return fmt.Errorf("network.max_redirects must be >= 0")
+	}
 	if c.Resolver.CacheTTLHours < 0 {
 		return fmt.Errorf("resolver.cache_ttl_hours must be >= 0")
 	}
@@ -334,6 +347,13 @@ func (c *Config) Validate() error {
 	}
 	if c.UI.RefreshHz < 0 {
 		return fmt.Errorf("ui.refresh_hz must be >= 0")
+	}
+	columnMode := stringsLower(strings.TrimSpace(c.UI.ColumnMode))
+	switch columnMode {
+	case "", "dest", "url", "host":
+		c.UI.ColumnMode = columnMode
+	default:
+		return fmt.Errorf("ui.column_mode invalid: %s", c.UI.ColumnMode)
 	}
 	return nil
 }

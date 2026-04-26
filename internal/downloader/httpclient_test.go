@@ -4,6 +4,8 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jxwalker/modfetch/internal/config"
@@ -42,6 +44,29 @@ func TestNewHTTPClientHonorsTLSVerify(t *testing.T) {
 	}
 	if tr.TLSClientConfig == nil || !tr.TLSClientConfig.InsecureSkipVerify {
 		t.Fatal("expected TLS verification to be disabled")
+	}
+}
+
+func TestNewHTTPClientHonorsMaxRedirects(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/start":
+			http.Redirect(w, r, "/one", http.StatusFound)
+		case "/one":
+			http.Redirect(w, r, "/two", http.StatusFound)
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer server.Close()
+
+	client := newHTTPClient(&config.Config{Network: config.Network{MaxRedirects: 1}})
+	resp, err := client.Get(server.URL + "/start")
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "stopped after 1 redirects") {
+		t.Fatalf("expected redirect limit error, got %v", err)
 	}
 }
 

@@ -30,10 +30,14 @@ type cachingDialer struct {
 
 func newHTTPClient(cfg *config.Config) *http.Client {
 	timeoutSeconds := 0
+	maxRedirects := 10
 	perHost := 10
 	tlsVerify := true
 	if cfg != nil {
 		timeoutSeconds = cfg.Network.TimeoutSeconds
+		if cfg.Network.MaxRedirects > 0 {
+			maxRedirects = cfg.Network.MaxRedirects
+		}
 		tlsVerify = cfg.Network.TLSVerify
 		if cfg.Concurrency.PerHostRequests > 0 {
 			perHost = cfg.Concurrency.PerHostRequests
@@ -76,6 +80,9 @@ func newHTTPClient(cfg *config.Config) *http.Client {
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) == 0 {
 			return nil
+		}
+		if len(via) > maxRedirects {
+			return fmt.Errorf("stopped after %d redirects", maxRedirects)
 		}
 		prev := via[len(via)-1]
 		if ua := prev.Header.Get("User-Agent"); ua != "" {
