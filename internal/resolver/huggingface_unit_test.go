@@ -3,9 +3,11 @@ package resolver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jxwalker/modfetch/internal/config"
@@ -64,18 +66,22 @@ func TestHuggingFaceResolveWithLocalTreeAndNamingPattern(t *testing.T) {
 		return ""
 	}
 
-	var sawAuth bool
+	var sawAuth atomic.Bool
+	var handlerErr atomic.Value
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/models/acme/tiny/tree/main" {
-			t.Fatalf("unexpected path: %s", r.URL.Path)
+			handlerErr.Store(fmt.Sprintf("unexpected path: %s", r.URL.Path))
+			http.Error(w, "unexpected path", http.StatusNotFound)
+			return
 		}
-		sawAuth = r.Header.Get("Authorization") == "Bearer secret"
+		sawAuth.Store(r.Header.Get("Authorization") == "Bearer secret")
 		files := []hfRepoFile{
 			{Path: "tiny.Q4_K_M.gguf", Type: "file", Size: 42},
 			{Path: "tiny.Q8_0.gguf", Type: "file", Size: 84},
 		}
 		if err := json.NewEncoder(w).Encode(files); err != nil {
-			t.Fatalf("encode files: %v", err)
+			handlerErr.Store(fmt.Sprintf("encode files: %v", err))
+			return
 		}
 	}))
 	defer server.Close()
@@ -96,7 +102,10 @@ func TestHuggingFaceResolveWithLocalTreeAndNamingPattern(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if !sawAuth {
+	if v := handlerErr.Load(); v != nil {
+		t.Fatal(v)
+	}
+	if !sawAuth.Load() {
 		t.Fatal("expected Authorization header on tree request")
 	}
 	if res.SelectedQuantization != "Q8_0" || res.RepoPath != "tiny.Q8_0.gguf" {

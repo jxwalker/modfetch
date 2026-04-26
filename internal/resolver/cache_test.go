@@ -37,7 +37,8 @@ func TestResolverCacheRoundTripDeleteAndClear(t *testing.T) {
 	if !ok {
 		t.Fatal("expected cache hit")
 	}
-	if got.URL != want.URL || got.Headers["Authorization"] != want.Headers["Authorization"] || got.SuggestedFilename != want.SuggestedFilename {
+	if got.URL != want.URL || got.Headers["Authorization"] != want.Headers["Authorization"] ||
+		got.SuggestedFilename != want.SuggestedFilename || got.RepoOwner != want.RepoOwner || got.RepoName != want.RepoName {
 		t.Fatalf("unexpected cached result: %+v", got)
 	}
 

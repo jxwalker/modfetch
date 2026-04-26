@@ -3,9 +3,11 @@ package resolver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/jxwalker/modfetch/internal/config"
@@ -16,12 +18,15 @@ func TestCivitAIResolveWithLocalModelEndpoint(t *testing.T) {
 	defer SetCivitaiBaseForTest(oldBase)
 	t.Setenv("CIVITAI_TEST_TOKEN", "secret")
 
-	var sawAuth bool
+	var sawAuth atomic.Bool
+	var handlerErr atomic.Value
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/models/123" {
-			t.Fatalf("unexpected path: %s", r.URL.Path)
+			handlerErr.Store(fmt.Sprintf("unexpected path: %s", r.URL.Path))
+			http.Error(w, "unexpected path", http.StatusNotFound)
+			return
 		}
-		sawAuth = r.Header.Get("Authorization") == "Bearer secret"
+		sawAuth.Store(r.Header.Get("Authorization") == "Bearer secret")
 		model := civitModel{
 			Name: "Example Model",
 			ModelVersions: []civitVersion{
@@ -43,7 +48,8 @@ func TestCivitAIResolveWithLocalModelEndpoint(t *testing.T) {
 			},
 		}
 		if err := json.NewEncoder(w).Encode(model); err != nil {
-			t.Fatalf("encode model: %v", err)
+			handlerErr.Store(fmt.Sprintf("encode model: %v", err))
+			return
 		}
 	}))
 	defer server.Close()
@@ -64,7 +70,10 @@ func TestCivitAIResolveWithLocalModelEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if !sawAuth {
+	if v := handlerErr.Load(); v != nil {
+		t.Fatal(v)
+	}
+	if !sawAuth.Load() {
 		t.Fatal("expected Authorization header on model request")
 	}
 	if res.URL != "https://cdn.example/vae" || res.FileName != "vae file.safetensors" || res.FileType != "VAE" {
@@ -85,6 +94,7 @@ func TestCivitAIResolveWithLocalVersionEndpoint(t *testing.T) {
 	oldBase := CivitaiBaseForTest()
 	defer SetCivitaiBaseForTest(oldBase)
 
+	var handlerErr atomic.Value
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v1/model-versions/44":
@@ -98,14 +108,18 @@ func TestCivitAIResolveWithLocalVersionEndpoint(t *testing.T) {
 				},
 			}
 			if err := json.NewEncoder(w).Encode(version); err != nil {
-				t.Fatalf("encode version: %v", err)
+				handlerErr.Store(fmt.Sprintf("encode version: %v", err))
+				return
 			}
 		case "/api/v1/models/123":
 			if err := json.NewEncoder(w).Encode(civitModel{Name: "Versioned Model"}); err != nil {
-				t.Fatalf("encode model: %v", err)
+				handlerErr.Store(fmt.Sprintf("encode model: %v", err))
+				return
 			}
 		default:
-			t.Fatalf("unexpected path: %s", r.URL.Path)
+			handlerErr.Store(fmt.Sprintf("unexpected path: %s", r.URL.Path))
+			http.Error(w, "unexpected path", http.StatusNotFound)
+			return
 		}
 	}))
 	defer server.Close()
@@ -114,6 +128,9 @@ func TestCivitAIResolveWithLocalVersionEndpoint(t *testing.T) {
 	res, err := (&CivitAI{}).Resolve(context.Background(), "civitai://model/123?version=44", nil)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
+	}
+	if v := handlerErr.Load(); v != nil {
+		t.Fatal(v)
 	}
 	if res.URL != "https://cdn.example/model" {
 		t.Fatalf("expected Model file fallback, got %+v", res)
@@ -124,7 +141,7 @@ func TestCivitAIResolveWithLocalVersionEndpoint(t *testing.T) {
 }
 
 func TestCivitAIResolveLocalErrorsAndFilenameHelpers(t *testing.T) {
-	if hasPrefixName("Example_Model-v1", "example model") != true {
+	if !hasPrefixName("Example_Model-v1", "example model") {
 		t.Fatal("expected normalized prefix match")
 	}
 	if normalizeAlphaNum("A b_C-1!") != "abc1" {
