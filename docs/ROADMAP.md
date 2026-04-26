@@ -31,7 +31,7 @@ Priority 3 — User experience
 
 Priority 4 — Quality improvements
 - Rich, structured error context with remediation hints [IMPL]
-- Test coverage expansion (resolvers/state/placer/downloaders) [NEW]
+- Test coverage expansion (resolvers/state/placer/downloaders) [IMPL]
 - Metrics expansion (per-download stats, percentiles) [IMPL]
 - Configuration validation hardening [IMPL]
 
