@@ -13,14 +13,17 @@ type File struct {
 }
 
 type BatchJob struct {
-	URI      string   `yaml:"uri"`
-	Mirrors  []string `yaml:"mirrors"`
-	Priority int      `yaml:"priority"`
-	Dest     string   `yaml:"dest"`
-	SHA256   string   `yaml:"sha256"`
-	Type     string   `yaml:"type"`
-	Place    bool     `yaml:"place"`
-	Mode     string   `yaml:"mode"` // symlink|hardlink|copy
+	URI            string   `yaml:"uri"`
+	Mirrors        []string `yaml:"mirrors"`
+	Priority       int      `yaml:"priority"`
+	Dest           string   `yaml:"dest"`
+	SHA256         string   `yaml:"sha256"`
+	Type           string   `yaml:"type"`
+	Place          bool     `yaml:"place"`
+	Mode           string   `yaml:"mode"` // symlink|hardlink|copy
+	Extract        bool     `yaml:"extract"`
+	ExtractDir     string   `yaml:"extract_dir"`
+	ScheduleWindow string   `yaml:"schedule_window"` // local HH:MM-HH:MM window
 }
 
 func Load(path string) (*File, error) {

@@ -23,11 +23,17 @@ type rateLimitedError struct {
 func (e rateLimitedError) Error() string { return e.msg }
 
 type httpStatusError struct {
-	statusCode int
-	msg        string
+	statusCode  int
+	msg         string
+	remediation string
 }
 
-func (e httpStatusError) Error() string { return e.msg }
+func (e httpStatusError) Error() string {
+	if strings.TrimSpace(e.remediation) == "" {
+		return e.msg
+	}
+	return e.msg + " | remediation: " + e.remediation
+}
 
 type checksumMismatchError struct {
 	msg string
@@ -94,6 +100,14 @@ func parseRetryAfter(raw string) time.Duration {
 }
 
 func friendlyHTTPStatusMessage(cfg *config.Config, host string, statusCode int, status string, hadAuth bool) string {
+	msg, remediation := friendlyHTTPStatusProblem(cfg, host, statusCode, status, hadAuth)
+	if remediation == "" {
+		return msg
+	}
+	return msg + " | remediation: " + remediation
+}
+
+func friendlyHTTPStatusProblem(cfg *config.Config, host string, statusCode int, status string, hadAuth bool) (string, string) {
 	h := strings.ToLower(strings.TrimSpace(host))
 	hfEnv, civEnv := "HF_TOKEN", "CIVITAI_TOKEN"
 	if cfg != nil {
@@ -105,26 +119,26 @@ func friendlyHTTPStatusMessage(cfg *config.Config, host string, statusCode int, 
 		}
 	}
 
-	mk := func(base string) string {
+	mk := func(base string) (string, string) {
 		if hostIs(h, "huggingface.co") {
 			if hadAuth {
-				return fmt.Sprintf("%s (Hugging Face: token present but not authorized; ensure you have access and have accepted the repository license)", base)
+				return base, "Hugging Face token is present but not authorized; ensure you have access and have accepted the repository license"
 			}
-			return fmt.Sprintf("%s (Hugging Face: token required; export %s)", base, hfEnv)
+			return base, fmt.Sprintf("export %s and accept the repository license if required", hfEnv)
 		}
 		if hostIs(h, "civitai.com") {
 			if hadAuth {
-				return fmt.Sprintf("%s (Civitai: token present but not authorized; ensure your account has access and age-gating or permissions allow download)", base)
+				return base, "Civitai token is present but not authorized; ensure the account has access and age-gating or permissions allow download"
 			}
-			return fmt.Sprintf("%s (Civitai: token may be required; export %s)", base, civEnv)
+			return base, fmt.Sprintf("export %s if the asset is gated", civEnv)
 		}
-		return base
+		return base, ""
 	}
 
 	switch statusCode {
 	case 429:
 		// Keep neutral guidance for rate limits; do not imply tokens are required
-		return "429 Too Many Requests: rate limited"
+		return "429 Too Many Requests: rate limited", "retry later or lower concurrency/bandwidth settings"
 	case 401:
 		if hadAuth {
 			return mk("401 Unauthorized: token present but not authorized")
@@ -142,7 +156,7 @@ func friendlyHTTPStatusMessage(cfg *config.Config, host string, statusCode int, 
 		return mk("404 Not Found: check path/revision; if private, provide token")
 	default:
 		// Preserve original status text verbatim
-		return status
+		return status, ""
 	}
 }
 

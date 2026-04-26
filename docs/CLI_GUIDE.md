@@ -84,6 +84,8 @@ modfetch download --url URL [OPTIONS]
 - `--sha256-file PATH` - File containing expected hash (`.sha256` format)
 - `--batch PATH` - YAML file with multiple downloads (see [BATCH.md](BATCH.md))
 - `--place` - Automatically place files after download (with `--batch`)
+- `--extract` - Extract `.zip`, `.tar`, `.tar.gz`, or `.tgz` archives after download
+- `--extract-dir PATH` - Directory for extracted archive contents
 - `--batch-parallel N` - Concurrent downloads in batch mode
 - `--dry-run` - Preview download without actually downloading
 - `--summary-json` - Output JSON summary instead of human-readable
@@ -122,12 +124,25 @@ modfetch download --url 'hf://org/repo/model.gguf' \
 # Batch download
 modfetch download --batch jobs.yml --place
 
+# Download and extract an archive
+modfetch download --url 'https://example.com/model-pack.zip' --extract --extract-dir ~/models/model-pack
+
 # Dry run (preview without downloading)
 modfetch download --url 'hf://org/repo/model.gguf' --dry-run
 
 # JSON output for scripts
 modfetch download --url 'https://example.com/file.bin' --summary-json
 ```
+
+### status
+
+Show rows from the download state database.
+
+**Options:**
+- `--only-errors` - Show only failed or verification-error rows
+- `--summary` - Print totals
+- `--duplicates` - Group completed downloads by matching SHA256 content
+- `--json` - Emit machine-readable JSON
 
 **Output:**
 

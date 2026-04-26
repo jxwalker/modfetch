@@ -1,11 +1,13 @@
 # Batch downloads (jobs.yml)
 
-modfetch can execute multiple downloads from a YAML file via the --batch flag on the download command. Batch mode supports direct HTTP(S) URLs as well as resolver URIs (hf:// and civitai://), optional SHA256 verification, and post-download placement.
+modfetch can execute multiple downloads from a YAML file via the --batch flag on the download command. Batch mode supports direct HTTP(S) URLs as well as resolver URIs (hf:// and civitai://), optional SHA256 verification, post-download extraction, scheduling windows, and post-download placement.
 
 Key properties:
 - YAML-driven; versioned schema (current version: 1)
 - No secrets in YAML; tokens must be provided via environment variables (HF_TOKEN, CIVITAI_TOKEN) when the corresponding sources are enabled in config
 - Per-job or global placement control
+- Per-job archive extraction for `.zip`, `.tar`, `.tar.gz`, and `.tgz`
+- Optional local daily schedule windows for jobs
 
 ## Schema (version 1)
 Top-level:
@@ -34,6 +36,12 @@ BatchJob fields:
   - Whether to place the file immediately after download using your placement mapping.
 - mode: string (optional)
   - Placement mode override: `symlink` | `hardlink` | `copy`. If omitted, falls back to `general.placement_mode` from your config.
+- extract: boolean (optional; default false)
+  - Extract the downloaded file after it completes. Supported formats are `.zip`, `.tar`, `.tar.gz`, and `.tgz`. `.7z` currently returns a clear unsupported-format error.
+- extract_dir: string (optional)
+  - Directory for extracted files. If omitted, modfetch uses the archive path without its extension.
+- schedule_window: string (optional)
+  - Local daily time window in `HH:MM-HH:MM` form. Jobs outside the window wait until the next start time. Overnight windows such as `22:00-02:00` are supported.
 
 ## Example
 ```yaml path=null start=null
@@ -44,6 +52,11 @@ jobs:
     mirrors:
       - "https://proof.ovh.net/files/1Mb.dat"
     place: false
+
+  - uri: "https://example.com/models/archive.zip"
+    extract: true
+    extract_dir: "/models/extracted/archive"
+    schedule_window: "22:00-06:00"
 
   - uri: "hf://gpt2/README.md?rev=main"
     # dest: "/absolute/path/optional"
@@ -74,6 +87,7 @@ modfetch download \
 
 Notes:
 - Global `--place` causes all jobs to be placed, but per-job `place: true` also works; either will trigger placement.
+- Global `--extract` causes all jobs to be extracted, but per-job `extract: true` also works.
 - Tokens for gated resources must come from environment variables (HF_TOKEN, CIVITAI_TOKEN). Do not put secrets in YAML.
 - Chunked downloads are used when supported; otherwise modfetch falls back to single-stream and resumes via `.part` files.
 - On re-run, downloads will resume and verify integrity; placement dedupes by SHA256 if `allow_overwrite: false`.

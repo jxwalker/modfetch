@@ -30,16 +30,18 @@ Priority 3 — User experience
 - Download queue management with priorities [IMPL]
 
 Priority 4 — Quality improvements
-- Rich, structured error context with remediation hints [NEW]
+- Rich, structured error context with remediation hints [IMPL]
 - Test coverage expansion (resolvers/state/placer/downloaders) [NEW]
 - Metrics expansion (per-download stats, percentiles) [IMPL]
 - Configuration validation hardening [IMPL]
 
 Priority 5 — Advanced features
-- Archive extraction post-download (zip/tar/7z) [NEW]
-- Duplicate detection / content-addressable storage [NEW]
+- Archive extraction post-download (zip/tar/7z) [WIP]
+  - zip, tar, tar.gz, and tgz are implemented; 7z reports a clear unsupported-format error until a 7z backend is selected.
+- Duplicate detection / content-addressable storage [WIP]
+  - Duplicate reporting by completed SHA256 is implemented; content-addressable storage/linking remains open.
 - S3-compatible backend for storage [NEW]
-- Download scheduling (cron-like windows) [NEW]
+- Download scheduling (cron-like windows) [IMPL]
 
 Priority 6 — Architecture
 - Context propagation pattern improvements [IMPL]
