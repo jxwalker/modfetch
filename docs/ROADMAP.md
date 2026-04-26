@@ -23,8 +23,8 @@ Priority 2 — Core functionality gaps
   - Reuse a shared HTTP client/transport across downloaders; per-host limits.
 
 Priority 3 — User experience
-- TUI refactor and feature polish [NEW]
-  - Factor large models into smaller components; refine sort/group/columns; persistence of selection when filtering; progress accuracy during planning.
+- TUI refactor and feature polish [IMPL]
+  - TUI state persistence, state-event handling, downloads/library/settings views, and modal handling are split across focused files; sort/group/columns, filter selection persistence, and planning progress accuracy are implemented.
 - Progress persistence across sessions [IMPL]
 - Adaptive retry/backoff by error type [IMPL]
 - Download queue management with priorities [IMPL]

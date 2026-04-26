@@ -1,0 +1,92 @@
+package tui
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+type uiState struct {
+	ThemeIndex int    `json:"theme_index"`
+	ShowURL    bool   `json:"show_url"`
+	ColumnMode string `json:"column_mode"`
+	Compact    bool   `json:"compact"`
+	GroupBy    string `json:"group_by"`
+	SortMode   string `json:"sort_mode"`
+}
+
+func (m *Model) compactToggle()  { m.cfg.UI.Compact = !m.cfg.UI.Compact }
+func (m *Model) isCompact() bool { return m.cfg.UI.Compact }
+
+func (m *Model) uiStatePath() string {
+	root := strings.TrimSpace(m.cfg.General.DataRoot)
+	if root == "" {
+		if h, err := os.UserHomeDir(); err == nil {
+			root = filepath.Join(h, ".config", "modfetch")
+		}
+	}
+	return filepath.Join(root, "ui_state_v2.json")
+}
+
+func (m *Model) loadUIState() {
+	p := m.uiStatePath()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return
+	}
+	var st uiState
+	if err := json.Unmarshal(b, &st); err != nil {
+		return
+	}
+	presets := themePresets()
+	if st.ThemeIndex >= 0 && st.ThemeIndex < len(presets) {
+		m.themeIndex = st.ThemeIndex
+		m.th = presets[st.ThemeIndex]
+	}
+	if validColumnMode(st.ColumnMode) {
+		m.columnMode = st.ColumnMode
+	} else if st.ShowURL {
+		m.columnMode = "url"
+	}
+	if m.cfg != nil {
+		m.cfg.UI.Compact = st.Compact
+	}
+	if st.GroupBy != "" {
+		m.groupBy = st.GroupBy
+	}
+	if st.SortMode != "" {
+		m.sortMode = st.SortMode
+	}
+}
+
+func (m *Model) saveUIState() {
+	if m.cfg == nil {
+		return
+	}
+	p := m.uiStatePath()
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		m.logUIStateError("failed to create ui state dir", filepath.Dir(p), err)
+		return
+	}
+	st := uiState{ThemeIndex: m.themeIndex, ShowURL: m.columnMode == "url", ColumnMode: m.columnMode, Compact: m.cfg.UI.Compact, GroupBy: m.groupBy, SortMode: m.sortMode}
+	b, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		m.logUIStateError("failed to marshal ui state", p, err)
+		return
+	}
+	if err := os.WriteFile(p, b, 0o644); err != nil {
+		m.logUIStateError("failed to write ui state file", p, err)
+	}
+}
+
+func (m *Model) logUIStateError(msg, path string, err error) {
+	if err == nil || m.log == nil {
+		return
+	}
+	m.log.Debugf("%s %s: %v", msg, path, err)
+}
+
+func validColumnMode(mode string) bool {
+	return mode == "dest" || mode == "url" || mode == "host"
+}
