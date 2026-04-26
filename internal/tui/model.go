@@ -491,15 +491,19 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "s":
 		m.sortMode = "speed"
+		m.saveUIState()
 		return m, nil
 	case "e":
 		m.sortMode = "eta"
+		m.saveUIState()
 		return m, nil
 	case "o":
 		m.sortMode = ""
+		m.saveUIState()
 		return m, nil
 	case "R":
 		m.sortMode = "rem"
+		m.saveUIState()
 		return m, nil
 	case "g":
 		if m.groupBy == "host" {
@@ -507,6 +511,7 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.groupBy = "host"
 		}
+		m.saveUIState()
 		return m, nil
 	case "t":
 		switch m.columnMode {
@@ -938,6 +943,9 @@ func (m *Model) loadUIState() {
 }
 
 func (m *Model) saveUIState() {
+	if m.cfg == nil {
+		return
+	}
 	p := m.uiStatePath()
 	_ = os.MkdirAll(filepath.Dir(p), 0o755)
 	st := uiState{ThemeIndex: m.themeIndex, ShowURL: m.columnMode == "url", ColumnMode: m.columnMode, Compact: m.cfg.UI.Compact, GroupBy: m.groupBy, SortMode: m.sortMode}
