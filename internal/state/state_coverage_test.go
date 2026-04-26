@@ -104,6 +104,107 @@ func TestNewDBRejectsNewerSchemaVersion(t *testing.T) {
 	}
 }
 
+func TestNewDBMigratesLegacyVersionZeroDownloadsSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	raw, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = raw.Exec(`CREATE TABLE downloads (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		url TEXT NOT NULL,
+		dest TEXT NOT NULL,
+		expected_sha256 TEXT,
+		etag TEXT,
+		last_modified TEXT,
+		size INTEGER,
+		status TEXT,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL,
+		UNIQUE(url, dest)
+	);
+	INSERT INTO downloads(url, dest, expected_sha256, etag, last_modified, size, status, created_at, updated_at)
+	VALUES('https://example.com/legacy.bin', '/tmp/legacy.bin', 'expected', 'etag', 'lastmod', 42, 'complete', 1, 2);`)
+	if err != nil {
+		_ = raw.Close()
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := NewDB(path)
+	if err != nil {
+		t.Fatalf("open migrated db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	var version int
+	if err := db.SQL.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatalf("query user_version: %v", err)
+	}
+	if version != SchemaVersion {
+		t.Fatalf("schema version = %d; want %d", version, SchemaVersion)
+	}
+	for _, column := range []string{"actual_sha256", "retries", "last_error"} {
+		ok, err := downloadsTableHasColumn(db.SQL, column)
+		if err != nil {
+			t.Fatalf("check column %s: %v", column, err)
+		}
+		if !ok {
+			t.Fatalf("expected migrated downloads.%s column", column)
+		}
+	}
+
+	rows, err := db.ListDownloads()
+	if err != nil {
+		t.Fatalf("list migrated downloads: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected one legacy row, got %d", len(rows))
+	}
+	if rows[0].ActualSHA256 != "" || rows[0].Retries != 0 || rows[0].LastError != "" {
+		t.Fatalf("expected migrated defaults, got %+v", rows[0])
+	}
+
+	rows[0].ActualSHA256 = "actual"
+	rows[0].LastError = "kept"
+	if err := db.UpsertDownload(rows[0]); err != nil {
+		t.Fatalf("upsert migrated row: %v", err)
+	}
+	if err := db.IncDownloadRetries(rows[0].URL, rows[0].Dest, 3); err != nil {
+		t.Fatalf("increment migrated retries: %v", err)
+	}
+	rows, err = db.ListDownloads()
+	if err != nil {
+		t.Fatalf("list after migrated upsert: %v", err)
+	}
+	if rows[0].ActualSHA256 != "actual" || rows[0].Retries != 3 || rows[0].LastError != "kept" {
+		t.Fatalf("expected migrated columns to be writable, got %+v", rows[0])
+	}
+}
+
+func downloadsTableHasColumn(db *sql.DB, column string) (bool, error) {
+	rows, err := db.Query(`PRAGMA table_info(downloads)`)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull, pk int
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
 func TestDownloadStatusRetriesAndDelete(t *testing.T) {
 	db := testDownloadDB(t)
 	row := DownloadRow{URL: "https://example.com/a", Dest: "/tmp/a.bin", Status: "pending"}

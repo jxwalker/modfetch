@@ -72,6 +72,7 @@ Breaking changes to consider for v1.0
   - Documented enum/range values are validated for placement mode, network timeout/redirect settings, and TUI column mode [IMPL]
 - State DB schema simplification [WIP]
   - State DB bootstrap is centralized and stamps SQLite `user_version` as the v1.0 migration baseline [IMPL]
+  - Legacy version-0 download schemas migrate through an explicit v0-to-v1 path for missing compatibility columns [IMPL]
 - Standardize CLI flags and naming [WIP]
   - Shared config path resolution across config-backed commands; `place` now honors the documented default config path [IMPL]
   - Shell completions are aligned with current commands and flags, including `hostcaps`, strict config validation, quantization selection, and dry-run variants [IMPL]
