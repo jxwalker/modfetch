@@ -252,10 +252,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		return "", "", err
 	}
 	if len(chunks) == 0 {
-		chunkSize := int64(e.cfg.Concurrency.ChunkSizeMB) * 1024 * 1024
-		if chunkSize <= 0 {
-			chunkSize = 8 * 1024 * 1024
-		}
+		chunkSize := chooseChunkSize(e.cfg, h.size)
 		var idx int
 		// Group initial chunk plan into a single transaction for consistency
 		if err := e.st.WithTx(func(tx *sql.Tx) error {
@@ -772,6 +769,43 @@ func hashRange(f *os.File, start, size int64) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func chooseChunkSize(cfg *config.Config, totalSize int64) int64 {
+	const (
+		mb         = int64(1024 * 1024)
+		minChunk   = 1 * mb
+		defaultMin = 8 * mb
+		maxChunk   = 64 * mb
+	)
+	if cfg != nil && cfg.Concurrency.ChunkSizeMB > 0 {
+		return int64(cfg.Concurrency.ChunkSizeMB) * mb
+	}
+	var limit int64
+	if cfg != nil {
+		if cfg.Network.PerDownloadBandwidthBytesPerSecond > 0 {
+			limit = cfg.Network.PerDownloadBandwidthBytesPerSecond
+		} else if cfg.Network.GlobalBandwidthBytesPerSecond > 0 {
+			limit = cfg.Network.GlobalBandwidthBytesPerSecond
+		}
+	}
+	if limit > 0 {
+		return clampInt64(limit*8, minChunk, maxChunk)
+	}
+	if totalSize > 0 {
+		return clampInt64(totalSize/128, defaultMin, maxChunk)
+	}
+	return defaultMin
+}
+
+func clampInt64(v, min, max int64) int64 {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }
 
 func hashRangePath(path string, start, size int64) (string, error) {

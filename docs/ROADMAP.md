@@ -63,7 +63,7 @@ Technical debt
 Performance optimizations
 - Pre-allocate/truncate files in chunked mode and parallel chunk verification [IMPL]
 - DNS result caching for repeated hosts [IMPL]
-- Adaptive chunk size based on throughput [NEW]
+- Adaptive chunk size based on configured throughput and file size [IMPL]
 
 Breaking changes to consider for v1.0
 - Config schema tidy-up
