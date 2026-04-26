@@ -137,7 +137,6 @@ func (m *Manager) Write() error {
 		return err
 	}
 	defer func() { _ = os.Remove(f.Name()) }()
-	defer func() { _ = f.Close() }()
 	// Prometheus textfile format
 	// Use modfetch_ prefix
 	if _, err := fmt.Fprintf(f, "# HELP modfetch_bytes_downloaded_total Total bytes downloaded.\n"); err != nil {

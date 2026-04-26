@@ -1,6 +1,8 @@
 package downloader
 
 import (
+	"context"
+	"net"
 	"net/http"
 	"testing"
 
@@ -24,6 +26,29 @@ func TestNewHTTPClientUsesConfiguredPerHostPoolLimit(t *testing.T) {
 	}
 	if tr.MaxConnsPerHost != 3 {
 		t.Fatalf("expected MaxConnsPerHost=3, got %d", tr.MaxConnsPerHost)
+	}
+}
+
+func TestNewHTTPClientHonorsTLSVerify(t *testing.T) {
+	cfg := &config.Config{
+		Network:     config.Network{TLSVerify: false},
+		Concurrency: config.Concurrency{PerHostRequests: 2},
+	}
+
+	client := newHTTPClient(cfg)
+	tr, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport, got %T", client.Transport)
+	}
+	if tr.TLSClientConfig == nil || !tr.TLSClientConfig.InsecureSkipVerify {
+		t.Fatal("expected TLS verification to be disabled")
+	}
+}
+
+func TestCachingDialerNilReceiverDoesNotPanic(t *testing.T) {
+	var dialer *cachingDialer
+	if _, err := dialer.DialContext(context.Background(), "tcp", net.JoinHostPort("127.0.0.1", "1")); err == nil {
+		t.Fatal("expected connection error from fallback dialer")
 	}
 }
 

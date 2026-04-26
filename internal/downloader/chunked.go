@@ -147,11 +147,12 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		} else {
 			// As a last resort, resolve signed redirect then retry probe on the final URL
 			if ru, ok := resolveRedirectURL(ctx, e.client, url, headers, userAgent(e.cfg)); ok {
+				prevURL := url
 				e.log.Debugf("resolved redirect -> %s", logging.SanitizeURL(ru))
 				url = ru
 				// Do not forward Authorization to different host
 				if u1, _ := neturl.Parse(ru); u1 != nil {
-					if u0, _ := neturl.Parse(url); u0 == nil || !strings.EqualFold(u0.Host, u1.Host) {
+					if u0, _ := neturl.Parse(prevURL); u0 == nil || !strings.EqualFold(u0.Host, u1.Host) {
 						delete(headers, "Authorization")
 					}
 				}

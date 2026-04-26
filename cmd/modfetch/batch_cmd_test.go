@@ -102,10 +102,10 @@ func TestDownloadBatch_UsesOrderedMirrorFallback(t *testing.T) {
 	dest := filepath.Join(downloadRoot, "model.bin")
 	batchPath := filepath.Join(d, "jobs.yaml")
 	batchYAML := "version: 1\njobs:\n" +
-		"  - uri: \"" + primary.URL + "/model.bin\"\n" +
+		"  - uri: " + fmt.Sprintf("%q", primary.URL+"/model.bin") + "\n" +
 		"    mirrors:\n" +
-		"      - \"" + mirror.URL + "/model.bin\"\n" +
-		"    dest: \"" + dest + "\"\n"
+		"      - " + fmt.Sprintf("%q", mirror.URL+"/model.bin") + "\n" +
+		"    dest: " + fmt.Sprintf("%q", dest) + "\n"
 	if err := os.WriteFile(batchPath, []byte(batchYAML), 0o644); err != nil {
 		t.Fatal(err)
 	}

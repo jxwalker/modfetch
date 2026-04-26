@@ -196,8 +196,8 @@ func TestSingleRejectsShortBodyAgainstHeadSize(t *testing.T) {
 	cfgYaml := []byte(strings.Join([]string{
 		"version: 1",
 		"general:",
-		"  data_root: \"" + tmp + "/data\"",
-		"  download_root: \"" + tmp + "/dl\"",
+		"  data_root: " + strconv.Quote(filepath.Join(tmp, "data")),
+		"  download_root: " + strconv.Quote(filepath.Join(tmp, "dl")),
 		"  stage_partials: false",
 	}, "\n"))
 	if err := os.WriteFile(cfgPath, cfgYaml, 0o644); err != nil {

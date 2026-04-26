@@ -2,7 +2,7 @@ package resolver
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -43,9 +43,15 @@ type Resolver interface {
 }
 
 var (
-	registryMu          sync.RWMutex
-	registeredResolvers []Resolver
+	registryMu      sync.RWMutex
+	nextResolverID  uint64
+	resolverEntries []resolverEntry
 )
+
+type resolverEntry struct {
+	id       uint64
+	resolver Resolver
+}
 
 // Register adds a resolver ahead of the built-in resolvers and returns an
 // unregister function for tests or plugin lifecycle cleanup.
@@ -54,14 +60,16 @@ func Register(r Resolver) func() {
 		return func() {}
 	}
 	registryMu.Lock()
-	registeredResolvers = append(registeredResolvers, r)
+	nextResolverID++
+	id := nextResolverID
+	resolverEntries = append(resolverEntries, resolverEntry{id: id, resolver: r})
 	registryMu.Unlock()
 	return func() {
 		registryMu.Lock()
 		defer registryMu.Unlock()
-		for i, existing := range registeredResolvers {
-			if existing == r {
-				registeredResolvers = append(registeredResolvers[:i], registeredResolvers[i+1:]...)
+		for i, entry := range resolverEntries {
+			if entry.id == id {
+				resolverEntries = append(resolverEntries[:i], resolverEntries[i+1:]...)
 				return
 			}
 		}
@@ -70,8 +78,10 @@ func Register(r Resolver) func() {
 
 func resolverSnapshot() []Resolver {
 	registryMu.RLock()
-	out := make([]Resolver, 0, len(registeredResolvers)+2)
-	out = append(out, registeredResolvers...)
+	out := make([]Resolver, 0, len(resolverEntries)+2)
+	for _, entry := range resolverEntries {
+		out = append(out, entry.resolver)
+	}
 	registryMu.RUnlock()
 	out = append(out, &HuggingFace{}, &CivitAI{})
 	return out
@@ -95,7 +105,7 @@ func Resolve(ctx context.Context, uri string, cfg *config.Config) (*Resolved, er
 		}
 	}
 	if res == nil && err == nil {
-		err = errors.New("no resolver for uri scheme")
+		err = fmt.Errorf("no resolver for uri scheme: %s", uri)
 	}
 	if err == nil && cfg != nil {
 		_ = cacheSet(cfg, uri, res)

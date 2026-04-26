@@ -31,8 +31,10 @@ type cachingDialer struct {
 func newHTTPClient(cfg *config.Config) *http.Client {
 	timeoutSeconds := 0
 	perHost := 10
+	tlsVerify := true
 	if cfg != nil {
 		timeoutSeconds = cfg.Network.TimeoutSeconds
+		tlsVerify = cfg.Network.TLSVerify
 		if cfg.Concurrency.PerHostRequests > 0 {
 			perHost = cfg.Concurrency.PerHostRequests
 		}
@@ -65,7 +67,8 @@ func newHTTPClient(cfg *config.Config) *http.Client {
 		MaxIdleConnsPerHost:   perHost,
 		MaxConnsPerHost:       perHost,
 		TLSClientConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: !tlsVerify,
 		},
 	}
 	client := &http.Client{Transport: tr, Timeout: timeout}
@@ -97,7 +100,10 @@ func newHTTPClient(cfg *config.Config) *http.Client {
 
 func (d *cachingDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(address)
-	if err != nil || d == nil || d.ttl <= 0 || net.ParseIP(host) != nil {
+	if d == nil {
+		return (&net.Dialer{}).DialContext(ctx, network, address)
+	}
+	if err != nil || d.ttl <= 0 || net.ParseIP(host) != nil {
 		return d.base.DialContext(ctx, network, address)
 	}
 	addrs, err := d.lookup(ctx, network, host)
@@ -129,10 +135,13 @@ func (d *cachingDialer) lookup(ctx context.Context, network, host string) ([]net
 	key := network + "|" + strings.ToLower(host)
 	now := time.Now()
 	d.mu.Lock()
-	if entry, ok := d.cache[key]; ok && now.Before(entry.expires) {
-		addrs := append([]net.IPAddr(nil), entry.addrs...)
-		d.mu.Unlock()
-		return addrs, nil
+	if entry, ok := d.cache[key]; ok {
+		if now.Before(entry.expires) {
+			addrs := append([]net.IPAddr(nil), entry.addrs...)
+			d.mu.Unlock()
+			return addrs, nil
+		}
+		delete(d.cache, key)
 	}
 	d.mu.Unlock()
 
