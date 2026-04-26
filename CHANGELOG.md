@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v0.6.2 — 2026-04-26
+
 Added
 - S3-compatible storage destinations using local resumable staging plus SigV4 upload.
 - Archive extraction support for zip, tar, tar.gz, tgz, and optional 7z backends.

@@ -132,6 +132,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 - **Documentation**: Complete user guides for Library (docs/LIBRARY.md) and Scanner (docs/SCANNER.md)
 
 Previous releases:
+- v0.6.2: Roadmap, storage, archives, schema, CLI, shell completions, and test coverage
 - v0.6.1: Testing reliability, real API integration coverage, and TUI test expansion
 - v0.5.2: Enhanced TUI with rich UI elements and vibrant colors
 - v0.5.1: Critical installer and TUI navigation fixes
