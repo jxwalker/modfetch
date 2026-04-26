@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	_ "github.com/glebarez/sqlite"
@@ -19,6 +20,9 @@ type DB struct {
 	stmtUpsertDownload     *sql.Stmt
 	stmtIncDownloadRetries *sql.Stmt
 	stmtListDownloads      *sql.Stmt
+
+	eventsMu    sync.Mutex
+	subscribers map[chan struct{}]struct{}
 }
 
 // Close closes the database connection
@@ -26,6 +30,12 @@ func (db *DB) Close() error {
 	if db == nil || db.SQL == nil {
 		return nil
 	}
+	db.eventsMu.Lock()
+	for ch := range db.subscribers {
+		close(ch)
+		delete(db.subscribers, ch)
+	}
+	db.eventsMu.Unlock()
 	return db.SQL.Close()
 }
 
@@ -48,7 +58,51 @@ func (db *DB) WithTx(fn func(tx *sql.Tx) error) error {
 		_ = tx.Rollback()
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	db.NotifyChange()
+	return nil
+}
+
+// Subscribe returns a channel that receives a signal whenever DB state changes.
+// Signals are coalesced when the receiver is slow.
+func (db *DB) Subscribe() (<-chan struct{}, func()) {
+	ch := make(chan struct{}, 1)
+	if db == nil {
+		close(ch)
+		return ch, func() {}
+	}
+	db.eventsMu.Lock()
+	if db.subscribers == nil {
+		db.subscribers = map[chan struct{}]struct{}{}
+	}
+	db.subscribers[ch] = struct{}{}
+	db.eventsMu.Unlock()
+	cancel := func() {
+		db.eventsMu.Lock()
+		if _, ok := db.subscribers[ch]; ok {
+			delete(db.subscribers, ch)
+			close(ch)
+		}
+		db.eventsMu.Unlock()
+	}
+	return ch, cancel
+}
+
+// NotifyChange broadcasts a coalesced state-change signal to subscribers.
+func (db *DB) NotifyChange() {
+	if db == nil {
+		return
+	}
+	db.eventsMu.Lock()
+	defer db.eventsMu.Unlock()
+	for ch := range db.subscribers {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
 }
 
 func Open(cfg *config.Config) (*DB, error) {
@@ -183,6 +237,7 @@ func (db *DB) UpdateDownloadStatus(url, dest, status, lastError string) error {
 	if n, _ := res.RowsAffected(); n == 0 {
 		return sql.ErrNoRows
 	}
+	db.NotifyChange()
 	return nil
 }
 
@@ -204,6 +259,9 @@ type DownloadRow struct {
 func (db *DB) UpsertDownload(row DownloadRow) error {
 	now := time.Now().Unix()
 	_, err := db.stmtUpsertDownload.Exec(row.URL, row.Dest, row.ExpectedSHA256, row.ActualSHA256, row.ETag, row.LastModified, row.Size, row.Status, row.LastError, now, now, now)
+	if err == nil {
+		db.NotifyChange()
+	}
 	return err
 }
 
@@ -231,12 +289,18 @@ func (db *DB) IncDownloadRetries(url, dest string, delta int64) error {
 		return nil
 	}
 	_, err := db.stmtIncDownloadRetries.Exec(delta, url, dest)
+	if err == nil {
+		db.NotifyChange()
+	}
 	return err
 }
 
 // DeleteDownload removes a download row for the given url+dest.
 func (db *DB) DeleteDownload(url, dest string) error {
 	_, err := db.SQL.Exec(`DELETE FROM downloads WHERE url=? AND dest=?`, url, dest)
+	if err == nil {
+		db.NotifyChange()
+	}
 	return err
 }
 

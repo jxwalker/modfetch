@@ -28,6 +28,33 @@ func TestUpdateBatchModeEsc(t *testing.T) {
 	}
 }
 
+func TestStateChangedMessageRefreshesRows(t *testing.T) {
+	tmpDir := t.TempDir()
+	db, err := state.NewDB(filepath.Join(tmpDir, "state.db"))
+	if err != nil {
+		t.Fatalf("new db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	cfg := &config.Config{General: config.General{DataRoot: tmpDir, DownloadRoot: tmpDir}}
+	m := New(cfg, db, "test").(*Model)
+	if m.stateEvents == nil {
+		t.Fatal("expected TUI model to subscribe to state events")
+	}
+	if err := db.UpsertDownload(state.DownloadRow{URL: "https://example.com/a", Dest: "/tmp/a", Status: "pending"}); err != nil {
+		t.Fatalf("upsert download: %v", err)
+	}
+
+	msg := m.stateEventsCmd()()
+	if _, ok := msg.(stateChangedMsg); !ok {
+		t.Fatalf("expected stateChangedMsg, got %T", msg)
+	}
+	m.Update(msg)
+	if len(m.rows) != 1 || m.rows[0].URL != "https://example.com/a" {
+		t.Fatalf("expected rows to refresh from state event, got %+v", m.rows)
+	}
+}
+
 func TestUpdateFilterEsc(t *testing.T) {
 	m := &Model{filterOn: true, filterInput: textinput.New()}
 	m.updateFilter(tea.KeyMsg{Type: tea.KeyEsc})

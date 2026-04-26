@@ -218,6 +218,9 @@ func (db *DB) UpsertMetadata(meta *ModelMetadata) error {
 		meta.CreatedAt.Unix(), meta.UpdatedAt.Unix(),
 		meta.UserNotes, meta.UserRating, meta.Favorite,
 	)
+	if err == nil {
+		db.NotifyChange()
+	}
 
 	return err
 }
@@ -470,12 +473,16 @@ func (db *DB) UpdateMetadataUsage(downloadURL string) error {
 		return sql.ErrNoRows
 	}
 
+	db.NotifyChange()
 	return nil
 }
 
 // DeleteMetadata removes metadata for a specific download URL
 func (db *DB) DeleteMetadata(downloadURL string) error {
 	_, err := db.SQL.Exec(`DELETE FROM model_metadata WHERE download_url = ?`, downloadURL)
+	if err == nil {
+		db.NotifyChange()
+	}
 	return err
 }
 

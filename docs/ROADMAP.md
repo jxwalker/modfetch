@@ -46,7 +46,7 @@ Priority 5 — Advanced features
 Priority 6 — Architecture
 - Context propagation pattern improvements [IMPL]
 - Plugin architecture for resolvers [IMPL]
-- Event-driven updates vs polling [NEW]
+- Event-driven TUI updates with polling fallback [IMPL]
 
 Quick wins (remaining)
 - Add a flag to skip SHA256 verification intentionally for trusted sources (implemented as --force) [IMPL]
