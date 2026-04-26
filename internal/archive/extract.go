@@ -271,7 +271,7 @@ func moveExtractedTree(ctx context.Context, srcDir, destDir string) ([]string, e
 		out = append(out, target)
 		return nil
 	}); err != nil {
-		return nil, err
+		return out, err
 	}
 	return out, nil
 }

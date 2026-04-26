@@ -132,6 +132,43 @@ func TestExtract7zReportsMissingBackend(t *testing.T) {
 	}
 }
 
+func TestExtract7zRejectsSymlinkInExtractedTree(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("test uses a POSIX shell script fake")
+	}
+	dir := t.TempDir()
+	binDir := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fake := filepath.Join(binDir, "7zz")
+	script := `#!/bin/sh
+set -eu
+out=""
+for arg in "$@"; do
+  case "$arg" in
+    -o*) out="${arg#-o}" ;;
+  esac
+done
+mkdir -p "$out/nested"
+printf model > "$out/nested/model.bin"
+ln -s model.bin "$out/nested/link.bin"
+`
+	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+"/bin"+string(os.PathListSeparator)+"/usr/bin")
+
+	src := filepath.Join(dir, "model.7z")
+	if err := os.WriteFile(src, []byte("fake archive"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Extract(context.Background(), src, filepath.Join(dir, "out"))
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("expected symlink rejection, got %v", err)
+	}
+}
+
 func TestMoveExtractedTreeRejectsSymlink(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink setup is platform-specific")
