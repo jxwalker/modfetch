@@ -275,6 +275,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m, m.refresh()
 	case stateChangedMsg:
+		m.libraryNeedsRefresh = true
 		m.refreshNow()
 		return m, m.stateEventsCmd()
 	case recoverRowsMsg:

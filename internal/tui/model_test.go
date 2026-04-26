@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -45,13 +46,36 @@ func TestStateChangedMessageRefreshesRows(t *testing.T) {
 		t.Fatalf("upsert download: %v", err)
 	}
 
-	msg := m.stateEventsCmd()()
+	msg := receiveStateEventMsg(t, m)
 	if _, ok := msg.(stateChangedMsg); !ok {
 		t.Fatalf("expected stateChangedMsg, got %T", msg)
 	}
+	m.libraryNeedsRefresh = false
 	m.Update(msg)
 	if len(m.rows) != 1 || m.rows[0].URL != "https://example.com/a" {
 		t.Fatalf("expected rows to refresh from state event, got %+v", m.rows)
+	}
+	if !m.libraryNeedsRefresh {
+		t.Fatal("expected state event to invalidate library data")
+	}
+}
+
+func receiveStateEventMsg(t *testing.T, m *Model) tea.Msg {
+	t.Helper()
+	cmd := m.stateEventsCmd()
+	if cmd == nil {
+		t.Fatal("expected state event command")
+	}
+	msgs := make(chan tea.Msg, 1)
+	go func() {
+		msgs <- cmd()
+	}()
+	select {
+	case msg := <-msgs:
+		return msg
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for state event")
+		return nil
 	}
 }
 
