@@ -249,10 +249,7 @@ func handleConfig(ctx context.Context, args []string) error {
 	sub := args[0]
 	switch sub {
 	case "validate":
-		return configOp(args[1:], func(c *config.Config, log *logging.Logger) error {
-			log.Infof("config: valid")
-			return nil
-		})
+		return configValidate(args[1:])
 	case "print":
 		return configOp(args[1:], func(c *config.Config, log *logging.Logger) error {
 			enc := json.NewEncoder(os.Stdout)
@@ -264,6 +261,43 @@ func handleConfig(ctx context.Context, args []string) error {
 	default:
 		return fmt.Errorf("unknown config subcommand: %s", sub)
 	}
+}
+
+func configValidate(args []string) error {
+	fs := flag.NewFlagSet("config validate", flag.ContinueOnError)
+	cfgPath := fs.String("config", "", "Path to YAML config file")
+	logLevel := fs.String("log-level", "info", "log level")
+	jsonOut := fs.Bool("json", false, "json logs")
+	strict := fs.Bool("strict", false, "reject unknown config fields")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	resolvedCfgPath, err := resolveConfigPath(*cfgPath)
+	if err != nil {
+		return err
+	}
+	if err := loadConfigForValidation(resolvedCfgPath, *strict); err != nil {
+		return err
+	}
+	log := logging.New(*logLevel, *jsonOut)
+	log.Infof("config: valid")
+	return nil
+}
+
+func loadConfigForValidation(path string, strict bool) error {
+	var err error
+	if strict {
+		_, err = config.LoadStrict(path)
+	} else {
+		_, err = config.Load(path)
+	}
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("config file not found: %s", path)
+		}
+		return err
+	}
+	return nil
 }
 
 func handleDownload(ctx context.Context, args []string) error {

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -16,6 +18,33 @@ func TestLoadSampleConfig(t *testing.T) {
 	}
 	if c.General.DataRoot == "" || c.General.DownloadRoot == "" {
 		t.Fatalf("expected non-empty general paths")
+	}
+}
+
+func TestLoadStrictSampleConfig(t *testing.T) {
+	path := "../../assets/sample-config/config.example.yml"
+	if _, err := LoadStrict(path); err != nil {
+		t.Fatalf("LoadStrict returned error for sample config: %v", err)
+	}
+}
+
+func TestLoadStrictRejectsUnknownFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yml")
+	cfg := "version: 1\n" +
+		"general:\n" +
+		"  data_root: " + filepath.Join(dir, "data") + "\n" +
+		"  download_root: " + filepath.Join(dir, "downloads") + "\n" +
+		"  download_rooot: typo\n"
+	if err := os.WriteFile(path, []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err != nil {
+		t.Fatalf("non-strict Load should ignore unknown fields, got %v", err)
+	}
+	_, err := LoadStrict(path)
+	if err == nil || !strings.Contains(err.Error(), "download_rooot") {
+		t.Fatalf("expected strict unknown-field error, got %v", err)
 	}
 }
 

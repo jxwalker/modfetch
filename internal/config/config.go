@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -189,6 +190,15 @@ type UIOptions struct {
 
 // Load reads, parses, expands, and validates a YAML config file.
 func Load(path string) (*Config, error) {
+	return load(path, false)
+}
+
+// LoadStrict reads, parses, expands, and validates a YAML config file while rejecting unknown schema fields.
+func LoadStrict(path string) (*Config, error) {
+	return load(path, true)
+}
+
+func load(path string, strict bool) (*Config, error) {
 	if path == "" {
 		return nil, errors.New("config path is empty")
 	}
@@ -203,7 +213,13 @@ func Load(path string) (*Config, error) {
 	// Expand ${ENV} placeholders before unmarshalling
 	b = []byte(os.ExpandEnv(string(b)))
 	var c Config
-	if err := yaml.Unmarshal(b, &c); err != nil {
+	if strict {
+		dec := yaml.NewDecoder(bytes.NewReader(b))
+		dec.KnownFields(true)
+		if err := dec.Decode(&c); err != nil {
+			return nil, err
+		}
+	} else if err := yaml.Unmarshal(b, &c); err != nil {
 		return nil, err
 	}
 	if err := c.expandPaths(); err != nil {
