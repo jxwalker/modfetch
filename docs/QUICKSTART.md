@@ -22,9 +22,9 @@ curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/inst
 ```
 
 ```
-✓ Downloaded modfetch v0.6.1
-✓ Installed to /usr/local/bin/modfetch
-✓ Ready to use!
+✓ Downloaded modfetch binary
+✓ Installed modfetch to /usr/local/bin/modfetch
+✓ Version check passed
 ```
 
 ### Option B: Build from Source
