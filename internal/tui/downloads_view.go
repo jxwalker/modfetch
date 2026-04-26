@@ -19,6 +19,7 @@ func (m *Model) visibleRows() []state.DownloadRow {
 	rows := m.filterRows(m.activeTab)
 	rows = m.applySearch(rows)
 	rows = m.applySort(rows)
+	rows = m.applyGrouping(rows)
 	return rows
 }
 
@@ -143,9 +144,32 @@ func (m *Model) applySort(in []state.DownloadRow) []state.DownloadRow {
 	return out
 }
 
-func (m *Model) renderTable() string {
-	rows := m.visibleRows()
-	var sb strings.Builder
+func (m *Model) applyGrouping(in []state.DownloadRow) []state.DownloadRow {
+	if m.groupBy != "host" || len(in) < 2 {
+		return in
+	}
+	out := make([]state.DownloadRow, len(in))
+	copy(out, in)
+	sort.SliceStable(out, func(i, j int) bool {
+		hi := hostOf(out[i].URL)
+		hj := hostOf(out[j].URL)
+		if hi == hj {
+			return false
+		}
+		return hi < hj
+	})
+	return out
+}
+
+type downloadTableLayout struct {
+	compact    bool
+	lastLabel  string
+	speedLabel string
+	etaLabel   string
+	lastWidth  int
+}
+
+func (m *Model) downloadTableLayout() downloadTableLayout {
 	lastLabel := "DEST"
 	switch m.columnMode {
 	case "url":
@@ -154,26 +178,41 @@ func (m *Model) renderTable() string {
 		lastLabel = "HOST"
 	}
 	speedLabel := "SPEED"
-	etaLabel := "ETA"
 	if m.sortMode == "speed" {
-		speedLabel = speedLabel + "*"
+		speedLabel += "*"
 	}
+	etaLabel := "ETA"
 	if m.sortMode == "eta" {
-		etaLabel = etaLabel + "*"
+		etaLabel += "*"
 	}
-	if m.isCompact() {
-		hdr := m.th.head.Render(fmt.Sprintf("%-1s %-8s %-3s  %-16s  %-4s  %-12s  %-8s  %-s", "S", "STATUS", "RT", "PROG", "PCT", "SRC", etaLabel, lastLabel))
-		if m.sortMode == "rem" {
-			hdr = hdr + "  [sort: remaining]"
-		}
-		sb.WriteString(hdr)
+	compact := m.isCompact()
+	return downloadTableLayout{
+		compact:    compact,
+		lastLabel:  lastLabel,
+		speedLabel: speedLabel,
+		etaLabel:   etaLabel,
+		lastWidth:  m.lastColumnWidth(compact),
+	}
+}
+
+func (m *Model) renderTableHeader(layout downloadTableLayout) string {
+	var hdr string
+	if layout.compact {
+		hdr = m.th.head.Render(fmt.Sprintf("%-1s %-8s %-3s  %-16s  %-4s  %-12s  %-8s  %-s", "S", "STATUS", "RT", "PROG", "PCT", "SRC", layout.etaLabel, layout.lastLabel))
 	} else {
-		hdr := m.th.head.Render(fmt.Sprintf("%-1s %-8s %-3s  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %-s", "S", "STATUS", "RT", "PROG", "PCT", speedLabel, "THR", "SRC", etaLabel, lastLabel))
-		if m.sortMode == "rem" {
-			hdr = hdr + "  [sort: remaining]"
-		}
-		sb.WriteString(hdr)
+		hdr = m.th.head.Render(fmt.Sprintf("%-1s %-8s %-3s  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %-s", "S", "STATUS", "RT", "PROG", "PCT", layout.speedLabel, "THR", "SRC", layout.etaLabel, layout.lastLabel))
 	}
+	if m.sortMode == "rem" {
+		hdr += "  [sort: remaining]"
+	}
+	return hdr
+}
+
+func (m *Model) renderTable() string {
+	rows := m.visibleRows()
+	var sb strings.Builder
+	layout := m.downloadTableLayout()
+	sb.WriteString(m.renderTableHeader(layout))
 	sb.WriteString("\n")
 	maxRows := m.h - 10
 	if maxRows < 3 {
@@ -188,73 +227,7 @@ func (m *Model) renderTable() string {
 				prevGroup = host
 			}
 		}
-		// Progress and pct
-		prog := m.renderProgress(r)
-		cur, total, rate, _ := m.progressFor(r)
-		pct := "--%"
-		if total > 0 {
-			ratio := float64(cur) / float64(total)
-			if ratio < 0 {
-				ratio = 0
-			}
-			if ratio > 1 {
-				ratio = 1
-			}
-			pct = fmt.Sprintf("%3.0f%%", ratio*100)
-		}
-		// For completed jobs, force 100%
-		if strings.EqualFold(strings.TrimSpace(r.Status), "complete") {
-			pct = "100%"
-		}
-		eta := m.etaCache[keyFor(r)]
-		thr := m.renderSparkline(keyFor(r))
-		sel := " "
-		if m.selectedKeys[keyFor(r)] {
-			sel = "*"
-		}
-		// status label with transient retrying overlay
-		statusLabel := r.Status
-		if strings.EqualFold(statusLabel, "hold") && strings.Contains(strings.ToLower(strings.TrimSpace(r.LastError)), "rate limited") {
-			statusLabel = "hold(rl)"
-		}
-		if ts, ok := m.retrying[keyFor(r)]; ok {
-			if time.Since(ts) < 4*time.Second {
-				statusLabel = "retrying"
-			} else {
-				delete(m.retrying, keyFor(r))
-			}
-		}
-		last := r.Dest
-		switch m.columnMode {
-		case "url":
-			last = logging.SanitizeURL(r.URL)
-		case "host":
-			last = hostOf(r.URL)
-		}
-		src := hostOf(r.URL)
-		src = truncateMiddle(src, 12)
-		lw := m.lastColumnWidth(m.isCompact())
-		last = truncateMiddle(last, lw)
-		// Speed column value
-		speedStr := humanize.Bytes(uint64(rate)) + "/s"
-		if strings.EqualFold(strings.TrimSpace(r.Status), "complete") {
-			// Show average speed for completed
-			if r.Size > 0 && r.UpdatedAt > 0 && r.CreatedAt > 0 && r.UpdatedAt >= r.CreatedAt {
-				dur := time.Duration(r.UpdatedAt-r.CreatedAt) * time.Second
-				if dur > 0 {
-					avg := float64(r.Size) / dur.Seconds()
-					speedStr = humanize.Bytes(uint64(avg)) + "/s"
-				}
-			} else {
-				speedStr = "-"
-			}
-		}
-		var line string
-		if m.isCompact() {
-			line = fmt.Sprintf("%-1s %-8s %-3d  %-16s  %-4s  %-12s  %-8s  %s", sel, statusLabel, r.Retries, prog, pct, src, eta, last)
-		} else {
-			line = fmt.Sprintf("%-1s %-8s %-3d  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %s", sel, statusLabel, r.Retries, prog, pct, speedStr, thr, src, eta, last)
-		}
+		line := m.renderDownloadRow(r, layout)
 		if i == m.selected {
 			line = m.th.rowSelected.Render(line)
 		}
@@ -267,6 +240,84 @@ func (m *Model) renderTable() string {
 		sb.WriteString(m.th.label.Render("(no items)"))
 	}
 	return sb.String()
+}
+
+func (m *Model) renderDownloadRow(r state.DownloadRow, layout downloadTableLayout) string {
+	prog := m.renderProgress(r)
+	cur, total, rate, _ := m.progressFor(r)
+	pct := percentLabel(cur, total, r.Status)
+	key := keyFor(r)
+	eta := m.etaCache[key]
+	sel := " "
+	if m.selectedKeys[key] {
+		sel = "*"
+	}
+	statusLabel := m.downloadStatusLabel(r, key)
+	last := m.lastColumnValue(r)
+	src := truncateMiddle(hostOf(r.URL), 12)
+	last = truncateMiddle(last, layout.lastWidth)
+	if layout.compact {
+		return fmt.Sprintf("%-1s %-8s %-3d  %-16s  %-4s  %-12s  %-8s  %s", sel, statusLabel, r.Retries, prog, pct, src, eta, last)
+	}
+	return fmt.Sprintf("%-1s %-8s %-3d  %-16s  %-4s  %-10s  %-10s  %-12s  %-8s  %s", sel, statusLabel, r.Retries, prog, pct, completedAwareSpeed(r, rate), m.renderSparkline(key), src, eta, last)
+}
+
+func (m *Model) downloadStatusLabel(r state.DownloadRow, key string) string {
+	statusLabel := r.Status
+	if strings.EqualFold(statusLabel, "hold") && strings.Contains(strings.ToLower(strings.TrimSpace(r.LastError)), "rate limited") {
+		statusLabel = "hold(rl)"
+	}
+	if ts, ok := m.retrying[key]; ok {
+		if time.Since(ts) < 4*time.Second {
+			statusLabel = "retrying"
+		} else {
+			delete(m.retrying, key)
+		}
+	}
+	return statusLabel
+}
+
+func (m *Model) lastColumnValue(r state.DownloadRow) string {
+	switch m.columnMode {
+	case "url":
+		return logging.SanitizeURL(r.URL)
+	case "host":
+		return hostOf(r.URL)
+	default:
+		return r.Dest
+	}
+}
+
+func percentLabel(cur, total int64, status string) string {
+	if strings.EqualFold(strings.TrimSpace(status), "complete") {
+		return "100%"
+	}
+	if total <= 0 {
+		return "--%"
+	}
+	ratio := float64(cur) / float64(total)
+	if ratio < 0 {
+		ratio = 0
+	}
+	if ratio > 1 {
+		ratio = 1
+	}
+	return fmt.Sprintf("%3.0f%%", ratio*100)
+}
+
+func completedAwareSpeed(r state.DownloadRow, rate float64) string {
+	if !strings.EqualFold(strings.TrimSpace(r.Status), "complete") {
+		return humanize.Bytes(uint64(rate)) + "/s"
+	}
+	if r.Size <= 0 || r.UpdatedAt <= 0 || r.CreatedAt <= 0 || r.UpdatedAt < r.CreatedAt {
+		return "-"
+	}
+	dur := time.Duration(r.UpdatedAt-r.CreatedAt) * time.Second
+	if dur <= 0 {
+		return "-"
+	}
+	avg := float64(r.Size) / dur.Seconds()
+	return humanize.Bytes(uint64(avg)) + "/s"
 }
 
 func (m *Model) renderInspector() string {

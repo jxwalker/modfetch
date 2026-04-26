@@ -179,6 +179,10 @@ func (m *Model) renderSettings() string {
 	} else {
 		sb.WriteString("dest\n")
 	}
+	sb.WriteString(m.th.label.Render("Sort Mode: "))
+	sb.WriteString(displaySortMode(m.sortMode) + "\n")
+	sb.WriteString(m.th.label.Render("Group By: "))
+	sb.WriteString(displayGroupBy(m.groupBy) + "\n")
 	sb.WriteString(m.th.label.Render("Compact View: "))
 	if m.isCompact() {
 		sb.WriteString("Yes\n")
@@ -219,4 +223,24 @@ func (m *Model) renderSettings() string {
 	sb.WriteString(m.th.footer.Render("To edit settings, modify the YAML config file directly and restart"))
 
 	return sb.String()
+}
+
+func displaySortMode(mode string) string {
+	switch mode {
+	case "speed":
+		return "speed"
+	case "eta":
+		return "eta"
+	case "rem":
+		return "remaining"
+	default:
+		return "none"
+	}
+}
+
+func displayGroupBy(group string) string {
+	if group == "host" {
+		return "host"
+	}
+	return "none"
 }

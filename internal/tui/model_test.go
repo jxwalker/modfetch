@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -91,6 +92,76 @@ func TestUpdateFilterEscPreservesSelectedRowWhenClearingFilter(t *testing.T) {
 	}
 	if rows := m.visibleRows(); rows[m.selected].Dest != "gamma.gguf" {
 		t.Fatalf("expected gamma to remain selected, got %q", rows[m.selected].Dest)
+	}
+}
+
+func TestGroupByHostOrdersRowsIntoContiguousHostGroups(t *testing.T) {
+	m := &Model{
+		activeTab: -1,
+		groupBy:   "host",
+		rows: []state.DownloadRow{
+			{URL: "https://b.example.com/first", Dest: "b-first.gguf", Status: "running"},
+			{URL: "https://a.example.com/first", Dest: "a-first.gguf", Status: "running"},
+			{URL: "https://b.example.com/second", Dest: "b-second.gguf", Status: "running"},
+		},
+		filterInput: textinput.New(),
+	}
+
+	rows := m.visibleRows()
+	if got := []string{hostOf(rows[0].URL), hostOf(rows[1].URL), hostOf(rows[2].URL)}; got[0] != "a.example.com" || got[1] != "b.example.com" || got[2] != "b.example.com" {
+		t.Fatalf("expected contiguous host groups, got %v", got)
+	}
+}
+
+func TestGroupByHostPreservesSortWithinHost(t *testing.T) {
+	m := &Model{
+		activeTab: -1,
+		groupBy:   "host",
+		sortMode:  "speed",
+		rows: []state.DownloadRow{
+			{URL: "https://b.example.com/slow", Dest: "b-slow.gguf", Status: "running"},
+			{URL: "https://a.example.com/only", Dest: "a-only.gguf", Status: "running"},
+			{URL: "https://b.example.com/fast", Dest: "b-fast.gguf", Status: "running"},
+		},
+		filterInput: textinput.New(),
+		rateCache: map[string]float64{
+			"https://b.example.com/slow|b-slow.gguf": 10,
+			"https://a.example.com/only|a-only.gguf": 50,
+			"https://b.example.com/fast|b-fast.gguf": 100,
+		},
+		curBytesCache: map[string]int64{},
+		totalCache:    map[string]int64{},
+		rateHist:      map[string][]float64{},
+	}
+
+	rows := m.visibleRows()
+	got := []string{rows[0].Dest, rows[1].Dest, rows[2].Dest}
+	want := []string{"a-only.gguf", "b-fast.gguf", "b-slow.gguf"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("expected grouped rows %v, got %v", want, got)
+		}
+	}
+}
+
+func TestSortAndGroupKeysPersistUIState(t *testing.T) {
+	tmpDir := t.TempDir()
+	m := &Model{
+		cfg: &config.Config{General: config.General{DataRoot: tmpDir}},
+	}
+
+	m.updateNormal(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m.updateNormal(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+
+	b, err := os.ReadFile(filepath.Join(tmpDir, "ui_state_v2.json"))
+	if err != nil {
+		t.Fatalf("read ui state: %v", err)
+	}
+	got := string(b)
+	for _, want := range []string{`"sort_mode": "speed"`, `"group_by": "host"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected saved UI state to contain %s, got %s", want, got)
+		}
 	}
 }
 

@@ -406,6 +406,8 @@ func TestSettings_UIPreferences(t *testing.T) {
 	model, cleanup := setupTestSettings(t, nil)
 	defer cleanup()
 	model.columnMode = "dest"
+	model.sortMode = "rem"
+	model.groupBy = "host"
 
 	output := model.renderSettings()
 
@@ -428,6 +430,22 @@ func TestSettings_UIPreferences(t *testing.T) {
 
 	if !strings.Contains(output, "dest") {
 		t.Error("Should show column mode value")
+	}
+
+	if !strings.Contains(output, "Sort Mode:") {
+		t.Error("Should show sort mode")
+	}
+
+	if !strings.Contains(output, "remaining") {
+		t.Error("Should show sort mode value")
+	}
+
+	if !strings.Contains(output, "Group By:") {
+		t.Error("Should show group by")
+	}
+
+	if !strings.Contains(output, "host") {
+		t.Error("Should show group by value")
 	}
 
 	if !strings.Contains(output, "Compact View:") {
@@ -472,6 +490,10 @@ func TestSettings_UIPreferences_Defaults(t *testing.T) {
 
 	if !strings.Contains(output, "dest") {
 		t.Error("Should show default column mode")
+	}
+
+	if !strings.Contains(output, "none") {
+		t.Error("Should show default sort/group mode")
 	}
 }
 
