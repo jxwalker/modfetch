@@ -49,8 +49,8 @@ func (m *Model) loadUIState() {
 	} else if st.ShowURL {
 		m.columnMode = "url"
 	}
-	if st.Compact {
-		m.cfg.UI.Compact = true
+	if m.cfg != nil {
+		m.cfg.UI.Compact = st.Compact
 	}
 	if st.GroupBy != "" {
 		m.groupBy = st.GroupBy
@@ -65,8 +65,24 @@ func (m *Model) saveUIState() {
 		return
 	}
 	p := m.uiStatePath()
-	_ = os.MkdirAll(filepath.Dir(p), 0o755)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		m.logUIStateError("failed to create ui state dir", filepath.Dir(p), err)
+		return
+	}
 	st := uiState{ThemeIndex: m.themeIndex, ShowURL: m.columnMode == "url", ColumnMode: m.columnMode, Compact: m.cfg.UI.Compact, GroupBy: m.groupBy, SortMode: m.sortMode}
-	b, _ := json.MarshalIndent(st, "", "  ")
-	_ = os.WriteFile(p, b, 0o644)
+	b, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		m.logUIStateError("failed to marshal ui state", p, err)
+		return
+	}
+	if err := os.WriteFile(p, b, 0o644); err != nil {
+		m.logUIStateError("failed to write ui state file", p, err)
+	}
+}
+
+func (m *Model) logUIStateError(msg, path string, err error) {
+	if err == nil || m.log == nil {
+		return
+	}
+	m.log.Debugf("%s %s: %v", msg, path, err)
 }
