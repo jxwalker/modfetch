@@ -139,10 +139,10 @@ func openAtPath(path string) (*DB, error) {
 			_ = sqldb.Close()
 		}
 	}()
-	if err := rejectNewerSchemaVersion(sqldb); err != nil {
+	if err := initSchema(sqldb); err != nil {
 		return nil, err
 	}
-	if err := initSchema(sqldb); err != nil {
+	if err := migrateSchema(sqldb); err != nil {
 		return nil, err
 	}
 	db := &DB{SQL: sqldb, Path: path}
@@ -156,9 +156,6 @@ func openAtPath(path string) (*DB, error) {
 		return nil, err
 	}
 	if err := db.InitMetadataTable(); err != nil {
-		return nil, err
-	}
-	if err := ensureSchemaVersion(sqldb); err != nil {
 		return nil, err
 	}
 	ready = true
@@ -192,54 +189,88 @@ func initSchema(db *sql.DB) error {
 			return err
 		}
 	}
-	// Try to add new columns in case of existing DB without them
-	if err := addColumnIfNotExists(db, `ALTER TABLE downloads ADD COLUMN actual_sha256 TEXT`); err != nil {
+	return nil
+}
+
+func migrateSchema(db *sql.DB) error {
+	var current int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&current); err != nil {
 		return err
 	}
-	if err := addColumnIfNotExists(db, `ALTER TABLE downloads ADD COLUMN retries INTEGER DEFAULT 0`); err != nil {
-		return err
+	if current > SchemaVersion {
+		return fmt.Errorf("database schema version %d is newer than supported version %d", current, SchemaVersion)
 	}
-	if err := addColumnIfNotExists(db, `ALTER TABLE downloads ADD COLUMN last_error TEXT`); err != nil {
-		return err
+	for current < SchemaVersion {
+		switch current {
+		case 0:
+			if err := migrateSchema0To1(db); err != nil {
+				return err
+			}
+			current = 1
+		default:
+			return fmt.Errorf("unsupported database schema version: %d", current)
+		}
 	}
 	return nil
 }
 
-func addColumnIfNotExists(db *sql.DB, stmt string) error {
-	_, err := db.Exec(stmt)
-	if err == nil {
-		return nil
+func migrateSchema0To1(db *sql.DB) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
 	}
-	if strings.Contains(strings.ToLower(err.Error()), "duplicate column name") {
-		return nil
+	existingColumns, err := downloadColumns(tx)
+	if err != nil {
+		return err
 	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	columns := []struct {
+		name       string
+		definition string
+	}{
+		{name: "actual_sha256", definition: "actual_sha256 TEXT"},
+		{name: "retries", definition: "retries INTEGER DEFAULT 0"},
+		{name: "last_error", definition: "last_error TEXT"},
+	}
+	for _, col := range columns {
+		if existingColumns[col.name] {
+			continue
+		}
+		if _, err := tx.Exec(`ALTER TABLE downloads ADD COLUMN ` + col.definition); err != nil {
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
+	_, err = db.Exec(`PRAGMA user_version = 1`)
 	return err
 }
 
-func rejectNewerSchemaVersion(db *sql.DB) error {
-	var current int
-	if err := db.QueryRow(`PRAGMA user_version`).Scan(&current); err != nil {
-		return err
+func downloadColumns(tx *sql.Tx) (map[string]bool, error) {
+	rows, err := tx.Query(`PRAGMA table_info(downloads)`)
+	if err != nil {
+		return nil, err
 	}
-	if current > SchemaVersion {
-		return fmt.Errorf("database schema version %d is newer than supported version %d", current, SchemaVersion)
+	defer func() { _ = rows.Close() }()
+	columns := map[string]bool{}
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull, pk int
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			return nil, err
+		}
+		columns[name] = true
 	}
-	return nil
-}
-
-func ensureSchemaVersion(db *sql.DB) error {
-	var current int
-	if err := db.QueryRow(`PRAGMA user_version`).Scan(&current); err != nil {
-		return err
-	}
-	if current > SchemaVersion {
-		return fmt.Errorf("database schema version %d is newer than supported version %d", current, SchemaVersion)
-	}
-	if current < SchemaVersion {
-		_, err := db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, SchemaVersion))
-		return err
-	}
-	return nil
+	return columns, rows.Err()
 }
 
 func (db *DB) prepareStatements() error {

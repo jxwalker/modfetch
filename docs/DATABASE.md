@@ -71,4 +71,9 @@ Indexes:
 
 ## Migration notes
 
-Version `1` preserves the current table layout. Future v1.x migrations should advance `PRAGMA user_version` and keep compatibility shims explicit rather than relying on silent best-effort `ALTER TABLE` calls.
+Version `1` preserves the current table layout. Databases with `PRAGMA user_version = 0`
+are migrated through an explicit v0-to-v1 step that adds the legacy `downloads`
+columns introduced before the schema version baseline: `actual_sha256`,
+`retries`, and `last_error`. Future v1.x migrations should advance
+`PRAGMA user_version` and keep compatibility shims explicit rather than relying
+on silent best-effort `ALTER TABLE` calls.
