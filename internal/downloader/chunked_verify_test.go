@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/state"
 )
 
@@ -51,4 +52,33 @@ func TestVerifyCompleteChunksHonorsContextCancellation(t *testing.T) {
 func chunkSHA(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
+}
+
+func TestChooseChunkSize(t *testing.T) {
+	const mb = int64(1024 * 1024)
+
+	explicit := &config.Config{}
+	explicit.Concurrency.ChunkSizeMB = 3
+	if got := chooseChunkSize(explicit, 128*mb); got != 3*mb {
+		t.Fatalf("explicit chunk size = %d", got)
+	}
+
+	limited := &config.Config{}
+	limited.Network.PerDownloadBandwidthBytesPerSecond = 512 * 1024
+	if got := chooseChunkSize(limited, 128*mb); got != 4*mb {
+		t.Fatalf("bandwidth-adaptive chunk size = %d", got)
+	}
+
+	slow := &config.Config{}
+	slow.Network.GlobalBandwidthBytesPerSecond = 1
+	if got := chooseChunkSize(slow, 128*mb); got != 1*mb {
+		t.Fatalf("minimum chunk size = %d", got)
+	}
+
+	if got := chooseChunkSize(&config.Config{}, 64*1024*mb); got != 64*mb {
+		t.Fatalf("large file chunk size should clamp to max, got %d", got)
+	}
+	if got := chooseChunkSize(&config.Config{}, 0); got != 8*mb {
+		t.Fatalf("default chunk size = %d", got)
+	}
 }
