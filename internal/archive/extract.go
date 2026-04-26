@@ -76,16 +76,20 @@ func extract7z(ctx context.Context, src, destDir string) ([]string, error) {
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
 
+	var stderr limitedBuffer
+	stderr.max = 8 * 1024
 	cmd := commandContext(ctx, bin, "x", "-y", "-o"+tmp, src)
-	out, err := cmd.CombinedOutput()
+	cmd.Stdout = io.Discard
+	cmd.Stderr = &stderr
+	err = cmd.Run()
 	if err != nil {
-		msg := strings.TrimSpace(string(out))
+		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			return nil, err
 		}
 		return nil, fmt.Errorf("%w: %s", err, msg)
 	}
-	return moveExtractedTree(tmp, cleanDest)
+	return moveExtractedTree(ctx, tmp, cleanDest)
 }
 
 func find7z() (string, error) {
@@ -209,7 +213,7 @@ func writeFile(path string, r io.Reader, mode os.FileMode) error {
 	return f.Close()
 }
 
-func moveExtractedTree(srcDir, destDir string) ([]string, error) {
+func moveExtractedTree(ctx context.Context, srcDir, destDir string) ([]string, error) {
 	var out []string
 	cleanDest, err := filepath.Abs(destDir)
 	if err != nil {
@@ -221,6 +225,9 @@ func moveExtractedTree(srcDir, destDir string) ([]string, error) {
 	}
 	if err := filepath.WalkDir(cleanSrc, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		rel, err := filepath.Rel(cleanSrc, path)
@@ -237,12 +244,18 @@ func moveExtractedTree(srcDir, destDir string) ([]string, error) {
 		if d.IsDir() {
 			return os.MkdirAll(target, 0o755)
 		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("archive entry is a symlink: %s", rel)
+		}
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
 		info, err := d.Info()
 		if err != nil {
 			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("archive entry is not a regular file: %s", rel)
 		}
 		f, err := os.Open(path)
 		if err != nil {
@@ -261,4 +274,27 @@ func moveExtractedTree(srcDir, destDir string) ([]string, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+type limitedBuffer struct {
+	max int
+	buf []byte
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	if b.max <= 0 {
+		return len(p), nil
+	}
+	if len(b.buf) < b.max {
+		n := b.max - len(b.buf)
+		if n > len(p) {
+			n = len(p)
+		}
+		b.buf = append(b.buf, p[:n]...)
+	}
+	return len(p), nil
+}
+
+func (b *limitedBuffer) String() string {
+	return string(b.buf)
 }

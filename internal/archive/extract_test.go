@@ -131,3 +131,40 @@ func TestExtract7zReportsMissingBackend(t *testing.T) {
 		t.Fatalf("expected missing 7z backend error, got %v", err)
 	}
 }
+
+func TestMoveExtractedTreeRejectsSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink setup is platform-specific")
+	}
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/etc/passwd", filepath.Join(src, "link")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	_, err := moveExtractedTree(context.Background(), src, filepath.Join(dir, "out"))
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("expected symlink rejection, got %v", err)
+	}
+}
+
+func TestMoveExtractedTreeHonorsContextCancellation(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "model.bin"), []byte("model"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := moveExtractedTree(ctx, src, filepath.Join(dir, "out"))
+	if err == nil || err != context.Canceled {
+		t.Fatalf("expected context cancellation, got %v", err)
+	}
+}
