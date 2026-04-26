@@ -114,7 +114,7 @@ func extractTar(ctx context.Context, r io.Reader, destDir string) ([]string, err
 			if err := os.MkdirAll(target, 0o755); err != nil {
 				return out, err
 			}
-		case tar.TypeReg, tar.TypeRegA:
+		case tar.TypeReg:
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return out, err
 			}
