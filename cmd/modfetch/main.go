@@ -120,21 +120,19 @@ Flags:
 
 func handleStatus(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("status", flag.ContinueOnError)
-	cfgPath := fs.String("config", "", "Path to YAML config file")
-	logLevel := fs.String("log-level", "info", "log level")
-	jsonOut := fs.Bool("json", false, "json logs")
+	common := addCommonConfigLogFlags(fs, "")
 	onlyErrors := fs.Bool("only-errors", false, "show only rows with error-like statuses (error, checksum_mismatch, verify_failed)")
 	summary := fs.Bool("summary", false, "print totals and error count")
 	duplicates := fs.Bool("duplicates", false, "show completed downloads with duplicate SHA256 content")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	c, _, err := loadConfig(*cfgPath)
+	c, _, err := loadConfig(*common.configPath)
 	if err != nil {
 		return err
 	}
 	_ = c // currently unused; reserved for future filters
-	log := logging.New(*logLevel, *jsonOut)
+	log := logging.New(*common.logLevel, *common.jsonOut)
 	st, err := state.Open(c)
 	if err != nil {
 		return err
@@ -146,7 +144,7 @@ func handleStatus(ctx context.Context, args []string) error {
 	}
 	if *duplicates {
 		groups := duplicateDownloadGroups(rows)
-		if *jsonOut {
+		if *common.jsonOut {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
 			return enc.Encode(groups)
@@ -172,7 +170,7 @@ func handleStatus(ctx context.Context, args []string) error {
 		}
 		rows = filt
 	}
-	if *jsonOut {
+	if *common.jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		if *summary {
@@ -204,19 +202,17 @@ type dedupeResult struct {
 
 func handleDedupe(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("dedupe", flag.ContinueOnError)
-	cfgPath := fs.String("config", "", "Path to YAML config file")
-	logLevel := fs.String("log-level", "info", "log level")
-	jsonOut := fs.Bool("json", false, "json logs")
+	common := addCommonConfigLogFlags(fs, "")
 	mode := fs.String("mode", "hardlink", "dedupe mode: hardlink|symlink")
 	dryRun := fs.Bool("dry-run", false, "show changes without modifying files")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	c, _, err := loadConfig(*cfgPath)
+	c, _, err := loadConfig(*common.configPath)
 	if err != nil {
 		return err
 	}
-	log := logging.New(*logLevel, *jsonOut)
+	log := logging.New(*common.logLevel, *common.jsonOut)
 	st, err := state.Open(c)
 	if err != nil {
 		return err
@@ -227,7 +223,7 @@ func handleDedupe(ctx context.Context, args []string) error {
 		return err
 	}
 	results := dedupeDuplicateGroups(duplicateDownloadGroups(rows), strings.ToLower(strings.TrimSpace(*mode)), *dryRun)
-	if *jsonOut {
+	if *common.jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(results)
@@ -265,21 +261,19 @@ func handleConfig(ctx context.Context, args []string) error {
 
 func configValidate(args []string) error {
 	fs := flag.NewFlagSet("config validate", flag.ContinueOnError)
-	cfgPath := fs.String("config", "", "Path to YAML config file")
-	logLevel := fs.String("log-level", "info", "log level")
-	jsonOut := fs.Bool("json", false, "json logs")
+	common := addCommonConfigLogFlags(fs, "")
 	strict := fs.Bool("strict", false, "reject unknown config fields")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	resolvedCfgPath, err := resolveConfigPath(*cfgPath)
+	resolvedCfgPath, err := resolveConfigPath(*common.configPath)
 	if err != nil {
 		return err
 	}
 	if err := loadConfigForValidation(resolvedCfgPath, *strict); err != nil {
 		return err
 	}
-	log := logging.New(*logLevel, *jsonOut)
+	log := logging.New(*common.logLevel, *common.jsonOut)
 	log.Infof("config: valid")
 	return nil
 }
@@ -302,9 +296,7 @@ func loadConfigForValidation(path string, strict bool) error {
 
 func handleDownload(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("download", flag.ContinueOnError)
-	cfgPath := fs.String("config", "", "Path to YAML config file")
-	logLevel := fs.String("log-level", "info", "log level")
-	jsonOut := fs.Bool("json", false, "json logs")
+	common := addCommonConfigLogFlags(fs, "")
 	quiet := fs.Bool("quiet", false, "suppress progress and info logs (errors only)")
 	noResume := fs.Bool("no-resume", false, "do not resume; start fresh (delete any staged .part and chunk state)")
 	url := fs.String("url", "", "HTTP URL to download (direct) or resolver URI (e.g. hf://owner/repo/path)")
@@ -325,7 +317,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	c, _, err := loadConfig(*cfgPath)
+	c, _, err := loadConfig(*common.configPath)
 	if err != nil {
 		return err
 	}
@@ -340,10 +332,10 @@ func handleDownload(ctx context.Context, args []string) error {
 		return errors.New("s3 destinations cannot be combined with --extract or --place")
 	}
 	// quiet forces log level to error unless JSON is requested
-	if *quiet && !*jsonOut {
-		*logLevel = "error"
+	if *quiet && !*common.jsonOut {
+		*common.logLevel = "error"
 	}
-	log := logging.New(*logLevel, *jsonOut)
+	log := logging.New(*common.logLevel, *common.jsonOut)
 	st, err := state.Open(c)
 	if err != nil {
 		return err
@@ -799,7 +791,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	// Prefer chunked downloader; it will fall back to single when needed
 	// Progress display (disabled for JSON or quiet)
 	var stopProg func()
-	if !*jsonOut && !*quiet {
+	if !*common.jsonOut && !*quiet {
 		candDest := strings.TrimSpace(*dest)
 		// Determine the resolver URI (could have been normalized above)
 		resolverURI := resolvedURL
@@ -886,7 +878,7 @@ func handleDownload(ctx context.Context, args []string) error {
 			"status":    "ok",
 			"extracted": extracted,
 		})
-	} else if !*jsonOut && !*quiet {
+	} else if !*common.jsonOut && !*quiet {
 		var rate string
 		if dur > 0 && size > 0 {
 			rate = humanize.Bytes(uint64(float64(size)/dur)) + "/s"
@@ -913,9 +905,7 @@ func handleDownload(ctx context.Context, args []string) error {
 
 func handlePlace(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("place", flag.ContinueOnError)
-	cfgPath := fs.String("config", "", "Path to YAML config file")
-	logLevel := fs.String("log-level", "info", "log level")
-	jsonOut := fs.Bool("json", false, "json logs")
+	common := addCommonConfigLogFlags(fs, "")
 	filePath := fs.String("path", "", "path to file to place")
 	artType := fs.String("type", "", "artifact type override (optional)")
 	mode := fs.String("mode", "", "placement mode override: symlink|hardlink|copy (optional)")
@@ -926,11 +916,11 @@ func handlePlace(ctx context.Context, args []string) error {
 	if *filePath == "" {
 		return errors.New("--path is required")
 	}
-	c, _, err := loadConfig(*cfgPath)
+	c, _, err := loadConfig(*common.configPath)
 	if err != nil {
 		return err
 	}
-	log := logging.New(*logLevel, *jsonOut)
+	log := logging.New(*common.logLevel, *common.jsonOut)
 	if *dryRun {
 		atype := *artType
 		if atype == "" {
@@ -958,9 +948,7 @@ func handlePlace(ctx context.Context, args []string) error {
 
 func handleClean(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("clean", flag.ContinueOnError)
-	cfgPath := fs.String("config", "", "Path to YAML config file")
-	logLevel := fs.String("log-level", "info", "log level")
-	jsonOut := fs.Bool("json", false, "json logs")
+	common := addCommonConfigLogFlags(fs, "")
 	days := fs.Int("days", 7, "remove .part files older than this many days (0 = remove all)")
 	dryRun := fs.Bool("dry-run", false, "show what would be removed, but do not delete")
 	destPath := fs.String("dest", "", "remove staged .part for this destination path (overrides days)")
@@ -969,11 +957,11 @@ func handleClean(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	c, _, err := loadConfig(*cfgPath)
+	c, _, err := loadConfig(*common.configPath)
 	if err != nil {
 		return err
 	}
-	log := logging.New(*logLevel, *jsonOut)
+	log := logging.New(*common.logLevel, *common.jsonOut)
 
 	removed := 0
 	skipped := 0
@@ -1104,7 +1092,7 @@ func handleClean(ctx context.Context, args []string) error {
 		}
 	}
 
-	if *jsonOut {
+	if *common.jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(map[string]any{"removed": removed, "skipped": skipped, "sidecars_removed": sideRemoved, "errors": errs})
@@ -1151,17 +1139,15 @@ func resolveBatchDownloadCandidate(ctx context.Context, c *config.Config, uri st
 
 func configOp(args []string, fn func(*config.Config, *logging.Logger) error) error {
 	fs := flag.NewFlagSet("config", flag.ContinueOnError)
-	cfgPath := fs.String("config", "", "Path to YAML config file")
-	logLevel := fs.String("log-level", "info", "log level")
-	jsonOut := fs.Bool("json", false, "json logs")
+	common := addCommonConfigLogFlags(fs, "")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	c, _, err := loadConfig(*cfgPath)
+	c, _, err := loadConfig(*common.configPath)
 	if err != nil {
 		return err
 	}
-	log := logging.New(*logLevel, *jsonOut)
+	log := logging.New(*common.logLevel, *common.jsonOut)
 	return fn(c, log)
 }
 

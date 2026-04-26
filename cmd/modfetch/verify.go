@@ -25,7 +25,7 @@ import (
 //	--safetensors     additionally perform a minimal .safetensors structure check
 func handleVerify(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
-	cfgPath := fs.String("config", "", "Path to YAML config file")
+	common := addCommonConfigLogFlags(fs, "")
 	pathFlag := fs.String("path", "", "Specific file to verify (optional)")
 	all := fs.Bool("all", false, "Verify all completed downloads")
 	checkST := fs.Bool("safetensors", false, "Sanity-check .safetensors structure")
@@ -36,16 +36,14 @@ func handleVerify(ctx context.Context, args []string) error {
 	onlyErrors := fs.Bool("only-errors", false, "Show only files with errors or non-verified status")
 	summary := fs.Bool("summary", false, "Print a summary of total scanned and error count")
 	fixSidecar := fs.Bool("fix-sidecar", false, "Rewrite .sha256 sidecar with actual hash for verified files")
-	logLevel := fs.String("log-level", "info", "log level")
-	jsonOut := fs.Bool("json", false, "json logs")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	_ = logging.New(*logLevel, *jsonOut)
+	_ = logging.New(*common.logLevel, *common.jsonOut)
 	// If scanning an arbitrary directory, DB is not required; open only for state-backed modes.
 	var st *state.DB
 	if *scanDir == "" {
-		c, _, err := loadConfig(*cfgPath)
+		c, _, err := loadConfig(*common.configPath)
 		if err != nil {
 			return err
 		}
@@ -141,7 +139,7 @@ func handleVerify(ctx context.Context, args []string) error {
 		return errors.New("use --scan-dir or --path or --all")
 	}
 
-	if *jsonOut {
+	if *common.jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(report)

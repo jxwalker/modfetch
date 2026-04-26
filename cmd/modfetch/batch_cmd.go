@@ -35,9 +35,7 @@ func handleBatch(ctx context.Context, args []string) error {
 
 func handleBatchImport(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("batch import", flag.ContinueOnError)
-	cfgPath := fs.String("config", "", "Path to YAML config file")
-	logLevel := fs.String("log-level", "info", "log level")
-	jsonOut := fs.Bool("json", false, "json logs")
+	common := addCommonConfigLogFlags(fs, "")
 	inPath := fs.String("input", "", "Text file with URLs (one per line). Supports optional key=value pairs after the URL: dest=... sha256=... type=... place=true mode=symlink")
 	outPath := fs.String("output", "", "Output batch YAML path (default: stdout)")
 	destDir := fs.String("dest-dir", "", "Destination directory override (default: config.general.download_root)")
@@ -53,11 +51,11 @@ func handleBatchImport(ctx context.Context, args []string) error {
 	if *inPath == "" {
 		return errors.New("--input is required")
 	}
-	c, _, err := loadConfig(*cfgPath)
+	c, _, err := loadConfig(*common.configPath)
 	if err != nil {
 		return err
 	}
-	log := logging.New(*logLevel, *jsonOut)
+	log := logging.New(*common.logLevel, *common.jsonOut)
 
 	f, err := os.Open(*inPath)
 	if err != nil {
