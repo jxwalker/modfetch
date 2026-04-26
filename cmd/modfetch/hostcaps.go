@@ -14,7 +14,7 @@ import (
 
 func handleHostCaps(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("hostcaps", flag.ContinueOnError)
-	cfgPath := fs.String("config", "", "Path to YAML config file")
+	cfgPath := addConfigPathFlag(fs)
 	list := fs.Bool("list", false, "List cached host capabilities")
 	clear := fs.String("clear", "", "Clear cache for a specific host")
 	clearAll := fs.Bool("clear-all", false, "Clear cache for all hosts")

@@ -19,13 +19,11 @@ import (
 
 func handleTUI(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("tui", flag.ContinueOnError)
-	cfgPath := fs.String("config", "", "Path to YAML config file")
-	logLevel := fs.String("log-level", "info", "log level")
-	jsonOut := fs.Bool("json", false, "json logs (not used in TUI)")
+	common := addCommonConfigLogFlags(fs, "json logs (not used in TUI)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	resolvedCfgPath, err := resolveConfigPath(*cfgPath)
+	resolvedCfgPath, err := resolveConfigPath(*common.configPath)
 	if err != nil {
 		return err
 	}
@@ -69,7 +67,7 @@ func handleTUI(ctx context.Context, args []string) error {
 			return err
 		}
 	}
-	_ = logging.New(*logLevel, *jsonOut) // placeholder for future log routing
+	_ = logging.New(*common.logLevel, *common.jsonOut) // placeholder for future log routing
 	st, err := state.Open(c)
 	if err != nil {
 		return err
