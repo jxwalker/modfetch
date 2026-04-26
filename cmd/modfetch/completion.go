@@ -34,30 +34,52 @@ _modfetch_completions()
 {
     local cur prev words cword
     _init_completion || return
-    local cmds="config download place verify status tui batch dedupe version help completion"
+    local cmds="config download place verify status tui batch dedupe clean hostcaps version help completion"
     if [[ ${cword} -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${cmds}" -- "$cur") )
         return
     fi
 	case ${words[1]} in
         config)
-            COMPREPLY=( $(compgen -W "validate print wizard --config --log-level --json" -- "$cur") ) ;;
+            if [[ ${cword} -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "validate print wizard" -- "$cur") )
+                return
+            fi
+            case ${words[2]} in
+                validate)
+                    COMPREPLY=( $(compgen -W "--config --log-level --json --strict" -- "$cur") ) ;;
+                print)
+                    COMPREPLY=( $(compgen -W "--config --log-level --json" -- "$cur") ) ;;
+                wizard)
+                    COMPREPLY=( $(compgen -W "--out" -- "$cur") ) ;;
+                *) ;;
+            esac ;;
         download)
-            COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --url --dest --sha256 --sha256-file --batch --place --extract --extract-dir" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --dry-run --force --no-auth-preflight --extract --extract-dir --quant --list-quants" -- "$cur") ) ;;
         dedupe)
             COMPREPLY=( $(compgen -W "--config --log-level --json --mode --dry-run" -- "$cur") ) ;;
         place)
-            COMPREPLY=( $(compgen -W "--config --log-level --json --path --type --mode" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --path --type --mode --dry-run" -- "$cur") ) ;;
         verify)
             COMPREPLY=( $(compgen -W "--config --path --all --safetensors --safetensors-deep --scan-dir --repair --quarantine-incomplete --only-errors --summary --fix-sidecar --log-level --json" -- "$cur") ) ;;
         status)
             COMPREPLY=( $(compgen -W "--config --log-level --json --only-errors --summary --duplicates" -- "$cur") ) ;;
         tui)
-            COMPREPLY=( $(compgen -W "--config --log-level --v1 --v2" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json" -- "$cur") ) ;;
         clean)
             COMPREPLY=( $(compgen -W "--config --log-level --json --days --dry-run --dest --include-next-to-dest --sidecars" -- "$cur") ) ;;
         batch)
-            COMPREPLY=( $(compgen -W "import --config --log-level --json --input --output --dest-dir --sha-mode --type --place --mode --no-resolve-pages" -- "$cur") ) ;;
+            if [[ ${cword} -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "import" -- "$cur") )
+                return
+            fi
+            case ${words[2]} in
+                import)
+                    COMPREPLY=( $(compgen -W "--config --log-level --json --input --output --dest-dir --sha-mode --type --place --mode --no-resolve-pages --naming-pattern" -- "$cur") ) ;;
+                *) ;;
+            esac ;;
+        hostcaps)
+            COMPREPLY=( $(compgen -W "--config --list --clear --clear-all --json" -- "$cur") ) ;;
         completion)
             COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") ) ;;
         *) ;;
@@ -70,23 +92,37 @@ const zshCompletion = `#compdef modfetch
 # zsh completion for modfetch (basic)
 _modfetch() {
   local -a cmds
-  cmds=(config download place verify status tui batch dedupe version help completion)
+  cmds=(config download place verify status tui batch dedupe clean hostcaps version help completion)
   if (( CURRENT == 2 )); then
     _describe 'command' cmds
     return
   fi
   case $words[2] in
     config)
-      _arguments '*:options:(--config --log-level --json validate print wizard)'
+      if (( CURRENT == 3 )); then
+        _arguments '*:subcommands:(validate print wizard)'
+      else
+        case $words[3] in
+          validate)
+            _arguments '*:options:(--config --log-level --json --strict)'
+            ;;
+          print)
+            _arguments '*:options:(--config --log-level --json)'
+            ;;
+          wizard)
+            _arguments '*:options:(--out)'
+            ;;
+        esac
+      fi
       ;;
     download)
-      _arguments '*:options:(--config --log-level --json --quiet --url --dest --sha256 --sha256-file --batch --place --extract --extract-dir)'
+      _arguments '*:options:(--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --dry-run --force --no-auth-preflight --extract --extract-dir --quant --list-quants)'
       ;;
     dedupe)
       _arguments '*:options:(--config --log-level --json --mode --dry-run)'
       ;;
     place)
-      _arguments '*:options:(--config --log-level --json --path --type --mode)'
+      _arguments '*:options:(--config --log-level --json --path --type --mode --dry-run)'
       ;;
     verify)
       _arguments '*:options:(--config --path --all --safetensors --safetensors-deep --scan-dir --repair --quarantine-incomplete --only-errors --summary --fix-sidecar --log-level --json)'
@@ -95,13 +131,24 @@ _modfetch() {
       _arguments '*:options:(--config --log-level --json --only-errors --summary --duplicates)'
       ;;
     tui)
-      _arguments '*:options:(--config --log-level --v1 --v2)'
+      _arguments '*:options:(--config --log-level --json)'
       ;;
     clean)
       _arguments '*:options:(--config --log-level --json --days --dry-run --dest --include-next-to-dest --sidecars)'
       ;;
     batch)
-      _arguments '*:options:(import --config --log-level --json --input --output --dest-dir --sha-mode --type --place --mode --no-resolve-pages)'
+      if (( CURRENT == 3 )); then
+        _arguments '*:subcommands:(import)'
+      else
+        case $words[3] in
+          import)
+            _arguments '*:options:(--config --log-level --json --input --output --dest-dir --sha-mode --type --place --mode --no-resolve-pages --naming-pattern)'
+            ;;
+        esac
+      fi
+      ;;
+    hostcaps)
+      _arguments '*:options:(--config --list --clear --clear-all --json)'
       ;;
     completion)
       _arguments '*:options:(bash zsh fish)'
@@ -122,9 +169,12 @@ complete -c modfetch -n "__fish_seen_subcommand_from status" -l only-errors -d "
 complete -c modfetch -n "__fish_seen_subcommand_from status" -l summary -d "Print totals and errors"
 complete -c modfetch -n "__fish_seen_subcommand_from status" -l duplicates -d "Show duplicate completed downloads"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "tui" -d "dashboard"
+complete -c modfetch -f -n "__fish_use_subcommand" -a "batch" -d "batch operations"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "version" -d "print version"
+complete -c modfetch -f -n "__fish_use_subcommand" -a "help" -d "show help"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "completion" -d "shell completions"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "clean" -d "prune partials and sidecars"
+complete -c modfetch -f -n "__fish_use_subcommand" -a "hostcaps" -d "host capability cache"
 complete -c modfetch -n "__fish_seen_subcommand_from clean" -l days -d "Age threshold for .part"
 complete -c modfetch -n "__fish_seen_subcommand_from clean" -l dry-run -d "Do not delete"
 complete -c modfetch -n "__fish_seen_subcommand_from clean" -l dest -d "Target dest for staged .part"
@@ -132,33 +182,59 @@ complete -c modfetch -n "__fish_seen_subcommand_from clean" -l include-next-to-d
 complete -c modfetch -n "__fish_seen_subcommand_from clean" -l sidecars -d "Remove orphan .sha256"
 
 # Common flags
-for cmd in config download place verify status tui batch dedupe
+for cmd in download place verify status tui dedupe clean
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l config -d "Path to config"
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l log-level -d "Log level"
+  complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l json -d "JSON output"
 end
+complete -c modfetch -n "__fish_seen_subcommand_from config" -a "validate" -d "Validate config"
+complete -c modfetch -n "__fish_seen_subcommand_from config" -a "print" -d "Print resolved config"
+complete -c modfetch -n "__fish_seen_subcommand_from config" -a "wizard" -d "Create starter config"
+complete -c modfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from validate" -l config -d "Path to config"
+complete -c modfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from validate" -l log-level -d "Log level"
+complete -c modfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from validate" -l json -d "JSON output"
+complete -c modfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from validate" -l strict -d "Reject unknown config fields"
+complete -c modfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from print" -l config -d "Path to config"
+complete -c modfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from print" -l log-level -d "Log level"
+complete -c modfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from print" -l json -d "JSON output"
+complete -c modfetch -n "__fish_seen_subcommand_from config; and __fish_seen_subcommand_from wizard" -l out -d "Write wizard YAML to path"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l url -d "URL or resolver URI"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l dest -d "Destination path"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l sha256 -d "Expected SHA256"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l sha256-file -d "File containing expected hash"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l batch -d "Batch file"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l place -d "Place after download"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l quiet -d "Suppress progress and info logs"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l no-resume -d "Start fresh instead of resuming"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l summary-json -d "Print completion summary as JSON"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l batch-parallel -d "Parallel batch downloads"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l dry-run -d "Plan without downloading"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l force -d "Skip SHA256 verification"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l no-auth-preflight -d "Skip auth preflight probe"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract -d "Extract zip/tar/tar.gz/tgz/7z archive after download"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract-dir -d "Extraction directory"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l quant -d "HuggingFace quantization to download"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l list-quants -d "List HuggingFace quantizations"
 complete -c modfetch -n "__fish_seen_subcommand_from dedupe" -l mode -d "hardlink|symlink"
 complete -c modfetch -n "__fish_seen_subcommand_from dedupe" -l dry-run -d "Show dedupe changes without modifying files"
 # batch import flags
 complete -c modfetch -n "__fish_seen_subcommand_from batch" -a "import" -d "Import URLs to YAML batch"
-complete -c modfetch -n "__fish_seen_subcommand_from batch" -l input -d "Text file with URLs"
-complete -c modfetch -n "__fish_seen_subcommand_from batch" -l output -d "Output batch YAML"
-complete -c modfetch -n "__fish_seen_subcommand_from batch" -l dest-dir -d "Destination directory"
-complete -c modfetch -n "__fish_seen_subcommand_from batch" -l sha-mode -d "none|compute"
-complete -c modfetch -n "__fish_seen_subcommand_from batch" -l type -d "Artifact type"
-complete -c modfetch -n "__fish_seen_subcommand_from batch" -l place -d "Place after download"
-complete -c modfetch -n "__fish_seen_subcommand_from batch" -l mode -d "symlink|hardlink|copy"
-complete -c modfetch -n "__fish_seen_subcommand_from batch" -l no-resolve-pages -d "Disable civitai page -> uri"
+complete -c modfetch -n "__fish_seen_subcommand_from batch; and __fish_seen_subcommand_from import" -l config -d "Path to config"
+complete -c modfetch -n "__fish_seen_subcommand_from batch; and __fish_seen_subcommand_from import" -l log-level -d "Log level"
+complete -c modfetch -n "__fish_seen_subcommand_from batch; and __fish_seen_subcommand_from import" -l json -d "JSON output"
+complete -c modfetch -n "__fish_seen_subcommand_from batch; and __fish_seen_subcommand_from import" -l input -d "Text file with URLs"
+complete -c modfetch -n "__fish_seen_subcommand_from batch; and __fish_seen_subcommand_from import" -l output -d "Output batch YAML"
+complete -c modfetch -n "__fish_seen_subcommand_from batch; and __fish_seen_subcommand_from import" -l dest-dir -d "Destination directory"
+complete -c modfetch -n "__fish_seen_subcommand_from batch; and __fish_seen_subcommand_from import" -l sha-mode -d "none|compute"
+complete -c modfetch -n "__fish_seen_subcommand_from batch; and __fish_seen_subcommand_from import" -l type -d "Artifact type"
+complete -c modfetch -n "__fish_seen_subcommand_from batch; and __fish_seen_subcommand_from import" -l place -d "Place after download"
+complete -c modfetch -n "__fish_seen_subcommand_from batch; and __fish_seen_subcommand_from import" -l mode -d "symlink|hardlink|copy"
+complete -c modfetch -n "__fish_seen_subcommand_from batch; and __fish_seen_subcommand_from import" -l no-resolve-pages -d "Disable civitai page -> uri"
+complete -c modfetch -n "__fish_seen_subcommand_from batch; and __fish_seen_subcommand_from import" -l naming-pattern -d "Override resolver naming pattern"
 complete -c modfetch -n "__fish_seen_subcommand_from place" -l path -d "File to place"
 complete -c modfetch -n "__fish_seen_subcommand_from place" -l type -d "Artifact type override"
 complete -c modfetch -n "__fish_seen_subcommand_from place" -l mode -d "Placement mode"
+complete -c modfetch -n "__fish_seen_subcommand_from place" -l dry-run -d "Show planned placements only"
 complete -c modfetch -n "__fish_seen_subcommand_from verify" -l path -d "File to verify"
 complete -c modfetch -n "__fish_seen_subcommand_from verify" -l all -d "Verify all"
 complete -c modfetch -n "__fish_seen_subcommand_from verify" -l safetensors -d "Check .safetensors structure"
@@ -169,4 +245,9 @@ complete -c modfetch -n "__fish_seen_subcommand_from verify" -l quarantine-incom
 complete -c modfetch -n "__fish_seen_subcommand_from verify" -l only-errors -d "Show only errors"
 complete -c modfetch -n "__fish_seen_subcommand_from verify" -l summary -d "Print summary"
 complete -c modfetch -n "__fish_seen_subcommand_from verify" -l fix-sidecar -d "Rewrite .sha256 sidecar on verified"
+complete -c modfetch -n "__fish_seen_subcommand_from hostcaps" -l config -d "Path to config"
+complete -c modfetch -n "__fish_seen_subcommand_from hostcaps" -l list -d "List cached host capabilities"
+complete -c modfetch -n "__fish_seen_subcommand_from hostcaps" -l clear -d "Clear cache for a host"
+complete -c modfetch -n "__fish_seen_subcommand_from hostcaps" -l clear-all -d "Clear all cached host capabilities"
+complete -c modfetch -n "__fish_seen_subcommand_from hostcaps" -l json -d "JSON output"
 `

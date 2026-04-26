@@ -73,6 +73,7 @@ Breaking changes to consider for v1.0
   - State DB bootstrap is centralized and stamps SQLite `user_version` as the v1.0 migration baseline [IMPL]
 - Standardize CLI flags and naming [WIP]
   - Shared config path resolution across config-backed commands; `place` now honors the documented default config path [IMPL]
+  - Shell completions are aligned with current commands and flags, including `hostcaps`, strict config validation, quantization selection, and dry-run variants [IMPL]
 
 Completed (from prior docs)
 - CivitAI model-aware default filenames and naming patterns (sources.*.naming.pattern) [IMPL]
