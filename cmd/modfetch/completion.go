@@ -34,7 +34,7 @@ _modfetch_completions()
 {
     local cur prev words cword
     _init_completion || return
-    local cmds="config download place verify status tui batch dedupe clean hostcaps version help completion"
+    local cmds="config download place verify status tui library batch dedupe clean hostcaps version help completion"
     if [[ ${cword} -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${cmds}" -- "$cur") )
         return
@@ -66,6 +66,18 @@ _modfetch_completions()
             COMPREPLY=( $(compgen -W "--config --log-level --json --only-errors --summary --duplicates" -- "$cur") ) ;;
         tui)
             COMPREPLY=( $(compgen -W "--config --log-level --json" -- "$cur") ) ;;
+        library)
+            if [[ ${cword} -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "export import" -- "$cur") )
+                return
+            fi
+            case ${words[2]} in
+                export)
+                    COMPREPLY=( $(compgen -W "--config --log-level --json --format --output" -- "$cur") ) ;;
+                import)
+                    COMPREPLY=( $(compgen -W "--config --log-level --json --input --dry-run" -- "$cur") ) ;;
+                *) ;;
+            esac ;;
         clean)
             COMPREPLY=( $(compgen -W "--config --log-level --json --days --dry-run --dest --include-next-to-dest --sidecars" -- "$cur") ) ;;
         batch)
@@ -92,7 +104,7 @@ const zshCompletion = `#compdef modfetch
 # zsh completion for modfetch (basic)
 _modfetch() {
   local -a cmds
-  cmds=(config download place verify status tui batch dedupe clean hostcaps version help completion)
+  cmds=(config download place verify status tui library batch dedupe clean hostcaps version help completion)
   if (( CURRENT == 2 )); then
     _describe 'command' cmds
     return
@@ -133,6 +145,20 @@ _modfetch() {
     tui)
       _arguments '*:options:(--config --log-level --json)'
       ;;
+    library)
+      if (( CURRENT == 3 )); then
+        _arguments '*:subcommands:(export import)'
+      else
+        case $words[3] in
+          export)
+            _arguments '*:options:(--config --log-level --json --format --output)'
+            ;;
+          import)
+            _arguments '*:options:(--config --log-level --json --input --dry-run)'
+            ;;
+        esac
+      fi
+      ;;
     clean)
       _arguments '*:options:(--config --log-level --json --days --dry-run --dest --include-next-to-dest --sidecars)'
       ;;
@@ -169,6 +195,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from status" -l only-errors -d "
 complete -c modfetch -n "__fish_seen_subcommand_from status" -l summary -d "Print totals and errors"
 complete -c modfetch -n "__fish_seen_subcommand_from status" -l duplicates -d "Show duplicate completed downloads"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "tui" -d "dashboard"
+complete -c modfetch -f -n "__fish_use_subcommand" -a "library" -d "library catalog"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "batch" -d "batch operations"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "version" -d "print version"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "help" -d "show help"
@@ -182,7 +209,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from clean" -l include-next-to-d
 complete -c modfetch -n "__fish_seen_subcommand_from clean" -l sidecars -d "Remove orphan .sha256"
 
 # Common flags
-for cmd in download place verify status tui dedupe clean
+for cmd in download place verify status tui library dedupe clean
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l config -d "Path to config"
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l log-level -d "Log level"
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l json -d "JSON output"
@@ -215,6 +242,12 @@ complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract -d "Ex
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract-dir -d "Extraction directory"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l quant -d "HuggingFace quantization to download"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l list-quants -d "List HuggingFace quantizations"
+complete -c modfetch -n "__fish_seen_subcommand_from library" -a "export" -d "Export model catalog"
+complete -c modfetch -n "__fish_seen_subcommand_from library" -a "import" -d "Import model catalog"
+complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from export" -l format -d "Catalog format"
+complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from export" -l output -d "Output catalog path"
+complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from import" -l input -d "Input catalog path"
+complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from import" -l dry-run -d "Report changes without writing"
 complete -c modfetch -n "__fish_seen_subcommand_from dedupe" -l mode -d "hardlink|symlink"
 complete -c modfetch -n "__fish_seen_subcommand_from dedupe" -l dry-run -d "Show dedupe changes without modifying files"
 # batch import flags
