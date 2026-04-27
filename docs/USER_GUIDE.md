@@ -4,6 +4,7 @@ This guide walks you through configuration, common workflows, and tips to get th
 
 - Build: `make build` (produces `./bin/modfetch`)
 - Config file path can be passed with `--config` or via the environment variable `MODFETCH_CONFIG`.
+- Current release: v0.6.3. The examples below include the Hugging Face shorthand URI form fixed in v0.6.3.
 
 ## Configure
 
@@ -54,7 +55,11 @@ modfetch download --config ~/.config/modfetch/config.yml \
 For Hugging Face / CivitAI resolvers:
 
 modfetch download --config ~/.config/modfetch/config.yml \
+  --url 'hf://gpt2/README.md?rev=main'
+modfetch download --config ~/.config/modfetch/config.yml \
   --url 'hf://org/repo/path/to/file?rev=main'
+modfetch download --config ~/.config/modfetch/config.yml \
+  --url 'hf://org/repo?rev=main&quant=Q4_K_M'
 modfetch download --config ~/.config/modfetch/config.yml \
   --url 'civitai://model/123456?file=myfile.safetensors'
 
@@ -165,4 +170,3 @@ See the full TUI guide: docs/TUI_GUIDE.md
 - Put ./bin on PATH for convenience:
 
 export PATH="$PWD/bin:$PATH"
-

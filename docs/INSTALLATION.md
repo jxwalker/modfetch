@@ -48,13 +48,13 @@ sudo cp bin/modfetch /usr/local/bin/
 ## Platform-Specific Instructions
 
 ### macOS
-- **Homebrew** (coming soon): `brew install jxwalker/tap/modfetch`
+- **One-line installer**: recommended until a Homebrew tap is published.
 - **Manual**: Use `modfetch_darwin_universal` for best compatibility
 
 ### Linux
 - **Ubuntu/Debian**: One-liner installer handles all dependencies
 - **CentOS/RHEL**: Ensure `curl` and `tar` are installed first
-- **Arch Linux**: AUR package coming soon
+- **Arch Linux**: Use the one-line installer or manual release binary until an AUR package is published.
 
 ## Configuration
 

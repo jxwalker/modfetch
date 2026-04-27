@@ -87,6 +87,10 @@ modfetch download --url URL [OPTIONS]
 - `--extract` - Extract `.zip`, `.tar`, `.tar.gz`, `.tgz`, or `.7z` archives after download. 7z archives require `7zz`, `7z`, or `7za` on `PATH`.
 - `--extract-dir PATH` - Directory for extracted archive contents
 - `--batch-parallel N` - Concurrent downloads in batch mode
+- `--no-resume` - Remove staged partial data and start fresh
+- `--force` - Skip SHA256 verification even when a hash is provided
+- `--quant NAME` - Select a Hugging Face quantization to download
+- `--list-quants` - List available Hugging Face quantizations and exit
 - `--dry-run` - Preview download without actually downloading
 - `--summary-json` - Output JSON summary instead of human-readable
 - `--quiet` - Suppress human-readable output (keeps errors)
@@ -98,7 +102,8 @@ modfetch download --url URL [OPTIONS]
 # Direct HTTPS
 modfetch download --url 'https://example.com/model.safetensors'
 
-# HuggingFace (requires HF_TOKEN for private repos)
+# Hugging Face (requires HF_TOKEN for private repos)
+modfetch download --url 'hf://gpt2/README.md?rev=main'
 modfetch download --url 'hf://TheBloke/Llama-2-7B-GGUF/llama-2-7b.Q4_K_M.gguf?rev=main'
 
 # CivitAI (requires CIVITAI_TOKEN for restricted content)
@@ -423,26 +428,37 @@ https://example.com/files/model.bin?query=param
 
 ---
 
-### HuggingFace (hf://)
+### Hugging Face (hf://)
 
 **Format:**
 ```
+hf://repo-alias?rev=REVISION
+hf://repo-alias/ROOT_FILE?rev=REVISION
 hf://org/repo/path/to/file?rev=REVISION
+hf://org/repo?rev=REVISION&quant=QUANTIZATION
 ```
 
 **Components:**
+- `repo-alias` - Single-name public repository, for example `gpt2`; supports repo-only URIs and root-level files
 - `org` - Organization or username
 - `repo` - Repository name
 - `path/to/file` - File path within repo
 - `rev` - Git revision (branch, tag, or commit SHA)
+- `quant` - Optional quantization selector, for example `Q4_K_M`
+
+Nested file paths require the explicit `org/repo/path/to/file` form.
 
 **Examples:**
 ```bash
 # Latest from main
+hf://gpt2/README.md?rev=main
 hf://TheBloke/Llama-2-7B-GGUF/llama-2-7b.Q4_K_M.gguf
 
 # Specific revision
 hf://TheBloke/Llama-2-7B-GGUF/llama-2-7b.Q4_K_M.gguf?rev=main
+
+# Quantized artifact selection
+hf://owner/repo?rev=main&quant=Q4_K_M
 
 # Specific commit
 hf://meta/llama-2-7b/model.safetensors?rev=abc123def456

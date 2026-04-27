@@ -130,10 +130,10 @@ modfetch download --url 'https://proof.ovh.net/files/1Mb.dat'
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Download from HuggingFace
+### Download from Hugging Face
 
 ```bash
-modfetch download --url 'hf://TheBloke/Llama-2-7B-GGUF/llama-2-7b.Q4_K_M.gguf'
+modfetch download --url 'hf://gpt2/README.md?rev=main'
 ```
 
 ### Download from CivitAI
@@ -171,7 +171,7 @@ modfetch tui
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║  modfetch v0.6.0                    Tab: [0] All                          ║
+║  modfetch v0.6.3                    Tab: [0] All                          ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
 ║  Summary                                                                  ║
 ║  ┌──────────────────────────────────────────────────────────────────────┐║
@@ -226,7 +226,7 @@ modfetch tui
    ┌────────────────────────────────────────┐
    │ New Download                           │
    ├────────────────────────────────────────┤
-   │ URL: hf://TheBloke/Llama-2-7B-GGUF/.. │
+   │ URL: hf://gpt2/README.md?rev=main     │
    │                                        │
    │ Enter/Tab: Continue  Esc: Cancel       │
    └────────────────────────────────────────┘
@@ -237,8 +237,8 @@ modfetch tui
    ┌────────────────────────────────────────┐
    │ New Download                           │
    ├────────────────────────────────────────┤
-   │ URL: hf://TheBloke/Llama-2-7B-GGUF/.. │
-   │ Dest: ~/Downloads/modfetch/llama-2-7b..│
+   │ URL: hf://gpt2/README.md?rev=main     │
+   │ Dest: ~/Downloads/modfetch/README.md  │
    │                                        │
    │ Enter: Start  Esc: Cancel              │
    └────────────────────────────────────────┘
@@ -281,7 +281,7 @@ The **Library** tab lets you browse, search, and organize all your downloaded mo
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║  modfetch v0.6.0                    Tab: [5] Library                      ║
+║  modfetch v0.6.3                    Tab: [5] Library                      ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
 ║  Model Library                      Showing: 1 of 1 models                ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
@@ -420,8 +420,8 @@ Create a batch file for multiple downloads:
 ```yaml
 # jobs.yml
 items:
-  - url: hf://TheBloke/Llama-2-7B-GGUF/llama-2-7b.Q4_K_M.gguf
-    dest: llama-2-7b.gguf
+  - url: hf://gpt2/README.md?rev=main
+    dest: gpt2-readme.md
 
   - url: civitai://model/123456
     dest: sdxl-model.safetensors
@@ -448,7 +448,7 @@ modfetch verify --scan-dir ~/models --safetensors-deep
 modfetch clean --days 7
 
 # Dry-run (preview without downloading)
-modfetch download --url 'hf://...' --dry-run
+modfetch download --url 'hf://gpt2/README.md?rev=main' --dry-run
 
 # JSON output for scripting
 modfetch download --url 'https://...' --summary-json
@@ -550,7 +550,8 @@ Save this for easy reference:
 │  ?      Help                        q    Quit           │
 │                                                          │
 │  URLs                                                    │
-│  hf://org/repo/file?rev=main        HuggingFace         │
+│  hf://repo/file?rev=main            Hugging Face        │
+│  hf://org/repo/file?rev=main        Hugging Face        │
 │  civitai://model/ID                 CivitAI             │
 │  https://example.com/file           Direct URL          │
 └──────────────────────────────────────────────────────────┘

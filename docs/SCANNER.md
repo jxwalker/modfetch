@@ -429,9 +429,9 @@ if err := db.UpsertMetadata(meta); err != nil {
 
 **Future enhancement:** Parallel scanning with worker pool:
 ```go
-// Planned: Concurrent scanning with worker pool
+// Sketch: concurrent scanning with a worker pool
 func (s *Scanner) ScanDirectoriesConcurrent(dirs []string, workers int) (*ScanResult, error) {
-    // Implementation TBD
+    // Future enhancement; current scanner is intentionally sequential.
 }
 ```
 
