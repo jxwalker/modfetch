@@ -24,6 +24,8 @@
 - [Library Guide](docs/LIBRARY.md) - Browse and organize your models
 - [User Guide](docs/USER_GUIDE.md) - Full feature reference
 - [Configuration](docs/CONFIG.md) - Config file options
+- [Installation Guide](docs/INSTALLATION.md) - Install with Homebrew, one-line installer, or release binaries
+- [Release Checklist](docs/RELEASE.md) - Maintainer checklist for tags, artifacts, and package updates
 
 ---
 
@@ -191,7 +193,21 @@ Download from [Releases](https://github.com/jxwalker/modfetch/releases):
 <details>
 <summary><b>🍺 Homebrew / Package Managers</b></summary>
 
-Homebrew and distro packages are not published yet. Use the one-line installer or download binaries from GitHub Releases for now.
+Install with Homebrew on macOS or Linuxbrew:
+
+```bash
+brew tap jxwalker/tap
+brew install jxwalker/tap/modfetch
+```
+
+Upgrade later with:
+
+```bash
+brew update
+brew upgrade jxwalker/tap/modfetch
+```
+
+The formula installs the published GitHub Release binary and verifies its SHA256 checksum.
 </details>
 
 <details>
