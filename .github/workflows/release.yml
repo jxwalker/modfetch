@@ -89,6 +89,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: dist
+      - name: Extract release notes
+        run: |
+          scripts/release-notes.sh "${GITHUB_REF_NAME}" > release_notes.md
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -96,5 +99,6 @@ jobs:
           name: ${{ github.ref_name }}
           draft: false
           prerelease: false
+          body_path: release_notes.md
           # Single glob to avoid double-matching .sha256 files which caused duplicate uploads
           files: dist/**/modfetch_*
