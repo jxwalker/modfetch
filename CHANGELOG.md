@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v0.6.3 — 2026-04-27
+
+Fixes
+- Fixed Hugging Face shorthand alias downloads such as `hf://gpt2/README.md?rev=main`.
+- Preserved canonical namespaced repo parsing for dotted repository names such as `hf://acme/model.v1`.
+
+Docs
+- Clarified Hugging Face resolver forms for repo-only and optional-path URIs.
+
 ## v0.6.2 — 2026-04-26
 
 Added
