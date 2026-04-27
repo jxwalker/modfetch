@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jxwalker/modfetch/internal/config"
@@ -63,6 +65,52 @@ func TestHandleLibraryExportImport(t *testing.T) {
 	}
 	if meta.ModelName != "CLI Model" || !meta.Favorite {
 		t.Fatalf("unexpected imported metadata: %+v", meta)
+	}
+}
+
+func TestHandleLibraryImportJSONReturnsErrorOnConflicts(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := writeLibraryConfig(t, filepath.Join(dir, "cfg"))
+	db, err := state.Open(&config.Config{General: config.General{
+		DataRoot:     filepath.Join(dir, "cfg", "data"),
+		DownloadRoot: filepath.Join(dir, "cfg", "downloads"),
+	}})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.UpsertMetadata(&state.ModelMetadata{
+		DownloadURL: "https://example.com/existing.gguf",
+		Dest:        "/models/shared.gguf",
+		ModelName:   "Existing",
+	}); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close db: %v", err)
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"app":             "modfetch",
+		"catalog_version": 1,
+		"models": []map[string]any{{
+			"metadata": map[string]any{
+				"download_url": "https://example.com/incoming.gguf",
+				"dest":         "/models/shared.gguf",
+				"model_name":   "Incoming",
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalogPath := filepath.Join(dir, "conflict.json")
+	if err := os.WriteFile(catalogPath, payload, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err = handleLibrary(context.Background(), []string{"import", "--config", cfgPath, "--input", catalogPath, "--json"})
+	if err == nil || !strings.Contains(err.Error(), "conflict") {
+		t.Fatalf("expected JSON import conflict error, got %v", err)
 	}
 }
 

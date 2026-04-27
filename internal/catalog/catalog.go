@@ -1,7 +1,6 @@
 package catalog
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -78,20 +77,14 @@ func Build(db *state.DB) (*Catalog, error) {
 		return nil, fmt.Errorf("list downloads: %w", err)
 	}
 	byURLDest := map[string]state.DownloadRow{}
-	byURL := map[string]state.DownloadRow{}
 	for _, row := range downloads {
 		byURLDest[downloadKey(row.URL, row.Dest)] = row
-		if _, ok := byURL[row.URL]; !ok {
-			byURL[row.URL] = row
-		}
 	}
 
 	entries := make([]CatalogEntry, 0, len(metadataRows))
 	for _, meta := range metadataRows {
 		entry := CatalogEntry{Metadata: meta}
 		if row, ok := byURLDest[downloadKey(meta.DownloadURL, meta.Dest)]; ok {
-			entry.Download = snapshotDownload(row)
-		} else if row, ok := byURL[meta.DownloadURL]; ok {
 			entry.Download = snapshotDownload(row)
 		}
 		entries = append(entries, entry)
@@ -130,10 +123,22 @@ func Import(db *state.DB, r io.Reader, opts ImportOptions) (*ImportResult, error
 	for _, row := range existingDownloads {
 		downloadsByKey[downloadKey(row.URL, row.Dest)] = row
 	}
+	existingMetadata, err := db.ListMetadata(state.MetadataFilters{})
+	if err != nil {
+		return nil, fmt.Errorf("list metadata: %w", err)
+	}
+	metadataByURL := map[string]state.ModelMetadata{}
+	metadataByDest := map[string]state.ModelMetadata{}
+	for _, meta := range existingMetadata {
+		metadataByURL[meta.DownloadURL] = meta
+		if meta.Dest != "" {
+			metadataByDest[meta.Dest] = meta
+		}
+	}
 
 	result := &ImportResult{DryRun: opts.DryRun}
 	for _, entry := range cat.Models {
-		action := importOne(db, downloadsByKey, entry, opts)
+		action := importOne(db, downloadsByKey, metadataByURL, metadataByDest, entry, opts)
 		result.Entries = append(result.Entries, action)
 		switch action.Action {
 		case "create":
@@ -149,7 +154,7 @@ func Import(db *state.DB, r io.Reader, opts ImportOptions) (*ImportResult, error
 	return result, nil
 }
 
-func importOne(db *state.DB, downloadsByKey map[string]state.DownloadRow, entry CatalogEntry, opts ImportOptions) ImportEntryResult {
+func importOne(db *state.DB, downloadsByKey map[string]state.DownloadRow, metadataByURL, metadataByDest map[string]state.ModelMetadata, entry CatalogEntry, opts ImportOptions) ImportEntryResult {
 	meta := entry.Metadata
 	res := ImportEntryResult{DownloadURL: meta.DownloadURL, Dest: meta.Dest}
 	if meta.DownloadURL == "" {
@@ -157,29 +162,31 @@ func importOne(db *state.DB, downloadsByKey map[string]state.DownloadRow, entry 
 		res.Reason = "metadata download_url is required"
 		return res
 	}
-	if meta.Dest != "" {
-		byDest, err := db.GetMetadataByDest(meta.Dest)
-		if err != nil {
+	if entry.Download != nil {
+		if entry.Download.URL != "" && entry.Download.URL != meta.DownloadURL {
 			res.Action = "conflict"
-			res.Reason = fmt.Sprintf("lookup destination: %v", err)
+			res.Reason = fmt.Sprintf("download snapshot URL %s does not match metadata URL", entry.Download.URL)
 			return res
 		}
-		if byDest != nil && byDest.DownloadURL != meta.DownloadURL {
+		if meta.Dest != "" && entry.Download.Dest != "" && entry.Download.Dest != meta.Dest {
+			res.Action = "conflict"
+			res.Reason = fmt.Sprintf("download snapshot destination %s does not match metadata destination", entry.Download.Dest)
+			return res
+		}
+	}
+	if meta.Dest != "" {
+		byDest, ok := metadataByDest[meta.Dest]
+		if ok && byDest.DownloadURL != meta.DownloadURL {
 			res.Action = "conflict"
 			res.Reason = fmt.Sprintf("destination already belongs to %s", byDest.DownloadURL)
 			return res
 		}
 	}
 
-	existing, err := db.GetMetadata(meta.DownloadURL)
-	if err != nil && err != sql.ErrNoRows {
-		res.Action = "conflict"
-		res.Reason = fmt.Sprintf("lookup metadata: %v", err)
-		return res
-	}
-	if err == sql.ErrNoRows {
+	existing, found := metadataByURL[meta.DownloadURL]
+	if !found {
 		res.Action = "create"
-	} else if metadataEqual(*existing, meta) && downloadEqual(downloadsByKey, entry) {
+	} else if metadataEqual(existing, meta) && downloadEqual(downloadsByKey, entry) {
 		res.Action = "skip"
 		return res
 	} else {
@@ -194,6 +201,10 @@ func importOne(db *state.DB, downloadsByKey map[string]state.DownloadRow, entry 
 		res.Reason = fmt.Sprintf("upsert metadata: %v", err)
 		return res
 	}
+	metadataByURL[meta.DownloadURL] = meta
+	if meta.Dest != "" {
+		metadataByDest[meta.Dest] = meta
+	}
 	if entry.Download != nil && entry.Download.URL != "" && entry.Download.Dest != "" {
 		row := state.DownloadRow{
 			URL:            entry.Download.URL,
@@ -204,7 +215,11 @@ func importOne(db *state.DB, downloadsByKey map[string]state.DownloadRow, entry 
 			Status:         entry.Download.Status,
 		}
 		if row.Status == "" {
-			row.Status = "imported"
+			if existingRow, ok := downloadsByKey[downloadKey(row.URL, row.Dest)]; ok {
+				row.Status = existingRow.Status
+			} else {
+				row.Status = "imported"
+			}
 		}
 		if err := db.UpsertDownload(row); err != nil {
 			res.Action = "conflict"
@@ -235,10 +250,11 @@ func downloadEqual(downloadsByKey map[string]state.DownloadRow, entry CatalogEnt
 	if !ok {
 		return false
 	}
+	statusMatches := entry.Download.Status == "" || row.Status == entry.Download.Status
 	return row.ExpectedSHA256 == entry.Download.ExpectedSHA256 &&
 		row.ActualSHA256 == entry.Download.ActualSHA256 &&
 		row.Size == entry.Download.Size &&
-		row.Status == entry.Download.Status
+		statusMatches
 }
 
 func metadataEqual(a, b state.ModelMetadata) bool {

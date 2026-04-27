@@ -148,6 +148,80 @@ func TestImportReportsDestinationConflict(t *testing.T) {
 	}
 }
 
+func TestImportRejectsMismatchedDownloadSnapshot(t *testing.T) {
+	db := testDB(t)
+	cat := Catalog{
+		App:            "modfetch",
+		CatalogVersion: Version,
+		Models: []CatalogEntry{{
+			Metadata: state.ModelMetadata{
+				DownloadURL: "https://example.com/model.gguf",
+				Dest:        "/models/model.gguf",
+				ModelName:   "Model",
+			},
+			Download: &DownloadSnapshot{
+				URL:    "https://example.com/other.gguf",
+				Dest:   "/models/model.gguf",
+				Status: "completed",
+			},
+		}},
+	}
+	result, err := Import(db, bytes.NewReader(encodeCatalog(t, cat)), ImportOptions{})
+	if err != nil {
+		t.Fatalf("import mismatch catalog: %v", err)
+	}
+	if result.Conflicts != 1 || result.Entries[0].Action != "conflict" {
+		t.Fatalf("expected snapshot mismatch conflict, got %+v", result)
+	}
+}
+
+func TestImportEmptySnapshotStatusPreservesExistingDownloadStatus(t *testing.T) {
+	db := testDB(t)
+	meta := state.ModelMetadata{
+		DownloadURL: "https://example.com/model.gguf",
+		Dest:        "/models/model.gguf",
+		ModelName:   "Model",
+	}
+	if err := db.UpsertMetadata(&meta); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+	if err := db.UpsertDownload(state.DownloadRow{
+		URL:    meta.DownloadURL,
+		Dest:   meta.Dest,
+		Size:   10,
+		Status: "completed",
+	}); err != nil {
+		t.Fatalf("seed download: %v", err)
+	}
+	meta.ModelName = "Model Updated"
+	cat := Catalog{
+		App:            "modfetch",
+		CatalogVersion: Version,
+		Models: []CatalogEntry{{
+			Metadata: meta,
+			Download: &DownloadSnapshot{
+				URL:  meta.DownloadURL,
+				Dest: meta.Dest,
+				Size: 10,
+			},
+		}},
+	}
+	result, err := Import(db, bytes.NewReader(encodeCatalog(t, cat)), ImportOptions{})
+	if err != nil {
+		t.Fatalf("import empty-status catalog: %v", err)
+	}
+	if result.Updates != 1 {
+		t.Fatalf("expected update, got %+v", result)
+	}
+	rows, err := db.ListDownloads()
+	if err != nil {
+		t.Fatalf("list downloads: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Status != "completed" {
+		t.Fatalf("expected existing status to be preserved, got %+v", rows)
+	}
+}
+
 func encodeCatalog(t *testing.T, cat Catalog) []byte {
 	t.Helper()
 	payload, err := json.Marshal(cat)

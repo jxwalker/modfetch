@@ -87,7 +87,13 @@ func handleLibraryImport(ctx context.Context, args []string) error {
 	if *common.jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(result)
+		if err := enc.Encode(result); err != nil {
+			return err
+		}
+		if result.Conflicts > 0 {
+			return fmt.Errorf("catalog import has %d conflict(s)", result.Conflicts)
+		}
+		return nil
 	}
 	fmt.Printf("Import summary: creates=%d updates=%d skips=%d conflicts=%d dry_run=%t\n",
 		result.Creates, result.Updates, result.Skips, result.Conflicts, result.DryRun)
