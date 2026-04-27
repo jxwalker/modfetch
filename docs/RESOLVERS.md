@@ -3,7 +3,7 @@
 This guide documents the resolver URI formats and configurable naming patterns.
 
 Supported schemes
-- Hugging Face: `hf://{owner}/{repo}/{path}?rev=main`
+- Hugging Face: `hf://{repo-alias}[/{file}]?rev=main` or `hf://{owner}/{repo}[/{path}]?rev=main`
 - CivitAI: `civitai://model/{id}[?version=ID][&file=substring]`
 
 Configurable naming patterns
@@ -92,4 +92,3 @@ Notes
 - Tokens must be provided via environment variables. Do not hardcode secrets in YAML.
 - The chunked downloader uses these headers for HEAD and ranged GET requests.
 - For testing only, an internal override is available to swap the CivitAI API base URL.
-

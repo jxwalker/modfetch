@@ -68,6 +68,32 @@ var preferredQuantizations = []string{
 	"Q3_K_L", "Q3_K_S", "Q2_K", "bf16", "fp32", "F32",
 }
 
+var hfAliasFileExtensions = map[string]struct{}{
+	".bin":         {},
+	".ckpt":        {},
+	".gguf":        {},
+	".json":        {},
+	".md":          {},
+	".model":       {},
+	".onnx":        {},
+	".pkl":         {},
+	".pt":          {},
+	".pth":         {},
+	".safetensors": {},
+	".txt":         {},
+	".yaml":        {},
+	".yml":         {},
+}
+
+var hfAliasFileNames = map[string]struct{}{
+	".gitattributes": {},
+	".gitignore":     {},
+	"dockerfile":     {},
+	"license":        {},
+	"notice":         {},
+	"readme":         {},
+}
+
 // Accepts URIs of the form:
 //
 //	hf://{owner}/{repo}/{path}?rev=main&quant={quantization}
@@ -76,6 +102,53 @@ var preferredQuantizations = []string{
 // If quant is specified, selects that specific quantization variant.
 // If path points to a directory or is omitted, will list and detect quantizations.
 func (h *HuggingFace) CanHandle(u string) bool { return strings.HasPrefix(u, "hf://") }
+
+func parseHFPath(rawPath string) (owner, repo, repoID, filePath string, err error) {
+	parts := splitHFPath(rawPath)
+	if len(parts) == 0 {
+		return "", "", "", "", errors.New("hf uri must be hf://repo[/file] or hf://owner/repo[/path]")
+	}
+	if len(parts) == 1 {
+		repo = parts[0]
+		return "", repo, repo, "", nil
+	}
+
+	owner = parts[0]
+	repo = parts[1]
+	repoID = owner + "/" + repo
+	if len(parts) > 2 {
+		filePath = path.Join(parts[2:]...)
+	}
+	return owner, repo, repoID, filePath, nil
+}
+
+func aliasFilePath(rawPath string) (repo, filePath string, ok bool) {
+	parts := splitHFPath(rawPath)
+	if len(parts) != 2 || !looksLikeHFAliasFile(parts[1]) {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
+func looksLikeHFAliasFile(segment string) bool {
+	base := strings.ToLower(path.Base(strings.TrimSpace(segment)))
+	if _, ok := hfAliasFileNames[base]; ok {
+		return true
+	}
+	_, ok := hfAliasFileExtensions[path.Ext(base)]
+	return ok
+}
+
+func splitHFPath(rawPath string) []string {
+	rawParts := strings.Split(rawPath, "/")
+	parts := make([]string, 0, len(rawParts))
+	for _, part := range rawParts {
+		if part = strings.TrimSpace(part); part != "" {
+			parts = append(parts, part)
+		}
+	}
+	return parts
+}
 
 // listRepoFiles fetches the file tree from HuggingFace API.
 func (h *HuggingFace) listRepoFiles(ctx context.Context, repoID, rev string, headers map[string]string) ([]hfRepoFile, error) {
@@ -240,21 +313,9 @@ func (h *HuggingFace) Resolve(ctx context.Context, uri string, cfg *config.Confi
 	} else {
 		rawPath = s
 	}
-	parts := strings.Split(rawPath, "/")
-	if len(parts) < 2 {
-		return nil, errors.New("hf uri must be hf://owner/repo or hf://owner/repo/path")
-	}
-	var owner, repo string
-	var filePath string
-	if len(parts) == 2 {
-		// hf://owner/repo - need to list files
-		owner = parts[0]
-		repo = parts[1]
-		filePath = ""
-	} else {
-		owner = parts[0]
-		repo = parts[1]
-		filePath = path.Join(parts[2:]...)
+	owner, repo, repoID, filePath, err := parseHFPath(rawPath)
+	if err != nil {
+		return nil, err
 	}
 
 	// Parse query parameters
@@ -267,9 +328,6 @@ func (h *HuggingFace) Resolve(ctx context.Context, uri string, cfg *config.Confi
 		}
 		requestedQuant = q.Get("quant")
 	}
-
-	// Construct repo ID
-	repoID := owner + "/" + repo
 
 	// Prepare headers (auth)
 	headers := map[string]string{}
@@ -286,27 +344,15 @@ func (h *HuggingFace) Resolve(ctx context.Context, uri string, cfg *config.Confi
 
 	// If specific file path given and no quant requested, use direct resolution (backward compatible)
 	if filePath != "" && !needsQuantDetection {
-		base := hfBaseURL + "/" + repoID
-		resURL := base + "/resolve/" + url.PathEscape(rev) + "/" + strings.ReplaceAll(filePath, "+", "%2B")
-
-		fileName := path.Base(filePath)
-		suggested := h.computeSuggestedFilename(cfg, owner, repo, filePath, rev, fileName, "")
-
-		return &Resolved{
-			URL:               resURL,
-			Headers:           headers,
-			FileName:          fileName,
-			SuggestedFilename: suggested,
-			RepoOwner:         owner,
-			RepoName:          repo,
-			RepoPath:          filePath,
-			Rev:               rev,
-		}, nil
+		return h.resolveDirectFile(repoID, owner, repo, filePath, rev, headers, cfg), nil
 	}
 
 	// List files and detect quantizations
 	files, err := h.listRepoFiles(ctx, repoID, rev, headers)
 	if err != nil {
+		if aliasRepo, aliasPath, ok := aliasFilePath(rawPath); ok {
+			return h.resolveDirectFile(aliasRepo, "", aliasRepo, aliasPath, rev, headers, cfg), nil
+		}
 		return nil, fmt.Errorf("list repo files: %w", err)
 	}
 
@@ -347,6 +393,25 @@ func (h *HuggingFace) Resolve(ctx context.Context, uri string, cfg *config.Confi
 		AvailableQuantizations: allQuants,
 		SelectedQuantization:   selected.Name,
 	}, nil
+}
+
+func (h *HuggingFace) resolveDirectFile(repoID, owner, repo, filePath, rev string, headers map[string]string, cfg *config.Config) *Resolved {
+	base := hfBaseURL + "/" + repoID
+	resURL := base + "/resolve/" + url.PathEscape(rev) + "/" + strings.ReplaceAll(filePath, "+", "%2B")
+
+	fileName := path.Base(filePath)
+	suggested := h.computeSuggestedFilename(cfg, owner, repo, filePath, rev, fileName, "")
+
+	return &Resolved{
+		URL:               resURL,
+		Headers:           headers,
+		FileName:          fileName,
+		SuggestedFilename: suggested,
+		RepoOwner:         owner,
+		RepoName:          repo,
+		RepoPath:          filePath,
+		Rev:               rev,
+	}
 }
 
 // computeSuggestedFilename computes the suggested filename using naming pattern.

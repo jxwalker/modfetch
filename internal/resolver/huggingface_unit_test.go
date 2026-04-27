@@ -125,6 +125,176 @@ func TestHuggingFaceResolveWithLocalTreeAndNamingPattern(t *testing.T) {
 	}
 }
 
+func TestHuggingFaceResolveSingleSegmentRepoAliasWithLocalTree(t *testing.T) {
+	oldBase := hfBaseURL
+	defer func() { hfBaseURL = oldBase }()
+
+	var handlerErr atomic.Value
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/models/gpt2/tree/main" {
+			handlerErr.Store(fmt.Sprintf("unexpected path: %s", r.URL.Path))
+			http.Error(w, "unexpected path", http.StatusNotFound)
+			return
+		}
+		files := []hfRepoFile{
+			{Path: "pytorch_model.bin", Type: "file", Size: 42},
+		}
+		if err := json.NewEncoder(w).Encode(files); err != nil {
+			handlerErr.Store(fmt.Sprintf("encode files: %v", err))
+			return
+		}
+	}))
+	defer server.Close()
+	hfBaseURL = server.URL
+
+	res, err := (&HuggingFace{}).Resolve(context.Background(), "hf://gpt2", nil)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if v := handlerErr.Load(); v != nil {
+		t.Fatal(v)
+	}
+	if res.URL != server.URL+"/gpt2/resolve/main/pytorch_model.bin" {
+		t.Fatalf("unexpected resolve URL: %s", res.URL)
+	}
+	if res.RepoOwner != "" || res.RepoName != "gpt2" || res.RepoPath != "pytorch_model.bin" {
+		t.Fatalf("unexpected repo metadata: %+v", res)
+	}
+}
+
+func TestHuggingFacePathParsingPrefersNamespacedRepos(t *testing.T) {
+	tests := []struct {
+		name         string
+		rawPath      string
+		wantOwner    string
+		wantRepo     string
+		wantRepoID   string
+		wantFilePath string
+	}{
+		{
+			name:       "namespaced repo with dotted name",
+			rawPath:    "owner/model.v1",
+			wantOwner:  "owner",
+			wantRepo:   "model.v1",
+			wantRepoID: "owner/model.v1",
+		},
+		{
+			name:         "namespaced repo file path",
+			rawPath:      "owner/model.v1/README.md",
+			wantOwner:    "owner",
+			wantRepo:     "model.v1",
+			wantRepoID:   "owner/model.v1",
+			wantFilePath: "README.md",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			owner, repo, repoID, filePath, err := parseHFPath(tc.rawPath)
+			if err != nil {
+				t.Fatalf("parseHFPath: %v", err)
+			}
+			if owner != tc.wantOwner || repo != tc.wantRepo || repoID != tc.wantRepoID || filePath != tc.wantFilePath {
+				t.Fatalf("unexpected parse: owner=%q repo=%q repoID=%q filePath=%q", owner, repo, repoID, filePath)
+			}
+		})
+	}
+}
+
+func TestHuggingFaceResolveDottedNamespacedRepo(t *testing.T) {
+	oldBase := hfBaseURL
+	defer func() { hfBaseURL = oldBase }()
+
+	var handlerErr atomic.Value
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/models/acme/model.v1/tree/main" {
+			handlerErr.Store(fmt.Sprintf("unexpected path: %s", r.URL.Path))
+			http.Error(w, "unexpected path", http.StatusNotFound)
+			return
+		}
+		files := []hfRepoFile{
+			{Path: "model.Q4_K_M.gguf", Type: "file", Size: 42},
+		}
+		if err := json.NewEncoder(w).Encode(files); err != nil {
+			handlerErr.Store(fmt.Sprintf("encode files: %v", err))
+			return
+		}
+	}))
+	defer server.Close()
+	hfBaseURL = server.URL
+
+	res, err := (&HuggingFace{}).Resolve(context.Background(), "hf://acme/model.v1?rev=main", nil)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if v := handlerErr.Load(); v != nil {
+		t.Fatal(v)
+	}
+	if res.URL != server.URL+"/acme/model.v1/resolve/main/model.Q4_K_M.gguf" {
+		t.Fatalf("unexpected resolve URL: %s", res.URL)
+	}
+	if res.RepoOwner != "acme" || res.RepoName != "model.v1" || res.RepoPath != "model.Q4_K_M.gguf" {
+		t.Fatalf("unexpected repo metadata: %+v", res)
+	}
+}
+
+func TestHuggingFaceAliasFileFallback(t *testing.T) {
+	oldBase := hfBaseURL
+	defer func() { hfBaseURL = oldBase }()
+
+	var sawCanonicalAttempt atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/models/gpt2/README.md/tree/main" {
+			sawCanonicalAttempt.Store(true)
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "unexpected path", http.StatusNotFound)
+	}))
+	defer server.Close()
+	hfBaseURL = server.URL
+
+	res, err := (&HuggingFace{}).Resolve(context.Background(), "hf://gpt2/README.md?rev=main", nil)
+	if err != nil {
+		t.Fatalf("Resolve direct file alias: %v", err)
+	}
+	if !sawCanonicalAttempt.Load() {
+		t.Fatal("expected canonical owner/repo tree lookup before alias fallback")
+	}
+	if res.URL != server.URL+"/gpt2/resolve/main/README.md" {
+		t.Fatalf("unexpected resolve URL: %s", res.URL)
+	}
+	if res.RepoOwner != "" || res.RepoName != "gpt2" || res.RepoPath != "README.md" {
+		t.Fatalf("unexpected repo metadata: %+v", res)
+	}
+}
+
+func TestHuggingFaceAliasFileFallbackSupportsExtensionlessFiles(t *testing.T) {
+	oldBase := hfBaseURL
+	defer func() { hfBaseURL = oldBase }()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/models/gpt2/LICENSE/tree/main" {
+			http.Error(w, "unexpected path", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+	hfBaseURL = server.URL
+
+	res, err := (&HuggingFace{}).Resolve(context.Background(), "hf://gpt2/LICENSE?rev=main", nil)
+	if err != nil {
+		t.Fatalf("Resolve direct file alias: %v", err)
+	}
+	if res.URL != server.URL+"/gpt2/resolve/main/LICENSE" {
+		t.Fatalf("unexpected resolve URL: %s", res.URL)
+	}
+	if res.RepoOwner != "" || res.RepoName != "gpt2" || res.RepoPath != "LICENSE" {
+		t.Fatalf("unexpected repo metadata: %+v", res)
+	}
+}
+
 func TestHuggingFaceResolveLocalTreeErrors(t *testing.T) {
 	oldBase := hfBaseURL
 	defer func() { hfBaseURL = oldBase }()
@@ -158,5 +328,30 @@ func TestHuggingFaceDirectFileResolutionAndSuggestedFilename(t *testing.T) {
 	}
 	if res.SuggestedFilename != "acme_tiny_dev_model-v1.gguf" {
 		t.Fatalf("unexpected suggested filename: %q", res.SuggestedFilename)
+	}
+}
+
+func TestHuggingFaceDirectFileResolutionForSingleSegmentRepoAlias(t *testing.T) {
+	oldBase := hfBaseURL
+	defer func() { hfBaseURL = oldBase }()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+	hfBaseURL = server.URL
+
+	res, err := (&HuggingFace{}).Resolve(context.Background(), "hf://gpt2/README.md?rev=main", nil)
+	if err != nil {
+		t.Fatalf("Resolve direct file: %v", err)
+	}
+	if res.URL != server.URL+"/gpt2/resolve/main/README.md" {
+		t.Fatalf("unexpected resolve URL: %s", res.URL)
+	}
+	if res.RepoOwner != "" || res.RepoName != "gpt2" || res.RepoPath != "README.md" {
+		t.Fatalf("unexpected repo metadata: %+v", res)
+	}
+	if res.FileName != "README.md" || res.SuggestedFilename != "README.md" {
+		t.Fatalf("unexpected file naming: %+v", res)
 	}
 }
