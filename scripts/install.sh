@@ -100,8 +100,8 @@ get_latest_version() {
         fi
         
         if [[ -z "$VERSION" ]]; then
-            warn "Could not fetch latest version, using v0.6.2 as fallback"
-            VERSION="v0.6.2"
+            warn "Could not fetch latest version, using v0.6.3 as fallback"
+            VERSION="v0.6.3"
         fi
     fi
     
