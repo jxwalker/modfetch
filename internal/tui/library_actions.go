@@ -186,7 +186,11 @@ func (m *Model) updateLibraryConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) libraryFilterValues(field string) []string {
 	seen := map[string]bool{}
-	for _, row := range m.libraryRows {
+	rows := m.libraryFilterRows
+	if len(rows) == 0 {
+		rows = m.libraryRows
+	}
+	for _, row := range rows {
 		var v string
 		switch field {
 		case "type":
@@ -455,25 +459,25 @@ func (m *Model) deleteLibraryStagedCmd(rows []state.ModelMetadata) tea.Cmd {
 			if !m.isStagedLibraryPath(row.Dest) {
 				continue
 			}
-			deleted := false
+			dbDeleted := strings.TrimSpace(row.DownloadURL) == "" || strings.TrimSpace(row.Dest) == ""
 			if strings.TrimSpace(row.DownloadURL) != "" && strings.TrimSpace(row.Dest) != "" {
 				if err := m.st.DeleteDownloadAndChunks(row.DownloadURL, row.Dest); err != nil {
 					if firstErr == nil {
 						firstErr = err
 					}
 				} else {
-					count++
-					deleted = true
+					dbDeleted = true
 				}
 			}
+			fileDeleted := true
 			if err := os.Remove(row.Dest); err != nil && !os.IsNotExist(err) {
+				fileDeleted = false
 				if firstErr == nil {
 					firstErr = err
 				}
-			} else {
-				deleted = true
 			}
-			if deleted {
+			if dbDeleted && fileDeleted {
+				count++
 				keys = append(keys, libraryKey(row))
 			}
 		}

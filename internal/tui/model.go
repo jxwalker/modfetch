@@ -167,6 +167,7 @@ type Model struct {
 	civRateLimited bool
 	// Library view state
 	libraryRows          []state.ModelMetadata
+	libraryFilterRows    []state.ModelMetadata
 	librarySelected      int
 	librarySearch        string
 	libraryViewingDetail bool
@@ -226,6 +227,7 @@ func New(cfg *config.Config, st *state.DB, version string) tea.Model {
 		placeType:  map[string]string{}, autoPlace: map[string]bool{},
 		// Library state
 		libraryRows:         []state.ModelMetadata{},
+		libraryFilterRows:   []state.ModelMetadata{},
 		librarySelectedKeys: map[string]bool{},
 		libraryNeedsRefresh: true,
 		librarySearchInput:  libSearch,

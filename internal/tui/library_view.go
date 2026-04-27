@@ -20,24 +20,38 @@ func (m *Model) refreshLibraryData() {
 	}
 	selectedKey := m.currentLibraryKey()
 
+	baseFilters := state.MetadataFilters{
+		OrderBy: "updated_at",
+		Limit:   libraryRowLimit,
+	}
+
 	// Build filters based on current library filter state
 	filters := state.MetadataFilters{
 		Source:    m.libraryFilterSource,
 		ModelType: m.libraryFilterType,
 		Favorite:  m.libraryShowFavorites,
-		OrderBy:   "updated_at", // Most recently updated first
+		OrderBy:   "updated_at",
 		Limit:     libraryRowLimit,
 	}
 
+	var baseRows []state.ModelMetadata
 	var rows []state.ModelMetadata
 	var err error
 
 	if m.librarySearch != "" {
-		// If searching, use search function
-		rows, err = m.st.SearchMetadata(m.librarySearch)
-		rows = normalizeLibraryRows(m.applyLibraryFilters(rows))
+		baseRows, err = m.st.SearchMetadata(m.librarySearch)
+		if err == nil {
+			baseRows = normalizeLibraryRows(baseRows)
+			rows = m.applyLibraryFilters(append([]state.ModelMetadata(nil), baseRows...))
+		}
 	} else {
-		// Otherwise use filtered list
+		baseRows, err = m.st.ListMetadata(baseFilters)
+		if err != nil {
+			if m.log != nil {
+				m.log.Errorf("failed to load library filter data: %v", err)
+			}
+			return
+		}
 		rows, err = m.st.ListMetadata(filters)
 	}
 
@@ -48,6 +62,7 @@ func (m *Model) refreshLibraryData() {
 		return
 	}
 
+	m.libraryFilterRows = baseRows
 	m.libraryRows = rows
 	m.libraryNeedsRefresh = false
 	m.restoreLibrarySelection(selectedKey)

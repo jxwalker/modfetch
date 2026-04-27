@@ -736,6 +736,50 @@ func TestLibrary_FilterMenuCyclesFiltersAndSearch(t *testing.T) {
 	}
 }
 
+func TestLibrary_FilterMenuValuesUseUnfilteredRows(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	models := []state.ModelMetadata{
+		{
+			DownloadURL: "https://example.com/llm.gguf",
+			ModelName:   "llama",
+			ModelType:   "LLM",
+			Source:      "huggingface",
+			Dest:        "/models/llm.gguf",
+		},
+		{
+			DownloadURL: "https://example.com/lora.safetensors",
+			ModelName:   "portrait",
+			ModelType:   "LoRA",
+			Source:      "civitai",
+			Dest:        "/models/lora.safetensors",
+		},
+	}
+	for i := range models {
+		if err := db.UpsertMetadata(&models[i]); err != nil {
+			t.Fatalf("seed metadata: %v", err)
+		}
+	}
+
+	model.libraryFilterType = "LLM"
+	model.refreshLibraryData()
+	if len(model.libraryRows) != 1 || model.libraryRows[0].ModelType != "LLM" {
+		t.Fatalf("expected active type filter to show LLM only, got %+v", model.libraryRows)
+	}
+
+	model.libraryFilterMenu = true
+	model.libraryFilterIndex = 1
+	_, _ = model.updateLibraryFilterMenu(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if model.libraryFilterType != "LoRA" {
+		t.Fatalf("expected type menu to cycle to LoRA, got %q", model.libraryFilterType)
+	}
+	if len(model.libraryRows) != 1 || model.libraryRows[0].ModelType != "LoRA" {
+		t.Fatalf("expected LoRA row after cycling type filter, got %+v", model.libraryRows)
+	}
+}
+
 func TestLibrary_FilterMenuClearResetsAllFilters(t *testing.T) {
 	model, db, cleanup := setupTestLibrary(t)
 	defer cleanup()
