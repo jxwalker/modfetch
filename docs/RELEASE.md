@@ -29,13 +29,13 @@ Use this checklist from a clean `main` checkout before tagging a modfetch releas
 ## Homebrew Tap
 
 - Update `jxwalker/homebrew-tap` after release assets are published.
-- Set the formula release token to the new tag.
+- Set the formula release string to the new tag.
 - Update SHA256 values from the published release assets.
 - Validate the tap locally:
   ```bash
   HOMEBREW_NO_AUTO_UPDATE=1 brew audit --strict --online jxwalker/tap/modfetch
   HOMEBREW_NO_AUTO_UPDATE=1 brew install jxwalker/tap/modfetch
-  modfetch version
+  "$(brew --prefix)/bin/modfetch" version
   HOMEBREW_NO_AUTO_UPDATE=1 brew test jxwalker/tap/modfetch
   HOMEBREW_NO_AUTO_UPDATE=1 brew uninstall modfetch
   ```
@@ -43,7 +43,7 @@ Use this checklist from a clean `main` checkout before tagging a modfetch releas
 
 ## Final Verification
 
-- Confirm `git status --short --branch` is clean on `main`.
-- Confirm the release tag exists on GitHub.
-- Confirm `gh release view vX.Y.Z` shows the expected assets and notes.
-- Confirm there are no stale release PRs or `codex/*` branches left open.
+- Ensure `git status --short --branch` is clean on `main`.
+- Verify the release tag exists on GitHub.
+- Inspect `gh release view vX.Y.Z` for the expected assets and notes.
+- Check there are no stale release PRs or `codex/*` branches remaining.
