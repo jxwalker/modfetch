@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -193,18 +194,32 @@ func importOne(db *state.DB, downloadsByKey map[string]state.DownloadRow, metada
 		res.Action = "update"
 	}
 
+	row, hasDownload := importDownloadRow(downloadsByKey, entry)
 	if opts.DryRun {
+		applyImportMaps(downloadsByKey, metadataByURL, metadataByDest, meta, row, hasDownload)
 		return res
 	}
-	if err := db.UpsertMetadata(&meta); err != nil {
+	err := db.WithTx(func(tx *sql.Tx) error {
+		if err := db.UpsertMetadataTx(tx, &meta); err != nil {
+			return fmt.Errorf("upsert metadata: %w", err)
+		}
+		if hasDownload {
+			if err := db.UpsertDownloadTx(tx, row); err != nil {
+				return fmt.Errorf("upsert download: %w", err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
 		res.Action = "conflict"
-		res.Reason = fmt.Sprintf("upsert metadata: %v", err)
+		res.Reason = err.Error()
 		return res
 	}
-	metadataByURL[meta.DownloadURL] = meta
-	if meta.Dest != "" {
-		metadataByDest[meta.Dest] = meta
-	}
+	applyImportMaps(downloadsByKey, metadataByURL, metadataByDest, meta, row, hasDownload)
+	return res
+}
+
+func importDownloadRow(downloadsByKey map[string]state.DownloadRow, entry CatalogEntry) (state.DownloadRow, bool) {
 	if entry.Download != nil && entry.Download.URL != "" && entry.Download.Dest != "" {
 		row := state.DownloadRow{
 			URL:            entry.Download.URL,
@@ -221,14 +236,19 @@ func importOne(db *state.DB, downloadsByKey map[string]state.DownloadRow, metada
 				row.Status = "imported"
 			}
 		}
-		if err := db.UpsertDownload(row); err != nil {
-			res.Action = "conflict"
-			res.Reason = fmt.Sprintf("upsert download: %v", err)
-			return res
-		}
+		return row, true
+	}
+	return state.DownloadRow{}, false
+}
+
+func applyImportMaps(downloadsByKey map[string]state.DownloadRow, metadataByURL, metadataByDest map[string]state.ModelMetadata, meta state.ModelMetadata, row state.DownloadRow, hasDownload bool) {
+	metadataByURL[meta.DownloadURL] = meta
+	if meta.Dest != "" {
+		metadataByDest[meta.Dest] = meta
+	}
+	if hasDownload {
 		downloadsByKey[downloadKey(row.URL, row.Dest)] = row
 	}
-	return res
 }
 
 func snapshotDownload(row state.DownloadRow) *DownloadSnapshot {

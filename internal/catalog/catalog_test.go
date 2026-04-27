@@ -119,6 +119,40 @@ func TestImportDryRunReportsCreatesWithoutWriting(t *testing.T) {
 	}
 }
 
+func TestImportDryRunSimulatesEarlierEntries(t *testing.T) {
+	db := testDB(t)
+	cat := Catalog{
+		App:            "modfetch",
+		CatalogVersion: Version,
+		Models: []CatalogEntry{
+			{
+				Metadata: state.ModelMetadata{
+					DownloadURL: "https://example.com/first.gguf",
+					Dest:        "/models/shared.gguf",
+					ModelName:   "First",
+				},
+			},
+			{
+				Metadata: state.ModelMetadata{
+					DownloadURL: "https://example.com/second.gguf",
+					Dest:        "/models/shared.gguf",
+					ModelName:   "Second",
+				},
+			},
+		},
+	}
+	result, err := Import(db, bytes.NewReader(encodeCatalog(t, cat)), ImportOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("dry-run import: %v", err)
+	}
+	if result.Creates != 1 || result.Conflicts != 1 {
+		t.Fatalf("expected dry-run to simulate destination conflict, got %+v", result)
+	}
+	if _, err := db.GetMetadata("https://example.com/first.gguf"); err == nil {
+		t.Fatal("dry-run import wrote metadata")
+	}
+}
+
 func TestImportReportsDestinationConflict(t *testing.T) {
 	db := testDB(t)
 	if err := db.UpsertMetadata(&state.ModelMetadata{

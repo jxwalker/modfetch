@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+type metadataExecer interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+}
+
 // ModelMetadata stores rich metadata about downloaded models
 type ModelMetadata struct {
 	ID int64 `json:"id"`
@@ -146,6 +150,18 @@ func (db *DB) InitMetadataTable() error {
 
 // UpsertMetadata inserts or updates model metadata
 func (db *DB) UpsertMetadata(meta *ModelMetadata) error {
+	err := upsertMetadata(db.SQL, meta)
+	if err == nil {
+		db.NotifyChange()
+	}
+	return err
+}
+
+func (db *DB) UpsertMetadataTx(tx *sql.Tx, meta *ModelMetadata) error {
+	return upsertMetadata(tx, meta)
+}
+
+func upsertMetadata(exec metadataExecer, meta *ModelMetadata) error {
 	if meta.DownloadURL == "" {
 		return fmt.Errorf("download_url is required")
 	}
@@ -208,7 +224,7 @@ func (db *DB) UpsertMetadata(meta *ModelMetadata) error {
 		user_rating=excluded.user_rating,
 		favorite=excluded.favorite`
 
-	_, err = db.SQL.Exec(stmt,
+	_, err = exec.Exec(stmt,
 		meta.DownloadURL, meta.Dest, meta.ModelName, meta.ModelID, meta.Version, meta.Source,
 		meta.Description, meta.Author, meta.AuthorURL, meta.License, string(tagsJSON),
 		meta.ModelType, meta.BaseModel, meta.Architecture, meta.ParameterCount, meta.Quantization,
@@ -218,10 +234,6 @@ func (db *DB) UpsertMetadata(meta *ModelMetadata) error {
 		meta.CreatedAt.Unix(), meta.UpdatedAt.Unix(),
 		meta.UserNotes, meta.UserRating, meta.Favorite,
 	)
-	if err == nil {
-		db.NotifyChange()
-	}
-
 	return err
 }
 
