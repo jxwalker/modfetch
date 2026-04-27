@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # Opt JavaScript actions into GitHub's Node 24 runner ahead of the Node 20 removal.
+  # See: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -81,4 +86,3 @@ jobs:
         uses: golang/govulncheck-action@v1
         with:
           go-version-file: go.mod
-
