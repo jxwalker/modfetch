@@ -306,6 +306,10 @@ modfetch place --path /path/to/model.safetensors
 
 # Batch downloads
 modfetch download --batch jobs.yml --place
+
+# Back up or migrate your model library catalog
+modfetch library export --output modfetch-catalog.json
+modfetch library import --input modfetch-catalog.json --dry-run
 ```
 
 ### Detailed Examples

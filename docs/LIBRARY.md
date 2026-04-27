@@ -12,6 +12,7 @@ The Model Library feature in modfetch provides a centralized view of all your do
 - [Filtering and Search](#filtering-and-search)
 - [Model Details](#model-details)
 - [Directory Scanning](#directory-scanning)
+- [Catalog Backup and Migration](#catalog-backup-and-migration)
 - [Metadata Sources](#metadata-sources)
 
 ## Overview
@@ -331,6 +332,27 @@ Scan complete: 15 new, 27 skipped, 0 errors
 ```
 
 The library view automatically refreshes to show newly discovered models.
+
+## Catalog Backup and Migration
+
+Use the CLI catalog commands to back up or move your library index without
+copying the SQLite state database directly.
+
+```bash
+modfetch library export --format json --output modfetch-catalog.json
+modfetch library import --input modfetch-catalog.json --dry-run
+modfetch library import --input modfetch-catalog.json
+```
+
+The JSON catalog includes:
+- schema version metadata
+- model metadata and user fields such as favorites, notes, and ratings
+- source URLs and destination paths
+- checksum, size, and status data when a matching download row exists
+
+Import dry-run reports the planned `create`, `update`, `skip`, and `conflict`
+counts without writing. Re-importing the same catalog is idempotent and reports
+unchanged entries as skips.
 
 ## Metadata Sources
 

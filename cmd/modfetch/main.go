@@ -79,6 +79,8 @@ func run(ctx context.Context, args []string) error {
 		return handleDedupe(ctx, args[1:])
 	case "batch":
 		return handleBatch(ctx, args[1:])
+	case "library":
+		return handleLibrary(ctx, args[1:])
 	case "help", "-h", "--help":
 		usage()
 		return nil
@@ -103,6 +105,8 @@ Commands:
   place             Place a file into configured app directories
   verify            Verify SHA256 of a file or all completed downloads
   tui               Open the interactive terminal dashboard
+  library export    Export model library catalog as JSON
+  library import    Import model library catalog JSON
   batch import      Import URLs from a text file and produce a YAML batch
   version           Print version
   help              Show this help

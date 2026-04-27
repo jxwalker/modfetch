@@ -13,6 +13,7 @@ Complete command-line reference for modfetch. For the visual TUI interface, see 
   - [clean](#clean)
   - [config](#config)
   - [tui](#tui)
+  - [library](#library)
 - [URL Formats](#url-formats)
 - [Examples](#examples)
 - [Scripting](#scripting)
@@ -33,6 +34,7 @@ modfetch download --url URL       # Download a file
 modfetch verify --all              # Verify all downloads
 modfetch place --path FILE         # Place model into app
 modfetch clean --days 7            # Clean old partials
+modfetch library export --output catalog.json
 modfetch config validate           # Validate config
 modfetch tui                       # Launch visual TUI
 ```
@@ -148,6 +150,31 @@ Show rows from the download state database.
 - `--summary` - Print totals
 - `--duplicates` - Group completed downloads by matching SHA256 content
 - `--json` - Emit machine-readable JSON
+
+### library
+
+Export or import the model library catalog for backup and machine migration.
+
+```bash
+# Export metadata, favorites, source URLs, destination paths, and checksums
+modfetch library export --format json --output modfetch-catalog.json
+
+# Preview an import without writing to the state database
+modfetch library import --input modfetch-catalog.json --dry-run
+
+# Import catalog entries and print a machine-readable summary
+modfetch library import --input modfetch-catalog.json --json
+```
+
+Exported catalogs include a schema version and one entry per model metadata row.
+When a matching download row exists, the catalog also carries expected and
+actual SHA256 values, file size, status, source URL, and destination path.
+
+Import is idempotent:
+- existing identical entries are reported as `skip`
+- new entries are reported as `create`
+- changed entries with the same source URL are reported as `update`
+- destination collisions with a different source URL are reported as `conflict`
 
 ### dedupe
 

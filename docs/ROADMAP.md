@@ -33,7 +33,7 @@ rewrite.
 
 ## v0.7.0 Implementation Plan
 
-### 1. Package Distribution [NEXT]
+### 1. Package Distribution [DONE]
 
 Outcome: users can install through a maintained package channel instead of only
 the curl installer or manual release binaries.
@@ -41,7 +41,8 @@ the curl installer or manual release binaries.
 - [DONE] Homebrew tap formula for macOS and Linuxbrew.
 - [DONE] Document the package install path in README and docs/INSTALLATION.md.
 - [DONE] Add release checklist coverage, so formula updates are part of tagging.
-- [TODO] Decide whether an AUR package is in scope for v0.7.0 or v0.7.x.
+- [DONE] Decide whether an AUR package is in scope for v0.7.0 or v0.7.x:
+  defer to v0.7.x after Homebrew usage settles.
 
 Acceptance checks:
 - Formula installs the latest GitHub Release artifact and verifies checksum.
@@ -49,17 +50,17 @@ Acceptance checks:
   the tap exists.
 - `docs/RELEASE.md` includes the tap update and validation steps.
 
-### 2. Library Catalog Export and Import [TODO]
+### 2. Library Catalog Export and Import [DONE]
 
 Outcome: users can move or back up their model library index without manually
 copying SQLite state.
 
-- [TODO] Add `library export --format json` for model metadata, favorites,
+- [DONE] Add `library export --format json` for model metadata, favorites,
   source URLs, checksums, and placement hints.
-- [TODO] Add `library import` with dry-run, conflict reporting, and idempotent
+- [DONE] Add `library import` with dry-run, conflict reporting, and idempotent
   updates.
-- [TODO] Include schema version metadata in exported catalogs.
-- [TODO] Document backup/restore and machine migration workflows.
+- [DONE] Include schema version metadata in exported catalogs.
+- [DONE] Document backup/restore and machine migration workflows.
 
 Acceptance checks:
 - Export/import round trip preserves model identity, favorite status, source,
