@@ -18,6 +18,7 @@ func (m *Model) refreshLibraryData() {
 	if m.st == nil {
 		return
 	}
+	selectedKey := m.currentLibraryKey()
 
 	// Build filters based on current library filter state
 	filters := state.MetadataFilters{
@@ -34,6 +35,7 @@ func (m *Model) refreshLibraryData() {
 	if m.librarySearch != "" {
 		// If searching, use search function
 		rows, err = m.st.SearchMetadata(m.librarySearch)
+		rows = m.applyLibraryFilters(rows)
 	} else {
 		// Otherwise use filtered list
 		rows, err = m.st.ListMetadata(filters)
@@ -48,11 +50,7 @@ func (m *Model) refreshLibraryData() {
 
 	m.libraryRows = rows
 	m.libraryNeedsRefresh = false
-
-	// Reset selection if out of bounds
-	if m.librarySelected >= len(m.libraryRows) {
-		m.librarySelected = 0
-	}
+	m.restoreLibrarySelection(selectedKey)
 }
 
 // renderLibrary renders the library view showing downloaded models with metadata
@@ -77,6 +75,9 @@ func (m *Model) renderLibrary() string {
 	}
 	if m.libraryShowFavorites {
 		header += m.th.ok.Render(" • ★ Favorites")
+	}
+	if len(m.librarySelectedKeys) > 0 {
+		header += m.th.label.Render(fmt.Sprintf(" • %d selected", len(m.selectedLibraryRows())))
 	}
 	sb.WriteString(header + "\n\n")
 
@@ -117,6 +118,9 @@ func (m *Model) renderLibrary() string {
 		if i == m.librarySelected {
 			style = m.th.rowSelected
 			cursor = "▶ "
+		}
+		if m.librarySelectedKeys[libraryKey(model)] {
+			cursor = "✓ "
 		}
 
 		// Format: [★] ModelName (Type) • Size • Quantization • Source
@@ -169,7 +173,7 @@ func (m *Model) renderLibrary() string {
 
 	// Footer with help
 	sb.WriteString("\n")
-	sb.WriteString(m.th.footer.Render(fmt.Sprintf("Showing %d-%d of %d models | ↑↓ navigate • Enter view details • / search • F filter • Q quit",
+	sb.WriteString(m.th.footer.Render(fmt.Sprintf("Showing %d-%d of %d models | ↑↓ navigate • Space select • f favorite • F filter • E export • Q quit",
 		start+1, end, len(m.libraryRows))))
 
 	return sb.String()
@@ -329,9 +333,80 @@ func (m *Model) renderLibraryDetail() string {
 	}
 
 	// Footer
-	sb.WriteString(m.th.footer.Render("Press Esc to go back • F to toggle favorite • Q to quit"))
+	sb.WriteString(m.th.footer.Render("Press Esc to go back • f to toggle favorite • Q to quit"))
 
 	return sb.String()
+}
+
+func (m *Model) renderLibraryFilterMenu() string {
+	rows := []struct {
+		name  string
+		value string
+	}{
+		{"Search", emptyLabel(m.librarySearch)},
+		{"Type", emptyLabel(m.libraryFilterType)},
+		{"Source", emptyLabel(m.libraryFilterSource)},
+		{"Favorites", boolLabel(m.libraryShowFavorites)},
+		{"Clear filters", ""},
+	}
+	var sb strings.Builder
+	sb.WriteString(m.th.head.Render("Library Filters") + "\n\n")
+	for i, row := range rows {
+		cursor := "  "
+		style := m.th.row
+		if i == m.libraryFilterIndex {
+			cursor = "▶ "
+			style = m.th.rowSelected
+		}
+		value := row.value
+		if i == 0 && m.libraryFilterEditing {
+			value = m.librarySearchInput.View()
+		}
+		if value != "" {
+			sb.WriteString(style.Render(fmt.Sprintf("%s%-14s %s", cursor, row.name, value)) + "\n")
+		} else {
+			sb.WriteString(style.Render(fmt.Sprintf("%s%s", cursor, row.name)) + "\n")
+		}
+	}
+	sb.WriteString("\n")
+	sb.WriteString(m.th.footer.Render("↑↓ choose • Enter cycle/edit • Esc close"))
+	return sb.String()
+}
+
+func (m *Model) renderLibraryConfirm() string {
+	if m.libraryConfirm == nil {
+		return ""
+	}
+	var title string
+	switch m.libraryConfirm.action {
+	case "delete-staged":
+		title = "Delete staged data"
+	default:
+		title = "Confirm action"
+	}
+	var sb strings.Builder
+	sb.WriteString(m.th.bad.Render(title) + "\n\n")
+	sb.WriteString(fmt.Sprintf("Affected items: %d\n", len(m.libraryConfirm.rows)))
+	if m.cfg != nil && strings.TrimSpace(m.cfg.General.DownloadRoot) != "" {
+		sb.WriteString("Files under the download root may be removed; library metadata is kept.\n")
+	}
+	sb.WriteString("\n")
+	sb.WriteString(m.th.footer.Render("Enter/y confirm • Esc/n cancel"))
+	return sb.String()
+}
+
+func emptyLabel(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "(all)"
+	}
+	return value
+}
+
+func boolLabel(value bool) string {
+	if value {
+		return "only favorites"
+	}
+	return "(all)"
 }
 
 // renderSettings displays current configuration
