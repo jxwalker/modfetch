@@ -327,6 +327,43 @@ func TestImportEmptySnapshotStatusPreservesExistingDownloadStatus(t *testing.T) 
 	}
 }
 
+func TestImportIncompleteDownloadSnapshotIsIgnoredForIdempotency(t *testing.T) {
+	db := testDB(t)
+	meta := state.ModelMetadata{
+		DownloadURL: "https://example.com/model.gguf",
+		Dest:        "/models/model.gguf",
+		ModelName:   "Model",
+	}
+	if err := db.UpsertMetadata(&meta); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+	if err := db.UpsertDownload(state.DownloadRow{
+		URL:    meta.DownloadURL,
+		Dest:   meta.Dest,
+		Size:   10,
+		Status: "completed",
+	}); err != nil {
+		t.Fatalf("seed download: %v", err)
+	}
+	cat := Catalog{
+		App:            "modfetch",
+		CatalogVersion: Version,
+		Models: []CatalogEntry{{
+			Metadata: meta,
+			Download: &DownloadSnapshot{
+				URL: meta.DownloadURL,
+			},
+		}},
+	}
+	result, err := Import(db, bytes.NewReader(encodeCatalog(t, cat)), ImportOptions{})
+	if err != nil {
+		t.Fatalf("import incomplete download catalog: %v", err)
+	}
+	if result.Skips != 1 || result.Creates != 0 || result.Updates != 0 || result.Conflicts != 0 {
+		t.Fatalf("expected incomplete snapshot to be ignored for idempotency, got %+v", result)
+	}
+}
+
 func encodeCatalog(t *testing.T, cat Catalog) []byte {
 	t.Helper()
 	payload, err := json.Marshal(cat)

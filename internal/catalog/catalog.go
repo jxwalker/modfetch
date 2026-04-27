@@ -270,7 +270,7 @@ func snapshotDownload(row state.DownloadRow) *DownloadSnapshot {
 }
 
 func downloadEqual(downloadsByKey map[string]state.DownloadRow, entry CatalogEntry) bool {
-	if entry.Download == nil {
+	if entry.Download == nil || entry.Download.URL == "" || entry.Download.Dest == "" {
 		return true
 	}
 	row, ok := downloadsByKey[downloadKey(entry.Download.URL, entry.Download.Dest)]
