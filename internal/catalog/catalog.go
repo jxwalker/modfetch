@@ -169,6 +169,10 @@ func importOne(db *state.DB, downloadsByKey map[string]state.DownloadRow, metada
 			res.Reason = fmt.Sprintf("download snapshot URL %s does not match metadata URL", entry.Download.URL)
 			return res
 		}
+		if meta.Dest == "" && entry.Download.Dest != "" {
+			meta.Dest = entry.Download.Dest
+			res.Dest = meta.Dest
+		}
 		if meta.Dest != "" && entry.Download.Dest != "" && entry.Download.Dest != meta.Dest {
 			res.Action = "conflict"
 			res.Reason = fmt.Sprintf("download snapshot destination %s does not match metadata destination", entry.Download.Dest)
@@ -242,6 +246,9 @@ func importDownloadRow(downloadsByKey map[string]state.DownloadRow, entry Catalo
 }
 
 func applyImportMaps(downloadsByKey map[string]state.DownloadRow, metadataByURL, metadataByDest map[string]state.ModelMetadata, meta state.ModelMetadata, row state.DownloadRow, hasDownload bool) {
+	if existing, ok := metadataByURL[meta.DownloadURL]; ok && existing.Dest != "" && existing.Dest != meta.Dest {
+		delete(metadataByDest, existing.Dest)
+	}
 	metadataByURL[meta.DownloadURL] = meta
 	if meta.Dest != "" {
 		metadataByDest[meta.Dest] = meta

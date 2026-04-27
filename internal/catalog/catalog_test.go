@@ -209,6 +209,77 @@ func TestImportRejectsMismatchedDownloadSnapshot(t *testing.T) {
 	}
 }
 
+func TestImportNormalizesSnapshotOnlyDestination(t *testing.T) {
+	db := testDB(t)
+	cat := Catalog{
+		App:            "modfetch",
+		CatalogVersion: Version,
+		Models: []CatalogEntry{{
+			Metadata: state.ModelMetadata{
+				DownloadURL: "https://example.com/model.gguf",
+				ModelName:   "Model",
+			},
+			Download: &DownloadSnapshot{
+				URL:    "https://example.com/model.gguf",
+				Dest:   "/models/model.gguf",
+				Status: "completed",
+			},
+		}},
+	}
+	result, err := Import(db, bytes.NewReader(encodeCatalog(t, cat)), ImportOptions{})
+	if err != nil {
+		t.Fatalf("import snapshot-only dest catalog: %v", err)
+	}
+	if result.Creates != 1 || result.Conflicts != 0 {
+		t.Fatalf("expected create without conflict, got %+v", result)
+	}
+	meta, err := db.GetMetadata("https://example.com/model.gguf")
+	if err != nil {
+		t.Fatalf("get metadata: %v", err)
+	}
+	if meta.Dest != "/models/model.gguf" {
+		t.Fatalf("expected metadata destination to be normalized, got %q", meta.Dest)
+	}
+}
+
+func TestImportDryRunMovedDestinationFreesOldPath(t *testing.T) {
+	db := testDB(t)
+	if err := db.UpsertMetadata(&state.ModelMetadata{
+		DownloadURL: "https://example.com/moved.gguf",
+		Dest:        "/models/old.gguf",
+		ModelName:   "Moved",
+	}); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+	cat := Catalog{
+		App:            "modfetch",
+		CatalogVersion: Version,
+		Models: []CatalogEntry{
+			{
+				Metadata: state.ModelMetadata{
+					DownloadURL: "https://example.com/moved.gguf",
+					Dest:        "/models/new.gguf",
+					ModelName:   "Moved",
+				},
+			},
+			{
+				Metadata: state.ModelMetadata{
+					DownloadURL: "https://example.com/replacement.gguf",
+					Dest:        "/models/old.gguf",
+					ModelName:   "Replacement",
+				},
+			},
+		},
+	}
+	result, err := Import(db, bytes.NewReader(encodeCatalog(t, cat)), ImportOptions{DryRun: true})
+	if err != nil {
+		t.Fatalf("dry-run import moved destination catalog: %v", err)
+	}
+	if result.Updates != 1 || result.Creates != 1 || result.Conflicts != 0 {
+		t.Fatalf("expected move to free old destination in dry-run, got %+v", result)
+	}
+}
+
 func TestImportEmptySnapshotStatusPreservesExistingDownloadStatus(t *testing.T) {
 	db := testDB(t)
 	meta := state.ModelMetadata{
