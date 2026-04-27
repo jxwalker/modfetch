@@ -76,8 +76,14 @@ func (m *Model) renderLibrary() string {
 	if m.libraryShowFavorites {
 		header += m.th.ok.Render(" • ★ Favorites")
 	}
-	if len(m.librarySelectedKeys) > 0 {
-		header += m.th.label.Render(fmt.Sprintf(" • %d selected", len(m.selectedLibraryRows())))
+	totalSelected := len(m.librarySelectedKeys)
+	if totalSelected > 0 {
+		visibleSelected := len(m.selectedLibraryRows())
+		if visibleSelected == totalSelected {
+			header += m.th.label.Render(fmt.Sprintf(" • %d selected", totalSelected))
+		} else {
+			header += m.th.label.Render(fmt.Sprintf(" • %d/%d selected", visibleSelected, totalSelected))
+		}
 	}
 	sb.WriteString(header + "\n\n")
 

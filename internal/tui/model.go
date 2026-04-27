@@ -768,13 +768,13 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "f":
 		if m.activeTab == 4 {
 			if m.libraryViewingDetail && m.libraryDetailModel != nil {
-				return m, m.toggleFavoriteLibraryRows([]state.ModelMetadata{*m.libraryDetailModel})
+				return m, m.toggleFavoriteLibraryRowsCmd([]state.ModelMetadata{*m.libraryDetailModel})
 			}
 			targets := m.selectedLibraryRows()
 			if len(targets) == 0 {
 				return m, nil
 			}
-			return m, m.toggleFavoriteLibraryRows(targets)
+			return m, m.toggleFavoriteLibraryRowsCmd(targets)
 		}
 		return m, nil
 	case "O":

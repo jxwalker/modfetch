@@ -1,12 +1,15 @@
 package tui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	neturl "net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jxwalker/modfetch/internal/catalog"
@@ -170,15 +173,8 @@ func (m *Model) updateLibraryConfirm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) libraryFilterValues(field string) []string {
-	if m.st == nil {
-		return nil
-	}
-	rows, err := m.st.ListMetadata(state.MetadataFilters{OrderBy: "name", Limit: 1000})
-	if err != nil {
-		return nil
-	}
 	seen := map[string]bool{}
-	for _, row := range rows {
+	for _, row := range m.libraryRows {
 		var v string
 		switch field {
 		case "type":
@@ -217,20 +213,56 @@ func (m *Model) retryLibraryRows(rows []state.ModelMetadata) tea.Cmd {
 		return nil
 	}
 	cmds := make([]tea.Cmd, 0, len(rows))
+	skipped := 0
+	now := time.Now()
 	for _, row := range rows {
 		if strings.TrimSpace(row.DownloadURL) == "" || strings.TrimSpace(row.Dest) == "" {
 			continue
 		}
-		_ = m.st.UpsertDownload(state.DownloadRow{URL: row.DownloadURL, Dest: row.Dest, Status: "pending"})
-		cmds = append(cmds, m.startDownloadCmd(row.DownloadURL, row.Dest, false, row.ModelType))
+		if !retryableLibraryURL(row.DownloadURL) {
+			skipped++
+			continue
+		}
+		key := row.DownloadURL + "|" + row.Dest
+		if _, ok := m.running[key]; ok {
+			continue
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		m.running[key] = cancel
+		m.retrying[key] = now
+		cmds = append(cmds, m.retryLibraryRowCmd(ctx, row))
 	}
 	if len(cmds) > 0 {
 		m.addToast(fmt.Sprintf("retrying %d library item(s)", len(cmds)))
 	}
+	if skipped > 0 {
+		m.addToast(fmt.Sprintf("skipped %d local item(s); only remote downloads can retry", skipped))
+	}
 	return tea.Batch(cmds...)
 }
 
-func (m *Model) toggleFavoriteLibraryRows(rows []state.ModelMetadata) tea.Cmd {
+func (m *Model) retryLibraryRowCmd(ctx context.Context, row state.ModelMetadata) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.st.UpsertDownload(state.DownloadRow{URL: row.DownloadURL, Dest: row.Dest, Status: "pending"}); err != nil {
+			return libraryBulkMsg{action: "retry", err: err}
+		}
+		return m.startDownloadCmdCtx(ctx, row.DownloadURL, row.Dest, false, row.ModelType)()
+	}
+}
+
+func retryableLibraryURL(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "hf://") || strings.HasPrefix(raw, "civitai://") {
+		return true
+	}
+	u, err := neturl.Parse(raw)
+	if err != nil {
+		return false
+	}
+	return u.Scheme == "http" || u.Scheme == "https"
+}
+
+func (m *Model) toggleFavoriteLibraryRowsCmd(rows []state.ModelMetadata) tea.Cmd {
 	if len(rows) == 0 || m.st == nil {
 		return nil
 	}
@@ -241,23 +273,24 @@ func (m *Model) toggleFavoriteLibraryRows(rows []state.ModelMetadata) tea.Cmd {
 			break
 		}
 	}
-	count := 0
-	for _, row := range rows {
-		row.Favorite = makeFavorite
-		if err := m.st.UpsertMetadata(&row); err == nil {
+	return func() tea.Msg {
+		count := 0
+		for _, row := range rows {
+			row.Favorite = makeFavorite
+			if err := m.st.UpsertMetadata(&row); err != nil {
+				return libraryBulkMsg{action: favoriteActionName(makeFavorite), count: count, err: err}
+			}
 			count++
 		}
+		return libraryBulkMsg{action: favoriteActionName(makeFavorite), count: count}
 	}
-	if count > 0 {
-		if makeFavorite {
-			m.addToast(fmt.Sprintf("favorited %d", count))
-		} else {
-			m.addToast(fmt.Sprintf("unfavorited %d", count))
-		}
+}
+
+func favoriteActionName(makeFavorite bool) string {
+	if makeFavorite {
+		return "favorite"
 	}
-	m.libraryNeedsRefresh = true
-	m.refreshLibraryData()
-	return nil
+	return "unfavorite"
 }
 
 func (m *Model) placeLibraryRowsCmd(rows []state.ModelMetadata) tea.Cmd {
@@ -266,19 +299,26 @@ func (m *Model) placeLibraryRowsCmd(rows []state.ModelMetadata) tea.Cmd {
 			return libraryBulkMsg{action: "place", err: fmt.Errorf("missing config")}
 		}
 		count := 0
+		var firstErr error
 		for _, row := range rows {
 			if strings.TrimSpace(row.Dest) == "" {
 				continue
 			}
 			if _, err := os.Stat(row.Dest); err != nil {
-				return libraryBulkMsg{action: "place", count: count, err: err}
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
 			}
 			if _, err := placer.Place(m.cfg, row.Dest, "", ""); err != nil {
-				return libraryBulkMsg{action: "place", count: count, err: err}
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
 			}
 			count++
 		}
-		return libraryBulkMsg{action: "place", count: count}
+		return libraryBulkMsg{action: "place", count: count, err: firstErr}
 	}
 }
 
@@ -287,12 +327,16 @@ func (m *Model) verifyLibraryRowsCmd(rows []state.ModelMetadata) tea.Cmd {
 		if m.st == nil {
 			return libraryBulkMsg{action: "verify", err: fmt.Errorf("missing database")}
 		}
-		downloadRows, _ := m.st.ListDownloads()
+		downloadRows, err := m.st.ListDownloads()
+		if err != nil {
+			return libraryBulkMsg{action: "verify", err: err}
+		}
 		downloads := map[string]state.DownloadRow{}
 		for _, row := range downloadRows {
 			downloads[keyFor(row)] = row
 		}
 		count := 0
+		var firstErr error
 		for _, meta := range rows {
 			if strings.TrimSpace(meta.Dest) == "" {
 				continue
@@ -305,8 +349,13 @@ func (m *Model) verifyLibraryRowsCmd(rows []state.ModelMetadata) tea.Cmd {
 			if err != nil {
 				row.Status = "verify_failed"
 				row.LastError = err.Error()
-				_ = m.st.UpsertDownload(row)
-				return libraryBulkMsg{action: "verify", count: count, err: err}
+				if upsertErr := m.st.UpsertDownload(row); upsertErr != nil && firstErr == nil {
+					firstErr = upsertErr
+				}
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
 			}
 			want := strings.TrimSpace(row.ExpectedSHA256)
 			if want == "" {
@@ -316,16 +365,26 @@ func (m *Model) verifyLibraryRowsCmd(rows []state.ModelMetadata) tea.Cmd {
 				row.ActualSHA256 = sum
 				row.Status = "verify_failed"
 				row.LastError = "checksum mismatch"
-				_ = m.st.UpsertDownload(row)
-				return libraryBulkMsg{action: "verify", count: count, err: fmt.Errorf("checksum mismatch for %s", meta.Dest)}
+				if upsertErr := m.st.UpsertDownload(row); upsertErr != nil && firstErr == nil {
+					firstErr = upsertErr
+				}
+				if firstErr == nil {
+					firstErr = fmt.Errorf("checksum mismatch for %s", meta.Dest)
+				}
+				continue
 			}
 			row.ActualSHA256 = sum
 			row.Status = "completed"
 			row.LastError = ""
-			_ = m.st.UpsertDownload(row)
+			if err := m.st.UpsertDownload(row); err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
 			count++
 		}
-		return libraryBulkMsg{action: "verify", count: count}
+		return libraryBulkMsg{action: "verify", count: count, err: firstErr}
 	}
 }
 
@@ -373,18 +432,34 @@ func (m *Model) deleteLibraryStagedCmd(rows []state.ModelMetadata) tea.Cmd {
 			return libraryBulkMsg{action: "delete staged", err: fmt.Errorf("missing database")}
 		}
 		count := 0
+		var firstErr error
 		for _, row := range rows {
+			if !m.isStagedLibraryPath(row.Dest) {
+				continue
+			}
+			deleted := false
 			if strings.TrimSpace(row.DownloadURL) != "" && strings.TrimSpace(row.Dest) != "" {
-				if err := m.st.DeleteDownloadAndChunks(row.DownloadURL, row.Dest); err == nil {
+				if err := m.st.DeleteDownloadAndChunks(row.DownloadURL, row.Dest); err != nil {
+					if firstErr == nil {
+						firstErr = err
+					}
+				} else {
 					count++
+					deleted = true
 				}
 			}
-			if m.isStagedLibraryPath(row.Dest) {
-				_ = os.Remove(row.Dest)
+			if err := os.Remove(row.Dest); err != nil && !os.IsNotExist(err) {
+				if firstErr == nil {
+					firstErr = err
+				}
+			} else {
+				deleted = true
 			}
-			delete(m.librarySelectedKeys, libraryKey(row))
+			if deleted {
+				delete(m.librarySelectedKeys, libraryKey(row))
+			}
 		}
-		return libraryBulkMsg{action: "delete staged", count: count}
+		return libraryBulkMsg{action: "delete staged", count: count, err: firstErr}
 	}
 }
 
@@ -419,5 +494,9 @@ func (m *Model) isStagedLibraryPath(path string) bool {
 	if err != nil {
 		return false
 	}
-	return rel == "." || (!strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && rel != "..")
+	if rel == "." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || rel == ".." {
+		return false
+	}
+	info, err := os.Stat(absPath)
+	return err == nil && !info.IsDir()
 }

@@ -800,7 +800,11 @@ func TestLibrary_BulkFavoriteToggle(t *testing.T) {
 	model.activeTab = 4
 	model.refreshLibraryData()
 	_, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("A")})
-	_, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
+	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
+	if cmd == nil {
+		t.Fatal("expected favorite command")
+	}
+	_, _ = model.Update(cmd())
 
 	for _, row := range model.libraryRows {
 		got, err := db.GetMetadata(row.DownloadURL)
@@ -812,7 +816,11 @@ func TestLibrary_BulkFavoriteToggle(t *testing.T) {
 		}
 	}
 
-	_, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
+	_, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
+	if cmd == nil {
+		t.Fatal("expected unfavorite command")
+	}
+	_, _ = model.Update(cmd())
 	for _, row := range model.libraryRows {
 		got, err := db.GetMetadata(row.DownloadURL)
 		if err != nil {
@@ -821,6 +829,27 @@ func TestLibrary_BulkFavoriteToggle(t *testing.T) {
 		if got.Favorite {
 			t.Fatalf("expected %s to be unfavorited", row.DownloadURL)
 		}
+	}
+}
+
+func TestLibrary_RetrySkipsLocalURLs(t *testing.T) {
+	model, _, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	cmd := model.retryLibraryRows([]state.ModelMetadata{{
+		DownloadURL: "file:///models/local.gguf",
+		ModelName:   "local",
+		Dest:        "/models/local.gguf",
+	}})
+	if len(model.running) != 0 {
+		t.Fatalf("local retry should not register running downloads: %+v", model.running)
+	}
+	if cmd == nil {
+		return
+	}
+	msg := cmd()
+	if msg != nil {
+		t.Fatalf("local retry should not start a command, got %T", msg)
 	}
 }
 
@@ -946,6 +975,31 @@ func TestLibrary_DeleteStagedDataRequiresConfirmation(t *testing.T) {
 	}
 	if _, err := db.GetMetadata(meta.DownloadURL); err != nil {
 		t.Fatalf("metadata should be kept: %v", err)
+	}
+}
+
+func TestLibrary_StagedPathRejectsRootAndDirectories(t *testing.T) {
+	model, _, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	root := model.cfg.General.DownloadRoot
+	dir := filepath.Join(root, "nested")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("make dir: %v", err)
+	}
+	file := filepath.Join(root, "model.gguf")
+	if err := os.WriteFile(file, []byte("model"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	if model.isStagedLibraryPath(root) {
+		t.Fatal("download root should not be deletable")
+	}
+	if model.isStagedLibraryPath(dir) {
+		t.Fatal("directories under download root should not be deletable")
+	}
+	if !model.isStagedLibraryPath(file) {
+		t.Fatal("files under download root should be staged")
 	}
 }
 
