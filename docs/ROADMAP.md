@@ -1,112 +1,167 @@
-# Roadmap (Consolidated)
+# Roadmap
 
-This document consolidates the project backlog and roadmap from multiple sources into a single, prioritized list. Source docs: docs/BACKLOG.md, docs/TODO.md, docs/TODO_NEXT.md, README.md (Roadmap), docs/PRD.md, docs/backlog/.
+This is the active project roadmap after the v0.6.3 release. Historical backlog
+items that shipped in v0.6.x are summarized at the end for traceability.
 
-Status key: [IMPL] implemented already (kept here for traceability).
+Status key:
+- [TODO] not started
+- [NEXT] next implementation slice
+- [IN PROGRESS] active work
+- [DONE] shipped on main
 
-Current state: all consolidated roadmap items below are implemented as of 2026-04-26.
+## Current Baseline
 
-Priority 1 — Critical reliability and performance
-- Concurrent download recovery [IMPL]
-  - Persist/reattach TUI-initiated downloads after process restart; graceful recovery of work-in-progress.
-- Database transaction boundaries [IMPL]
-  - Group related state updates in transactions to avoid inconsistent rows on crashes.
-- Streaming hashing [IMPL]
-  - Single and chunked downloaders perform streaming SHA256; keep for traceability.
-- Chunk corruption recovery [IMPL]
-  - Self-check and targeted re-fetch of dirty chunks is implemented in chunked downloader.
+Current release: v0.6.3, tagged 2026-04-27.
 
-Priority 2 — Core functionality gaps
-- Bandwidth throttling (per-download and global) [IMPL]
-- Mirror/fallback URLs with ordered failover [IMPL]
-- Partial verification during single-stream downloads [IMPL]
-  - Periodic checkpoints; chunked mode already verifies per-chunk.
-- Connection pool management [IMPL]
-  - Reuse a shared HTTP client/transport across downloaders; per-host limits.
+Shipped baseline:
+- Reliable direct, Hugging Face, and CivitAI downloads with resume, retries,
+  SHA256 verification, auth preflight, rate-limit handling, archive extraction,
+  S3-compatible destinations, and duplicate linking.
+- TUI download management with downloads, library, settings, themes, sorting,
+  grouping, filtering, state persistence, and event-driven refresh.
+- Library metadata storage, indexed scanning, favorites, metadata fetchers, and
+  documented configuration, placement, resolver, CLI, and installer workflows.
+- Release automation that builds Linux/macOS artifacts, publishes checksums, and
+  uses `CHANGELOG.md` sections for GitHub Release notes.
 
-Priority 3 — User experience
-- TUI refactor and feature polish [IMPL]
-  - TUI state persistence, state-event handling, downloads/library/settings views, and modal handling are split across focused files; sort/group/columns, filter selection persistence, and planning progress accuracy are implemented.
-- Progress persistence across sessions [IMPL]
-- Adaptive retry/backoff by error type [IMPL]
-- Download queue management with priorities [IMPL]
+## v0.7.0 Goal
 
-Priority 4 — Quality improvements
-- Rich, structured error context with remediation hints [IMPL]
-- Test coverage expansion (resolvers/state/placer/downloaders) [IMPL]
-- Metrics expansion (per-download stats, percentiles) [IMPL]
-- Configuration validation hardening [IMPL]
+Make modfetch easier to adopt and easier to use for real model-library
+maintenance. v0.7.0 should focus on distribution polish, library portability,
+bulk TUI operations, and placement presets rather than another downloader core
+rewrite.
 
-Priority 5 — Advanced features
-- Archive extraction post-download (zip/tar/7z) [IMPL]
-  - zip, tar, tar.gz, and tgz use native extraction; 7z uses `7zz`, `7z`, or `7za` when available on PATH.
-- Duplicate detection / content-addressable storage [IMPL]
-  - Duplicate reporting by completed SHA256 is implemented; `dedupe` can replace verified duplicates with hardlinks or symlinks to canonical content.
-- S3-compatible backend for storage [IMPL]
-  - Explicit `s3://bucket/key` destinations download through local resumable staging, then upload artifacts and optional `.sha256` sidecars to SigV4 S3-compatible endpoints.
-- Download scheduling (cron-like windows) [IMPL]
+## v0.7.0 Implementation Plan
 
-Priority 6 — Architecture
-- Context propagation pattern improvements [IMPL]
-- Plugin architecture for resolvers [IMPL]
-- Event-driven TUI updates with polling fallback [IMPL]
+### 1. Package Distribution [NEXT]
 
-Quick wins
-- Add a flag to skip SHA256 verification intentionally for trusted sources (implemented as --force) [IMPL]
-- Fix TUI selected item persistence when filtering [IMPL]
-- Fix progress bar showing 100% during chunk planning [IMPL]
+Outcome: users can install through a maintained package channel instead of only
+the curl installer or manual release binaries.
 
-Technical debt
-- Remove duplicate SafeFileName implementations (ensure all call util.SafeFileName) [IMPL]
-- Consolidate HTTP client creation to a shared pool [IMPL]
-- Standardize error wrapping and logging redaction [IMPL]
-- Trim dead code in legacy TUI model [IMPL]
-- Audit metrics writes/guards when disabled [IMPL]
+- [TODO] Homebrew tap formula for macOS and Linuxbrew.
+- [TODO] Document the package install path in README and docs/INSTALLATION.md.
+- [TODO] Add release checklist coverage, so formula updates are part of tagging.
+- [TODO] Decide whether an AUR package is in scope for v0.7.0 or v0.7.x.
 
-Performance optimizations
-- Pre-allocate/truncate files in chunked mode and parallel chunk verification [IMPL]
-- DNS result caching for repeated hosts [IMPL]
-- Adaptive chunk size based on configured throughput and file size [IMPL]
+Acceptance checks:
+- Formula installs the latest GitHub Release artifact and verifies checksum.
+- README and installation docs no longer describe Homebrew as unpublished once
+  the tap exists.
 
-Breaking changes to consider for v1.0
-- Config schema tidy-up [IMPL]
-  - `modfetch config validate --strict` rejects unknown YAML fields before strict validation becomes a v1.0 default candidate [IMPL]
-  - Documented enum/range values are validated for placement mode, network timeout/redirect settings, and TUI column mode [IMPL]
-- State DB schema simplification [IMPL]
-  - State DB bootstrap is centralized and stamps SQLite `user_version` as the v1.0 migration baseline [IMPL]
-  - Legacy version-0 download schemas migrate through an explicit v0-to-v1 path for missing compatibility columns [IMPL]
-- Standardize CLI flags and naming [IMPL]
-  - Shared config path resolution across config-backed commands; `place` now honors the documented default config path [IMPL]
-  - Shell completions are aligned with current commands and flags, including `hostcaps`, strict config validation, quantization selection, and dry-run variants [IMPL]
-  - Common `--config`, `--log-level`, and `--json` flag registration is centralized for config-backed commands [IMPL]
+### 2. Library Catalog Export and Import [TODO]
 
-Completed (from prior docs)
-- CivitAI model-aware default filenames and naming patterns (sources.*.naming.pattern) [IMPL]
-- Auth preflight/early 401 guidance with opt-out via network.disable_auth_preflight [IMPL]
-- Batch: --batch-parallel support; importer and summary behaviors [IMPL]
-- Single-stream: treat HTTP 416 on resume as completion [IMPL]
-- --quiet behavior aligned to suppress human summaries [IMPL]
+Outcome: users can move or back up their model library index without manually
+copying SQLite state.
 
-Completed v0.6.0 (November 2025)
-- Library View: Browse and search downloaded models with rich metadata [IMPL]
-  - Search by name, filter by type (LLM, LoRA, VAE) and source (HuggingFace, CivitAI, local)
-  - View detailed information: quantization, size, tags, descriptions
-  - Mark models as favorites
-  - Tab 5 or `L` keyboard shortcut
-- Directory Scanner: Auto-discover models in configured directories [IMPL]
-  - Scans download_root and placement directories
-  - Extracts metadata from filenames (quantization, parameter count, version)
-  - O(log n) duplicate detection with database indexes (10-100x faster than linear scan)
-  - Press `S` in Library view to trigger scan
-- Settings Tab: View configuration at a glance [IMPL]
-  - Display directory paths, API token status, placement rules, download settings
-  - Visual indicators for HuggingFace and CivitAI token validation
-  - Tab 6 or `M` keyboard shortcut
-- Database Performance: Added indexes for 10-100x speedup on large model libraries [IMPL]
-  - idx_metadata_dest and idx_metadata_model_name indexes
-  - Optimized duplicate detection and search queries
-- Comprehensive Testing: 84 test cases including unit, integration, and performance benchmarks [IMPL]
+- [TODO] Add `library export --format json` for model metadata, favorites,
+  source URLs, checksums, and placement hints.
+- [TODO] Add `library import` with dry-run, conflict reporting, and idempotent
+  updates.
+- [TODO] Include schema version metadata in exported catalogs.
+- [TODO] Document backup/restore and machine migration workflows.
 
-Notes
-- README "Roadmap" bullets map to the Priority 3/4 buckets here.
-- v0.6.0 features fully documented in docs/LIBRARY.md and docs/SCANNER.md
+Acceptance checks:
+- Export/import round trip preserves model identity, favorite status, source,
+  destination, checksum, and core metadata.
+- Import dry-run reports creates, updates, skips, and conflicts without writes.
+
+### 3. TUI Bulk Operations and Filter Menu [TODO]
+
+Outcome: common library maintenance tasks are possible from the TUI without
+dropping to separate CLI commands.
+
+- [TODO] Implement the documented `F` filter menu for library type/source,
+  favorite status, and text search.
+- [TODO] Add multi-select bulk actions for retry, delete staged data, verify,
+  place, favorite/unfavorite, and export selected catalog entries.
+- [TODO] Show bulk-action confirmation summaries before destructive actions.
+- [TODO] Add tests for selection persistence across filters and tabs.
+
+Acceptance checks:
+- Selection state remains stable when filters change.
+- Destructive actions require confirmation and show the exact affected count.
+- Keyboard help and TUI guide match the implemented controls.
+
+### 4. Placement and Classifier Presets [TODO]
+
+Outcome: first-time setup for common local AI tools needs less custom YAML.
+
+- [TODO] Add named placement presets for common targets such as Ollama,
+  ComfyUI, AUTOMATIC1111/Forge-style Stable Diffusion layouts, and generic
+  Hugging Face cache exports where appropriate.
+- [TODO] Add `modfetch config wizard` support for selecting presets.
+- [TODO] Add `modfetch place --preset NAME --dry-run` preview behavior.
+- [TODO] Improve classifier confidence reporting for ambiguous artifacts.
+
+Acceptance checks:
+- Preset output is explicit YAML that users can inspect and edit.
+- `--dry-run` explains every planned link/copy and every skipped artifact.
+
+### 5. Scanner Performance and Repair UX [TODO]
+
+Outcome: large model directories scan faster and failed scans are easier to
+recover from.
+
+- [TODO] Add bounded parallel directory scanning with serialized DB writes.
+- [TODO] Add scan progress reporting for CLI and TUI.
+- [TODO] Add optional stale-record repair for files moved or deleted outside
+  modfetch.
+- [TODO] Benchmark sequential versus parallel scans on representative trees.
+
+Acceptance checks:
+- Parallel scan results match sequential scan results.
+- Scan cancellation leaves the database in a consistent state.
+- Benchmarks show the change helps on large directories without regressing small
+  scans materially.
+
+### 6. Release and Documentation Hardening [TODO]
+
+Outcome: release quality stays repeatable as install surfaces expand.
+
+- [TODO] Add a release checklist that covers changelog section, installer,
+  package formula, release notes extraction, artifacts, checksums, and smoke
+  installs.
+- [TODO] Add a docs drift check for current version strings and stale installation
+  claims.
+- [TODO] Keep README.md, docs/QUICKSTART.md, docs/USER_GUIDE.md,
+  docs/CLI_GUIDE.md, docs/INSTALLATION.md, and CHANGELOG.md aligned before
+  each tag.
+
+Acceptance checks:
+- A release candidate can be validated from a clean checkout using documented
+  commands.
+- CI or a local script catches missing changelog release notes before tagging.
+
+## v0.7.x Candidates
+
+These are useful, but not required for the first v0.7.0 release:
+
+- AUR packaging after Homebrew is stable.
+- Metadata enrichment from additional model registries.
+- Remote catalog sync targets.
+- More archive formats if users report concrete needs.
+- Non-interactive TUI scripting hooks.
+
+## Completed v0.6.x History
+
+- v0.6.3: fixed Hugging Face shorthand alias downloads and refreshed resolver
+  documentation.
+- v0.6.2: delivered storage, archive extraction, duplicate linking, schema,
+  CLI/completion, release workflow, and broad test coverage improvements.
+- v0.6.1: expanded real API integration tests, TUI tests, and reliability fixes.
+- v0.6.0: introduced library view, directory scanner, settings tab, indexed
+  metadata storage, and core TUI/library documentation.
+
+## Completed Backlog Summary
+
+The previous consolidated backlog is closed as of v0.6.x. Completed areas
+include:
+
+- Concurrent recovery and transaction boundaries.
+- Streaming hashing and chunk corruption recovery.
+- Bandwidth throttling and mirror/fallback URLs.
+- Partial verification and shared HTTP clients.
+- TUI refactors and retry/backoff improvements.
+- Queue priority handling and structured error remediation.
+- Expanded metrics and strict config validation.
+- Plugin-style resolvers and v1.0 schema migration baseline.

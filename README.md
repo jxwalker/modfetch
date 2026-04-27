@@ -449,9 +449,11 @@ Troubleshooting
 - Slow scanning: First scan may take time; subsequent scans use indexed duplicate detection (10-100x faster).
 
 Roadmap
-- See docs/ROADMAP.md for the consolidated, prioritized roadmap
-- Further TUI enhancements (bulk operations, advanced filters)
-- Placement/classifier refinements and presets
-- Release packaging for more distros
-- Parallel directory scanning
-- Export/import library catalogs
+- See docs/ROADMAP.md for the active, prioritized roadmap
+- v0.7.0 focus:
+  - Package distribution
+  - Library catalog export/import
+  - TUI bulk operations and filter menu
+  - Placement presets
+  - Parallel scanner improvements
+  - Release hardening
