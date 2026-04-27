@@ -38,15 +38,16 @@ rewrite.
 Outcome: users can install through a maintained package channel instead of only
 the curl installer or manual release binaries.
 
-- [TODO] Homebrew tap formula for macOS and Linuxbrew.
-- [TODO] Document the package install path in README and docs/INSTALLATION.md.
-- [TODO] Add release checklist coverage, so formula updates are part of tagging.
+- [DONE] Homebrew tap formula for macOS and Linuxbrew.
+- [DONE] Document the package install path in README and docs/INSTALLATION.md.
+- [DONE] Add release checklist coverage, so formula updates are part of tagging.
 - [TODO] Decide whether an AUR package is in scope for v0.7.0 or v0.7.x.
 
 Acceptance checks:
 - Formula installs the latest GitHub Release artifact and verifies checksum.
 - README and installation docs no longer describe Homebrew as unpublished once
   the tap exists.
+- `docs/RELEASE.md` includes the tap update and validation steps.
 
 ### 2. Library Catalog Export and Import [TODO]
 
@@ -118,7 +119,7 @@ Acceptance checks:
 
 Outcome: release quality stays repeatable as install surfaces expand.
 
-- [TODO] Add a release checklist that covers changelog section, installer,
+- [DONE] Add a release checklist that covers changelog section, installer,
   package formula, release notes extraction, artifacts, checksums, and smoke
   installs.
 - [TODO] Add a docs drift check for current version strings and stale installation
