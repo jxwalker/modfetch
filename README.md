@@ -75,7 +75,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║  modfetch v0.6.0                    Tab: [2] Active                       ║
+║  modfetch v0.6.3                    Tab: [2] Active                       ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
 ║  🔄 Active: 2   ✓ Completed: 45   ⏳ Pending: 3   ✗ Failed: 1           ║
 ║  Throughput: 32.5 MB/s   •   Auth: HF ✓  CivitAI ✓                       ║
@@ -113,6 +113,8 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 ---
 
 ## What's new in v0.6.x
+- **v0.6.3**: Hugging Face shorthand aliases now resolve correctly, including public single-repo forms such as `hf://gpt2/README.md?rev=main`, while canonical owner/repo paths and dotted repo names remain supported.
+- **v0.6.2**: Storage, archive, schema, CLI, shell completion, and release workflow updates are shipped and documented.
 - **Library View**: Browse all your downloaded models with rich metadata, search, and filters
   - View model details: type, quantization, size, source, tags, descriptions
   - Search by name, filter by type (LLM, LoRA, VAE, etc.) and source (HuggingFace, CivitAI, local)
@@ -132,8 +134,6 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 - **Documentation**: Complete user guides for Library (docs/LIBRARY.md) and Scanner (docs/SCANNER.md)
 
 Previous releases:
-- v0.6.3: Hugging Face shorthand alias fixes and resolver docs clarification
-- v0.6.2: Roadmap, storage, archives, schema, CLI, shell completions, and test coverage
 - v0.6.1: Testing reliability, real API integration coverage, and TUI test expansion
 - v0.5.2: Enhanced TUI with rich UI elements and vibrant colors
 - v0.5.1: Critical installer and TUI navigation fixes
@@ -189,11 +189,9 @@ Download from [Releases](https://github.com/jxwalker/modfetch/releases):
 </details>
 
 <details>
-<summary><b>🍺 Homebrew (Coming Soon)</b></summary>
+<summary><b>🍺 Homebrew / Package Managers</b></summary>
 
-```bash
-brew install jxwalker/tap/modfetch
-```
+Homebrew and distro packages are not published yet. Use the one-line installer or download binaries from GitHub Releases for now.
 </details>
 
 <details>
@@ -308,7 +306,7 @@ modfetch download --batch jobs.yml --place
   
   - URL forms:
     - civitai://model/{id}[?version=...] is supported; base page URLs like https://civitai.com/models/{id} auto‑resolve to the latest version’s primary file
-    - hf://org/repo/path?rev=... is supported
+    - hf://org/repo/path?rev=... is supported; shorthand forms are limited to hf://repo and root-level files such as hf://repo/README.md
   - Default filename:
     - civitai:// uses `<ModelName> - <OriginalFileName>` if `--dest` is omitted (with collision‑safe suffixes)
     - direct URLs use the basename of the final resolved URL; query/fragment is stripped and the name is sanitized
@@ -424,7 +422,7 @@ Contributing
     - Linux: amd64, arm64
     - macOS: amd64, arm64, universal (fat) binary
     - Checksums (.sha256) for all artifacts
-  - See CHANGELOG.md for release notes
+  - Release notes are extracted from the matching `CHANGELOG.md` section by `scripts/release-notes.sh`
   - Optional (local): `make release-dist` and `make macos-universal` if you want to reproduce artifacts locally
 
 See CONTRIBUTING.md for full guidelines.
