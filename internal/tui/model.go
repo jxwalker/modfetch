@@ -72,6 +72,7 @@ type libraryBulkMsg struct {
 	action string
 	count  int
 	path   string
+	keys   []string
 	err    error
 }
 
@@ -392,6 +393,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case libraryBulkMsg:
+		for _, key := range msg.keys {
+			delete(m.librarySelectedKeys, key)
+		}
 		if msg.err != nil {
 			m.addToast(fmt.Sprintf("%s failed: %v", msg.action, msg.err))
 		} else if msg.path != "" {

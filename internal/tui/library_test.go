@@ -736,6 +736,58 @@ func TestLibrary_FilterMenuCyclesFiltersAndSearch(t *testing.T) {
 	}
 }
 
+func TestLibrary_FilterMenuClearResetsAllFilters(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	models := []state.ModelMetadata{
+		{
+			DownloadURL: "https://example.com/llm.gguf",
+			ModelName:   "llama",
+			ModelType:   "LLM",
+			Source:      "huggingface",
+			Dest:        "/models/llm.gguf",
+			Favorite:    true,
+		},
+		{
+			DownloadURL: "https://example.com/lora.safetensors",
+			ModelName:   "portrait",
+			ModelType:   "LoRA",
+			Source:      "civitai",
+			Dest:        "/models/lora.safetensors",
+		},
+	}
+	for i := range models {
+		if err := db.UpsertMetadata(&models[i]); err != nil {
+			t.Fatalf("seed metadata: %v", err)
+		}
+	}
+
+	model.librarySearch = "llama"
+	model.librarySearchInput.SetValue("llama")
+	model.libraryFilterType = "LoRA"
+	model.libraryFilterSource = "civitai"
+	model.libraryShowFavorites = true
+	model.refreshLibraryData()
+	if len(model.libraryRows) != 0 {
+		t.Fatalf("expected combined filters to hide all rows, got %d", len(model.libraryRows))
+	}
+
+	model.libraryFilterMenu = true
+	model.libraryFilterIndex = 4
+	_, _ = model.updateLibraryFilterMenu(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if model.librarySearch != "" || model.librarySearchInput.Value() != "" {
+		t.Fatalf("search was not cleared: search=%q input=%q", model.librarySearch, model.librarySearchInput.Value())
+	}
+	if model.libraryFilterType != "" || model.libraryFilterSource != "" || model.libraryShowFavorites {
+		t.Fatalf("filters were not cleared: type=%q source=%q favorites=%v", model.libraryFilterType, model.libraryFilterSource, model.libraryShowFavorites)
+	}
+	if len(model.libraryRows) != 2 {
+		t.Fatalf("expected all rows after clearing filters, got %d", len(model.libraryRows))
+	}
+}
+
 func TestLibrary_SelectionPersistsAcrossFiltersAndTabs(t *testing.T) {
 	model, db, cleanup := setupTestLibrary(t)
 	defer cleanup()
@@ -829,6 +881,27 @@ func TestLibrary_BulkFavoriteToggle(t *testing.T) {
 		if got.Favorite {
 			t.Fatalf("expected %s to be unfavorited", row.DownloadURL)
 		}
+	}
+}
+
+func TestLibrary_BulkMessagePrunesActedSelectionKeys(t *testing.T) {
+	model, _, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	model.librarySelectedKeys["acted"] = true
+	model.librarySelectedKeys["kept"] = true
+
+	_, _ = model.Update(libraryBulkMsg{
+		action: "favorite",
+		count:  1,
+		keys:   []string{"acted"},
+	})
+
+	if model.librarySelectedKeys["acted"] {
+		t.Fatal("expected acted key to be pruned from selection")
+	}
+	if !model.librarySelectedKeys["kept"] {
+		t.Fatal("expected unrelated selection key to remain")
 	}
 }
 
@@ -962,6 +1035,9 @@ func TestLibrary_DeleteStagedDataRequiresConfirmation(t *testing.T) {
 	}
 	if result.err != nil {
 		t.Fatalf("delete failed: %v", result.err)
+	}
+	if len(result.keys) != 1 || result.keys[0] != meta.DownloadURL {
+		t.Fatalf("expected acted key in delete result, got %+v", result.keys)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("expected staged file to be removed, err=%v", err)

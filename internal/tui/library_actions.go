@@ -90,6 +90,18 @@ func (m *Model) applyLibraryFilters(rows []state.ModelMetadata) []state.ModelMet
 	return filtered
 }
 
+const libraryRowLimit = 1000
+
+func normalizeLibraryRows(rows []state.ModelMetadata) []state.ModelMetadata {
+	sort.SliceStable(rows, func(i, j int) bool {
+		return rows[i].UpdatedAt.After(rows[j].UpdatedAt)
+	})
+	if len(rows) > libraryRowLimit {
+		return rows[:libraryRowLimit]
+	}
+	return rows
+}
+
 func (m *Model) updateLibraryFilterMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s := msg.String()
 	selectedKey := m.currentLibraryKey()
@@ -273,16 +285,21 @@ func (m *Model) toggleFavoriteLibraryRowsCmd(rows []state.ModelMetadata) tea.Cmd
 			break
 		}
 	}
+	clearKeys := !makeFavorite && m.libraryShowFavorites
 	return func() tea.Msg {
 		count := 0
+		keys := make([]string, 0, len(rows))
 		for _, row := range rows {
 			row.Favorite = makeFavorite
 			if err := m.st.UpsertMetadata(&row); err != nil {
-				return libraryBulkMsg{action: favoriteActionName(makeFavorite), count: count, err: err}
+				return libraryBulkMsg{action: favoriteActionName(makeFavorite), count: count, keys: keys, err: err}
+			}
+			if clearKeys {
+				keys = append(keys, libraryKey(row))
 			}
 			count++
 		}
-		return libraryBulkMsg{action: favoriteActionName(makeFavorite), count: count}
+		return libraryBulkMsg{action: favoriteActionName(makeFavorite), count: count, keys: keys}
 	}
 }
 
@@ -432,6 +449,7 @@ func (m *Model) deleteLibraryStagedCmd(rows []state.ModelMetadata) tea.Cmd {
 			return libraryBulkMsg{action: "delete staged", err: fmt.Errorf("missing database")}
 		}
 		count := 0
+		keys := make([]string, 0, len(rows))
 		var firstErr error
 		for _, row := range rows {
 			if !m.isStagedLibraryPath(row.Dest) {
@@ -456,10 +474,10 @@ func (m *Model) deleteLibraryStagedCmd(rows []state.ModelMetadata) tea.Cmd {
 				deleted = true
 			}
 			if deleted {
-				delete(m.librarySelectedKeys, libraryKey(row))
+				keys = append(keys, libraryKey(row))
 			}
 		}
-		return libraryBulkMsg{action: "delete staged", count: count, err: firstErr}
+		return libraryBulkMsg{action: "delete staged", count: count, keys: keys, err: firstErr}
 	}
 }
 

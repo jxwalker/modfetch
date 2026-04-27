@@ -26,7 +26,7 @@ func (m *Model) refreshLibraryData() {
 		ModelType: m.libraryFilterType,
 		Favorite:  m.libraryShowFavorites,
 		OrderBy:   "updated_at", // Most recently updated first
-		Limit:     1000,         // Reasonable limit
+		Limit:     libraryRowLimit,
 	}
 
 	var rows []state.ModelMetadata
@@ -35,7 +35,7 @@ func (m *Model) refreshLibraryData() {
 	if m.librarySearch != "" {
 		// If searching, use search function
 		rows, err = m.st.SearchMetadata(m.librarySearch)
-		rows = m.applyLibraryFilters(rows)
+		rows = normalizeLibraryRows(m.applyLibraryFilters(rows))
 	} else {
 		// Otherwise use filtered list
 		rows, err = m.st.ListMetadata(filters)
