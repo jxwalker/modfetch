@@ -9,6 +9,7 @@ CONFIG_DIR=${CONFIG_DIR:-"${XDG_CONFIG_HOME:-$HOME/.config}/modfetch"}
 DATA_DIR=${DATA_DIR:-"$HOME/modfetch-data"}
 DOWNLOAD_DIR=${DOWNLOAD_DIR:-"$HOME/Downloads/modfetch"}
 SKIP_CONFIG_WIZARD=${SKIP_CONFIG_WIZARD:-false}
+SKIP_SHELL_INTEGRATION=${SKIP_SHELL_INTEGRATION:-}
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -330,6 +331,11 @@ EOF
 }
 
 setup_shell_integration() {
+    if [[ "${SKIP_SHELL_INTEGRATION:-$SKIP_CONFIG_WIZARD}" == "true" ]]; then
+        info "Skipping shell integration"
+        return
+    fi
+
     log "Setting up shell integration..."
     
     local shell_rc
@@ -434,41 +440,41 @@ run_smoke_test() {
 print_next_steps() {
     local config_file="$CONFIG_DIR/config.yml"
     
-    printf "\n${GREEN}🎉 Installation completed successfully!${NC}\n\n" >&2
+    printf "\n%b\n\n" "${GREEN}🎉 Installation completed successfully!${NC}" >&2
     
-    printf "${WHITE}Next Steps:${NC}\n" >&2
-    printf "1. ${CYAN}Verify installation:${NC}\n" >&2
+    printf "%b\n" "${WHITE}Next Steps:${NC}" >&2
+    printf "%b\n" "1. ${CYAN}Verify installation:${NC}" >&2
     printf "   modfetch version\n\n" >&2
     
-    printf "2. ${CYAN}Configure tokens (if needed):${NC}\n" >&2
+    printf "%b\n" "2. ${CYAN}Configure tokens (if needed):${NC}" >&2
     printf "   export HF_TOKEN='your_huggingface_token'     # For HuggingFace\n" >&2
     printf "   export CIVITAI_TOKEN='your_civitai_token'    # For CivitAI\n\n" >&2
     
-    printf "3. ${CYAN}Try some downloads:${NC}\n" >&2
+    printf "%b\n" "3. ${CYAN}Try some downloads:${NC}" >&2
     printf "   # Direct HTTP download\n" >&2
     printf "   modfetch download --url 'https://proof.ovh.net/files/1Mb.dat'\n\n" >&2
     printf "   # HuggingFace model\n" >&2
-    printf "   modfetch download --url 'hf://gpt2/README.md?rev=main'\n\n"
-    printf "   # CivitAI model (requires token)\n"
-    printf "   modfetch download --url 'civitai://model/123456'\n\n"
+    printf "   modfetch download --url 'hf://gpt2/README.md?rev=main'\n\n" >&2
+    printf "   # CivitAI model (requires token)\n" >&2
+    printf "   modfetch download --url 'civitai://model/123456'\n\n" >&2
     
-    printf "4. ${CYAN}Launch TUI dashboard:${NC}\n"
-    printf "   modfetch tui\n\n"
+    printf "%b\n" "4. ${CYAN}Launch TUI dashboard:${NC}" >&2
+    printf "   modfetch tui\n\n" >&2
     
-    printf "5. ${CYAN}View status and verify downloads:${NC}\n"
-    printf "   modfetch status\n"
-    printf "   modfetch verify --all\n\n"
+    printf "%b\n" "5. ${CYAN}View status and verify downloads:${NC}" >&2
+    printf "   modfetch status\n" >&2
+    printf "   modfetch verify --all\n\n" >&2
     
-    printf "${WHITE}Configuration:${NC}\n"
-    printf "  Config file: $config_file\n"
-    printf "  Data directory: $DATA_DIR\n"
-    printf "  Download directory: $DOWNLOAD_DIR\n\n"
+    printf "%b\n" "${WHITE}Configuration:${NC}" >&2
+    printf "  Config file: %s\n" "$config_file" >&2
+    printf "  Data directory: %s\n" "$DATA_DIR" >&2
+    printf "  Download directory: %s\n\n" "$DOWNLOAD_DIR" >&2
     
-    printf "${WHITE}Documentation:${NC}\n"
-    printf "  GitHub: https://github.com/jxwalker/modfetch\n"
-    printf "  User Guide: https://github.com/jxwalker/modfetch/blob/main/docs/USER_GUIDE.md\n\n"
+    printf "%b\n" "${WHITE}Documentation:${NC}" >&2
+    printf "  GitHub: https://github.com/jxwalker/modfetch\n" >&2
+    printf "  User Guide: https://github.com/jxwalker/modfetch/blob/main/docs/USER_GUIDE.md\n\n" >&2
     
-    printf "${YELLOW}Need help? Open an issue at: https://github.com/jxwalker/modfetch/issues${NC}\n"
+    printf "%b\n" "${YELLOW}Need help? Open an issue at: https://github.com/jxwalker/modfetch/issues${NC}" >&2
 }
 
 cleanup_on_error() {
@@ -532,6 +538,10 @@ while [[ $# -gt 0 ]]; do
             DOWNLOAD_DIR="$2"
             shift 2
             ;;
+        --skip-shell-integration)
+            SKIP_SHELL_INTEGRATION="true"
+            shift
+            ;;
         --help)
             cat << EOF
 ModFetch Installation Script
@@ -545,6 +555,8 @@ Options:
   --data-dir DIR          Data directory (default: ~/modfetch-data)
   --download-dir DIR      Download directory (default: ~/Downloads/modfetch)
   --skip-config-wizard    Skip interactive configuration wizard
+  --skip-shell-integration
+                          Skip PATH and shell completion prompts
   --help                  Show this help message
 
 Environment Variables:
@@ -553,6 +565,8 @@ Environment Variables:
   CONFIG_DIR              Configuration directory
   DATA_DIR                Data directory
   DOWNLOAD_DIR            Download directory
+  SKIP_CONFIG_WIZARD      Skip interactive configuration wizard
+  SKIP_SHELL_INTEGRATION  Skip PATH and shell completion prompts
 
 Examples:
   $0
