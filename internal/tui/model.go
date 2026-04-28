@@ -68,9 +68,23 @@ type probeMsg struct {
 	info      string
 }
 
+type libraryBulkMsg struct {
+	action      string
+	count       int
+	path        string
+	keys        []string
+	runningKeys []string
+	err         error
+}
+
 type obs struct {
 	bytes int64
 	t     time.Time
+}
+
+type libraryConfirmAction struct {
+	action string
+	rows   []state.ModelMetadata
 }
 
 type toast struct {
@@ -154,6 +168,7 @@ type Model struct {
 	civRateLimited bool
 	// Library view state
 	libraryRows          []state.ModelMetadata
+	libraryFilterRows    []state.ModelMetadata
 	librarySelected      int
 	librarySearch        string
 	libraryViewingDetail bool
@@ -161,6 +176,11 @@ type Model struct {
 	libraryFilterType    string          // Filter by model type: "", "LLM", "LoRA", etc.
 	libraryFilterSource  string          // Filter by source: "", "huggingface", "civitai"
 	libraryShowFavorites bool            // Show only favorites
+	librarySelectedKeys  map[string]bool // Selected library metadata rows keyed by download URL or dest
+	libraryFilterMenu    bool            // Filter menu is visible
+	libraryFilterIndex   int             // Selected filter menu row
+	libraryFilterEditing bool            // Editing search inside filter menu
+	libraryConfirm       *libraryConfirmAction
 	libraryNeedsRefresh  bool            // Flag to reload library data
 	librarySearchInput   textinput.Model // Search input for library
 	librarySearchActive  bool            // Search input is active
@@ -208,6 +228,8 @@ func New(cfg *config.Config, st *state.DB, version string) tea.Model {
 		placeType:  map[string]string{}, autoPlace: map[string]bool{},
 		// Library state
 		libraryRows:         []state.ModelMetadata{},
+		libraryFilterRows:   []state.ModelMetadata{},
+		librarySelectedKeys: map[string]bool{},
 		libraryNeedsRefresh: true,
 		librarySearchInput:  libSearch,
 		log:                 logging.New("info", false),
@@ -257,6 +279,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.librarySearchActive {
 			return m.updateLibrarySearch(msg)
+		}
+		if m.libraryFilterMenu {
+			return m.updateLibraryFilterMenu(msg)
+		}
+		if m.libraryConfirm != nil {
+			return m.updateLibraryConfirm(msg)
 		}
 		return m.updateNormal(msg)
 	case tickMsg:
@@ -367,6 +395,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.libraryNeedsRefresh = true
 		}
 		return m, nil
+	case libraryBulkMsg:
+		for _, key := range msg.runningKeys {
+			if cancel, ok := m.running[key]; ok {
+				cancel()
+				delete(m.running, key)
+			}
+			delete(m.retrying, key)
+		}
+		for _, key := range msg.keys {
+			delete(m.librarySelectedKeys, key)
+		}
+		if msg.err != nil {
+			if msg.count > 0 {
+				m.addToast(fmt.Sprintf("%s partial: %d item(s), error: %v", msg.action, msg.count, msg.err))
+			} else {
+				m.addToast(fmt.Sprintf("%s failed: %v", msg.action, msg.err))
+			}
+		} else if msg.path != "" {
+			m.addToast(fmt.Sprintf("%s: %d item(s) → %s", msg.action, msg.count, truncateMiddle(msg.path, 48)))
+		} else {
+			m.addToast(fmt.Sprintf("%s: %d item(s)", msg.action, msg.count))
+		}
+		m.libraryNeedsRefresh = true
+		m.refreshLibraryData()
+		return m, m.refresh()
 	case dlDoneMsg:
 		// Apply placement metadata if needed (safe concurrent map access from Update thread)
 		if msg.needsPlaceMap && msg.origKey != msg.resKey {
@@ -487,6 +540,14 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, m.scanDirectoriesCmd()
 		}
 		return m, nil
+	case "F":
+		if m.activeTab == 4 && !m.libraryViewingDetail {
+			m.libraryFilterMenu = true
+			m.libraryFilterIndex = 0
+			m.libraryFilterEditing = false
+			return m, nil
+		}
+		return m, nil
 	case "s":
 		m.sortMode = "speed"
 		m.saveUIState()
@@ -570,7 +631,6 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "5", "l":
 		// Switch to Library tab (key 5 or 'l' for library)
 		m.activeTab = 4
-		m.librarySelected = 0
 		m.libraryViewingDetail = false
 		// Load library data if needed
 		if m.libraryNeedsRefresh || len(m.libraryRows) == 0 {
@@ -617,6 +677,17 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case " ":
+		if m.activeTab == 4 {
+			if !m.libraryViewingDetail && m.librarySelected >= 0 && m.librarySelected < len(m.libraryRows) {
+				key := libraryKey(m.libraryRows[m.librarySelected])
+				if m.librarySelectedKeys[key] {
+					delete(m.librarySelectedKeys, key)
+				} else {
+					m.librarySelectedKeys[key] = true
+				}
+			}
+			return m, nil
+		}
 		rows := m.visibleRows()
 		if m.selected >= 0 && m.selected < len(rows) {
 			key := keyFor(rows[m.selected])
@@ -628,16 +699,33 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "A":
+		if m.activeTab == 4 {
+			for _, row := range m.libraryRows {
+				m.librarySelectedKeys[libraryKey(row)] = true
+			}
+			return m, nil
+		}
 		for _, r := range m.visibleRows() {
 			m.selectedKeys[keyFor(r)] = true
 		}
 		return m, nil
 	case "X":
+		if m.activeTab == 4 {
+			m.librarySelectedKeys = map[string]bool{}
+			return m, nil
+		}
 		m.selectedKeys = map[string]bool{}
 		return m, nil
 	case "r":
 		fallthrough
 	case "y":
+		if m.activeTab == 4 {
+			targets := m.selectedLibraryRows()
+			if len(targets) == 0 {
+				return m, nil
+			}
+			return m, m.retryLibraryRows(targets)
+		}
 		targets := m.selectionOrCurrent()
 		if len(targets) == 0 {
 			return m, nil
@@ -657,6 +745,13 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.addToast(fmt.Sprintf("retrying %d item(s)…", len(targets)))
 		return m, tea.Batch(cmds...)
 	case "p":
+		if m.activeTab == 4 {
+			targets := m.selectedLibraryRows()
+			if len(targets) == 0 {
+				return m, nil
+			}
+			return m, m.placeLibraryRowsCmd(targets)
+		}
 		cnt := 0
 		for _, r := range m.selectionOrCurrent() {
 			key := keyFor(r)
@@ -668,6 +763,36 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if cnt > 0 {
 			m.addToast(fmt.Sprintf("cancelled %d", cnt))
+		}
+		return m, nil
+	case "V":
+		if m.activeTab == 4 {
+			targets := m.selectedLibraryRows()
+			if len(targets) == 0 {
+				return m, nil
+			}
+			return m, m.verifyLibraryRowsCmd(targets)
+		}
+		return m, nil
+	case "E":
+		if m.activeTab == 4 {
+			targets := m.selectedLibraryRows()
+			if len(targets) == 0 {
+				return m, nil
+			}
+			return m, m.exportLibraryRowsCmd(targets)
+		}
+		return m, nil
+	case "f":
+		if m.activeTab == 4 {
+			if m.libraryViewingDetail && m.libraryDetailModel != nil {
+				return m, m.toggleFavoriteLibraryRowsCmd([]state.ModelMetadata{*m.libraryDetailModel})
+			}
+			targets := m.selectedLibraryRows()
+			if len(targets) == 0 {
+				return m, nil
+			}
+			return m, m.toggleFavoriteLibraryRowsCmd(targets)
 		}
 		return m, nil
 	case "O":
@@ -689,6 +814,24 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "D":
+		if m.activeTab == 4 {
+			targets := m.selectedLibraryRows()
+			if len(targets) == 0 {
+				return m, nil
+			}
+			deletableTargets := make([]state.ModelMetadata, 0, len(targets))
+			for _, row := range targets {
+				if m.isStagedLibraryPath(row.Dest) {
+					deletableTargets = append(deletableTargets, row)
+				}
+			}
+			if len(deletableTargets) == 0 {
+				m.addToast("no staged library files selected")
+				return m, nil
+			}
+			m.libraryConfirm = &libraryConfirmAction{action: "delete-staged", rows: deletableTargets}
+			return m, nil
+		}
 		rows := m.selectionOrCurrent()
 		if len(rows) == 0 {
 			return m, nil
@@ -786,6 +929,12 @@ func (m *Model) View() string {
 	}
 	if m.batchMode {
 		modal = m.th.border.Width(m.w - 4).Render(m.renderBatchModal())
+	}
+	if m.libraryFilterMenu {
+		modal = m.th.border.Width(m.w - 4).Render(m.renderLibraryFilterMenu())
+	}
+	if m.libraryConfirm != nil {
+		modal = m.th.border.Width(m.w - 4).Render(m.renderLibraryConfirm())
 	}
 
 	// Minimal footer: show filter or search input when active

@@ -67,17 +67,17 @@ Acceptance checks:
   destination, checksum, and core metadata.
 - Import dry-run reports creates, updates, skips, and conflicts without writes.
 
-### 3. TUI Bulk Operations and Filter Menu [TODO]
+### 3. TUI Bulk Operations and Filter Menu [DONE]
 
 Outcome: common library maintenance tasks are possible from the TUI without
 dropping to separate CLI commands.
 
-- [TODO] Implement the documented `F` filter menu for library type/source,
+- [DONE] Implement the documented `F` filter menu for library type/source,
   favorite status, and text search.
-- [TODO] Add multi-select bulk actions for retry, delete staged data, verify,
+- [DONE] Add multi-select bulk actions for retry, delete staged data, verify,
   place, favorite/unfavorite, and export selected catalog entries.
-- [TODO] Show bulk-action confirmation summaries before destructive actions.
-- [TODO] Add tests for selection persistence across filters and tabs.
+- [DONE] Show bulk-action confirmation summaries before destructive actions.
+- [DONE] Add tests for selection persistence across filters and tabs.
 
 Acceptance checks:
 - Selection state remains stable when filters change.

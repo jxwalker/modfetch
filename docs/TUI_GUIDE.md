@@ -106,11 +106,19 @@ help overlay.
 
 - `j`/`k` or arrow keys - Navigate model list
 - `/` - Search models by name
+- `F` - Open the filter menu for search, model type, source, and favorites
+- `Space` - Select or deselect the highlighted model
+- `A` - Select all visible library models
+- `X` - Clear library selection
 - `Enter` - View model details
 - `Esc` - Return to list from detail view
-- `f` - Toggle favorite on selected model
+- `f` - Favorite or unfavorite the current selection
+- `r` or `y` - Retry selected library downloads
+- `V` - Verify selected files and update checksum/status state
+- `p` - Place selected files using configured placement rules
+- `E` - Export selected models to `library-selected-catalog.json`
+- `D` - Delete selected staged download data after confirmation
 - `S` - Scan directories for new models
-- `F` - Toggle filter menu (future)
 
 ### Settings Tab Keys
 
@@ -145,6 +153,12 @@ Default naming
 - Press / to filter by substring (e.g., part of the filename or URL)
 - Press g to toggle grouping by status
 - Sorting works with or without grouping
+
+Library filtering:
+- Press `F` on the Library tab to open the filter menu.
+- Use `j`/`k` or arrow keys to choose Search, Type, Source, Favorites, or Clear filters.
+- Press `Enter` to edit search, cycle type/source values, toggle favorites, or clear all filters.
+- Library selections are tracked by model identity, so selected rows remain selected when filters hide and later reveal them.
 
 ## Speed and ETA
 
@@ -214,4 +228,3 @@ For animated SVGs/GIFs, consider tools like svg-term or agg (requires additional
 - Quiet logs are for the CLI; the TUI always shows live state
 - For large batches, consider using batch YAML with `modfetch download --batch jobs.yml` alongside the TUI
 - Export MODFETCH_CONFIG for convenience so TUI and CLI share defaults
-

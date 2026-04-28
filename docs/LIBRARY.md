@@ -143,8 +143,17 @@ The library automatically paginates when you have more models than fit on screen
 | `5` or `L` | Switch to Library tab |
 | `Enter` | View model details |
 | `Esc` | Back to list / Exit detail view |
-| `f` | Toggle favorite on selected model |
+| `Space` | Select or deselect the highlighted model |
+| `A` | Select all visible models |
+| `X` | Clear library selection |
+| `f` | Favorite or unfavorite selected models |
 | `/` | Activate search |
+| `F` | Open filter menu |
+| `r` or `y` | Retry selected downloads |
+| `V` | Verify selected files |
+| `p` | Place selected files |
+| `E` | Export selected catalog entries |
+| `D` | Delete staged data after confirmation |
 | `S` | Scan directories for models |
 | `↑` `↓` `j` `k` | Navigate model list |
 | `g` `G` | Jump to first/last model |
@@ -183,7 +192,7 @@ Model Library • Search: "llama"
 
 ### Filtering by Type
 
-Filter models by type using the internal filter state (future enhancement will add UI controls):
+Press `F`, choose `Type`, and press `Enter` to cycle through known model types:
 
 **Supported types:**
 - `LLM` - Large language models (.gguf, .ggml files)
@@ -196,7 +205,7 @@ Filter models by type using the internal filter state (future enhancement will a
 
 ### Filtering by Source
 
-Filter models by source:
+Press `F`, choose `Source`, and press `Enter` to cycle through known sources:
 
 **Supported sources:**
 - `huggingface` - Models from HuggingFace Hub
@@ -212,7 +221,26 @@ Mark important models as favorites:
 2. Press `f` to toggle favorite status
 3. Favorite models show a ★ indicator
 
-Filter to show only favorites by enabling the favorites filter (future UI enhancement).
+Filter to show only favorites by pressing `F`, choosing `Favorites`, and pressing `Enter`.
+
+### Bulk Actions
+
+Use `Space` to select individual rows, `A` to select all visible rows, and `X`
+to clear the selection. When no rows are selected, library actions apply to the
+highlighted row.
+
+- `r` or `y`: retry the selected models' download URLs.
+- `V`: verify selected files and refresh checksum/status state.
+- `p`: place selected files using configured placement rules.
+- `f`: favorite the selection if any selected model is not favorite; otherwise
+  unfavorite the selection.
+- `E`: export selected entries to `library-selected-catalog.json` under the data
+  root.
+- `D`: delete staged download rows/chunks, and files under the download root,
+  after a confirmation summary. Library metadata is kept.
+
+Selections are tracked by model identity, so a selected model remains selected
+when filters temporarily hide it and later reveal it again.
 
 ## Model Details
 

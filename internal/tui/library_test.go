@@ -1,12 +1,15 @@
 package tui
 
 import (
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/jxwalker/modfetch/internal/catalog"
 	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/state"
 )
@@ -685,6 +688,546 @@ func TestLibrary_ThemeApplication(t *testing.T) {
 	}()
 
 	_ = model.renderLibrary()
+}
+
+func TestLibrary_FilterMenuCyclesFiltersAndSearch(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	models := []state.ModelMetadata{
+		{
+			DownloadURL: "https://example.com/llm.gguf",
+			ModelName:   "llama",
+			ModelType:   "LLM",
+			Source:      "huggingface",
+			Dest:        "/models/llm.gguf",
+		},
+		{
+			DownloadURL: "https://example.com/lora.safetensors",
+			ModelName:   "portrait",
+			ModelType:   "LoRA",
+			Source:      "civitai",
+			Dest:        "/models/lora.safetensors",
+		},
+	}
+	for i := range models {
+		if err := db.UpsertMetadata(&models[i]); err != nil {
+			t.Fatalf("seed metadata: %v", err)
+		}
+	}
+	model.refreshLibraryData()
+
+	model.libraryFilterMenu = true
+	model.libraryFilterIndex = 1
+	_, _ = model.updateLibraryFilterMenu(tea.KeyMsg{Type: tea.KeyEnter})
+	if model.libraryFilterType != "LLM" {
+		t.Fatalf("expected first type filter to be LLM, got %q", model.libraryFilterType)
+	}
+	if len(model.libraryRows) != 1 || model.libraryRows[0].ModelType != "LLM" {
+		t.Fatalf("type filter did not apply: %+v", model.libraryRows)
+	}
+
+	model.libraryFilterIndex = 0
+	_, _ = model.updateLibraryFilterMenu(tea.KeyMsg{Type: tea.KeyEnter})
+	model.librarySearchInput.SetValue("llama")
+	_, _ = model.updateLibraryFilterMenu(tea.KeyMsg{Type: tea.KeyEnter})
+	if model.librarySearch != "llama" || len(model.libraryRows) != 1 {
+		t.Fatalf("search filter did not apply: search=%q rows=%d", model.librarySearch, len(model.libraryRows))
+	}
+}
+
+func TestLibrary_FilterMenuValuesUseUnfilteredRows(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	models := []state.ModelMetadata{
+		{
+			DownloadURL: "https://example.com/llm.gguf",
+			ModelName:   "llama",
+			ModelType:   "LLM",
+			Source:      "huggingface",
+			Dest:        "/models/llm.gguf",
+		},
+		{
+			DownloadURL: "https://example.com/lora.safetensors",
+			ModelName:   "portrait",
+			ModelType:   "LoRA",
+			Source:      "civitai",
+			Dest:        "/models/lora.safetensors",
+		},
+	}
+	for i := range models {
+		if err := db.UpsertMetadata(&models[i]); err != nil {
+			t.Fatalf("seed metadata: %v", err)
+		}
+	}
+
+	model.libraryFilterType = "LLM"
+	model.refreshLibraryData()
+	if len(model.libraryRows) != 1 || model.libraryRows[0].ModelType != "LLM" {
+		t.Fatalf("expected active type filter to show LLM only, got %+v", model.libraryRows)
+	}
+
+	model.libraryFilterMenu = true
+	model.libraryFilterIndex = 1
+	_, _ = model.updateLibraryFilterMenu(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if model.libraryFilterType != "LoRA" {
+		t.Fatalf("expected type menu to cycle to LoRA, got %q", model.libraryFilterType)
+	}
+	if len(model.libraryRows) != 1 || model.libraryRows[0].ModelType != "LoRA" {
+		t.Fatalf("expected LoRA row after cycling type filter, got %+v", model.libraryRows)
+	}
+}
+
+func TestLibrary_FilterMenuClearResetsAllFilters(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	models := []state.ModelMetadata{
+		{
+			DownloadURL: "https://example.com/llm.gguf",
+			ModelName:   "llama",
+			ModelType:   "LLM",
+			Source:      "huggingface",
+			Dest:        "/models/llm.gguf",
+			Favorite:    true,
+		},
+		{
+			DownloadURL: "https://example.com/lora.safetensors",
+			ModelName:   "portrait",
+			ModelType:   "LoRA",
+			Source:      "civitai",
+			Dest:        "/models/lora.safetensors",
+		},
+	}
+	for i := range models {
+		if err := db.UpsertMetadata(&models[i]); err != nil {
+			t.Fatalf("seed metadata: %v", err)
+		}
+	}
+
+	model.librarySearch = "llama"
+	model.librarySearchInput.SetValue("llama")
+	model.libraryFilterType = "LoRA"
+	model.libraryFilterSource = "civitai"
+	model.libraryShowFavorites = true
+	model.refreshLibraryData()
+	if len(model.libraryRows) != 0 {
+		t.Fatalf("expected combined filters to hide all rows, got %d", len(model.libraryRows))
+	}
+
+	model.libraryFilterMenu = true
+	model.libraryFilterIndex = 4
+	_, _ = model.updateLibraryFilterMenu(tea.KeyMsg{Type: tea.KeyEnter})
+
+	if model.librarySearch != "" || model.librarySearchInput.Value() != "" {
+		t.Fatalf("search was not cleared: search=%q input=%q", model.librarySearch, model.librarySearchInput.Value())
+	}
+	if model.libraryFilterType != "" || model.libraryFilterSource != "" || model.libraryShowFavorites {
+		t.Fatalf("filters were not cleared: type=%q source=%q favorites=%v", model.libraryFilterType, model.libraryFilterSource, model.libraryShowFavorites)
+	}
+	if len(model.libraryRows) != 2 {
+		t.Fatalf("expected all rows after clearing filters, got %d", len(model.libraryRows))
+	}
+}
+
+func TestLibrary_SelectionPersistsAcrossFiltersAndTabs(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	selected := state.ModelMetadata{
+		DownloadURL: "https://example.com/selected.gguf",
+		ModelName:   "selected",
+		ModelType:   "LLM",
+		Source:      "huggingface",
+		Dest:        "/models/selected.gguf",
+	}
+	hidden := state.ModelMetadata{
+		DownloadURL: "https://example.com/hidden.safetensors",
+		ModelName:   "hidden",
+		ModelType:   "LoRA",
+		Source:      "civitai",
+		Dest:        "/models/hidden.safetensors",
+	}
+	if err := db.UpsertMetadata(&selected); err != nil {
+		t.Fatalf("seed selected: %v", err)
+	}
+	if err := db.UpsertMetadata(&hidden); err != nil {
+		t.Fatalf("seed hidden: %v", err)
+	}
+
+	model.activeTab = 4
+	model.refreshLibraryData()
+	for i, row := range model.libraryRows {
+		if row.DownloadURL == selected.DownloadURL {
+			model.librarySelected = i
+			break
+		}
+	}
+	_, _ = model.Update(tea.KeyMsg{Type: tea.KeySpace})
+	selectedKey := libraryKey(selected)
+	if !model.librarySelectedKeys[selectedKey] {
+		t.Fatal("expected selected model to be tracked")
+	}
+
+	model.libraryFilterType = "LoRA"
+	model.refreshLibraryData()
+	if model.librarySelectedKeys[selectedKey] != true {
+		t.Fatal("selection should remain tracked while filtered out")
+	}
+	model.libraryFilterType = ""
+	model.refreshLibraryData()
+	if !model.librarySelectedKeys[selectedKey] {
+		t.Fatal("selection should survive clearing filters")
+	}
+
+	model.activeTab = 0
+	_, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if model.activeTab != 4 || !model.librarySelectedKeys[selectedKey] {
+		t.Fatal("library selection should survive tab navigation")
+	}
+}
+
+func TestLibraryKeyUsesURLAndDest(t *testing.T) {
+	first := state.ModelMetadata{
+		DownloadURL: "https://example.com/model.gguf",
+		Dest:        "/models/a.gguf",
+	}
+	second := state.ModelMetadata{
+		DownloadURL: "https://example.com/model.gguf",
+		Dest:        "/models/b.gguf",
+	}
+
+	if libraryKey(first) == libraryKey(second) {
+		t.Fatal("expected same URL in different destinations to have distinct library keys")
+	}
+}
+
+func TestLibrary_BulkFavoriteToggle(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	createTestMetadata(t, db, 2)
+	model.activeTab = 4
+	model.refreshLibraryData()
+	_, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("A")})
+	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
+	if cmd == nil {
+		t.Fatal("expected favorite command")
+	}
+	_, _ = model.Update(cmd())
+
+	for _, row := range model.libraryRows {
+		got, err := db.GetMetadata(row.DownloadURL)
+		if err != nil {
+			t.Fatalf("get metadata: %v", err)
+		}
+		if !got.Favorite {
+			t.Fatalf("expected %s to be favorite", row.DownloadURL)
+		}
+	}
+
+	_, cmd = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("f")})
+	if cmd == nil {
+		t.Fatal("expected unfavorite command")
+	}
+	_, _ = model.Update(cmd())
+	for _, row := range model.libraryRows {
+		got, err := db.GetMetadata(row.DownloadURL)
+		if err != nil {
+			t.Fatalf("get metadata: %v", err)
+		}
+		if got.Favorite {
+			t.Fatalf("expected %s to be unfavorited", row.DownloadURL)
+		}
+	}
+}
+
+func TestLibrary_BulkMessagePrunesActedSelectionKeys(t *testing.T) {
+	model, _, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	model.librarySelectedKeys["acted"] = true
+	model.librarySelectedKeys["kept"] = true
+
+	_, _ = model.Update(libraryBulkMsg{
+		action: "favorite",
+		count:  1,
+		keys:   []string{"acted"},
+	})
+
+	if model.librarySelectedKeys["acted"] {
+		t.Fatal("expected acted key to be pruned from selection")
+	}
+	if !model.librarySelectedKeys["kept"] {
+		t.Fatal("expected unrelated selection key to remain")
+	}
+}
+
+func TestLibrary_RetrySkipsLocalURLs(t *testing.T) {
+	model, _, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	cmd := model.retryLibraryRows([]state.ModelMetadata{{
+		DownloadURL: "file:///models/local.gguf",
+		ModelName:   "local",
+		Dest:        "/models/local.gguf",
+	}})
+	if len(model.running) != 0 {
+		t.Fatalf("local retry should not register running downloads: %+v", model.running)
+	}
+	if cmd == nil {
+		return
+	}
+	msg := cmd()
+	if msg != nil {
+		t.Fatalf("local retry should not start a command, got %T", msg)
+	}
+}
+
+func TestLibrary_RetryCleansRunningStateOnUpsertError(t *testing.T) {
+	model, db, _ := setupTestLibrary(t)
+
+	row := state.ModelMetadata{
+		DownloadURL: "https://example.com/model.gguf",
+		ModelName:   "remote",
+		Dest:        "/models/model.gguf",
+	}
+	cmd := model.retryLibraryRows([]state.ModelMetadata{row})
+	if cmd == nil {
+		t.Fatal("expected retry command")
+	}
+	key := row.DownloadURL + "|" + row.Dest
+	if _, ok := model.running[key]; !ok {
+		t.Fatal("expected retry to register running state before command executes")
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close db: %v", err)
+	}
+
+	raw := cmd()
+	if batch, ok := raw.(tea.BatchMsg); ok && len(batch) == 1 {
+		raw = batch[0]()
+	}
+	msg, ok := raw.(libraryBulkMsg)
+	if !ok {
+		t.Fatalf("expected libraryBulkMsg, got %T", raw)
+	}
+	if msg.err == nil || len(msg.runningKeys) != 1 || msg.runningKeys[0] != key {
+		t.Fatalf("expected retry upsert error with cleanup key, got %+v", msg)
+	}
+	_, _ = model.Update(msg)
+	if _, ok := model.running[key]; ok {
+		t.Fatal("expected failed retry to clear running state")
+	}
+	if _, ok := model.retrying[key]; ok {
+		t.Fatal("expected failed retry to clear retrying state")
+	}
+}
+
+func TestLibrary_BulkExportSelectedCatalog(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+	model.cfg.General.DataRoot = t.TempDir()
+
+	createTestMetadata(t, db, 2)
+	model.activeTab = 4
+	model.refreshLibraryData()
+	model.librarySelectedKeys[libraryKey(model.libraryRows[0])] = true
+
+	msg := model.exportLibraryRowsCmd(model.selectedLibraryRows())()
+	result, ok := msg.(libraryBulkMsg)
+	if !ok {
+		t.Fatalf("expected libraryBulkMsg, got %T", msg)
+	}
+	if result.err != nil {
+		t.Fatalf("export failed: %v", result.err)
+	}
+	if result.count != 1 {
+		t.Fatalf("expected one exported entry, got %d", result.count)
+	}
+	data, err := os.ReadFile(result.path)
+	if err != nil {
+		t.Fatalf("read export: %v", err)
+	}
+	var exported catalog.Catalog
+	if err := json.Unmarshal(data, &exported); err != nil {
+		t.Fatalf("decode export: %v", err)
+	}
+	if len(exported.Models) != 1 {
+		t.Fatalf("expected one catalog model, got %d", len(exported.Models))
+	}
+}
+
+func TestLibrary_DetailModelRebindsAfterRefresh(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	meta := state.ModelMetadata{
+		DownloadURL: "https://example.com/detail.gguf",
+		ModelName:   "detail",
+		Dest:        "/models/detail.gguf",
+	}
+	if err := db.UpsertMetadata(&meta); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+	model.refreshLibraryData()
+	model.libraryViewingDetail = true
+	model.libraryDetailModel = &model.libraryRows[0]
+
+	meta.Favorite = true
+	if err := db.UpsertMetadata(&meta); err != nil {
+		t.Fatalf("update metadata: %v", err)
+	}
+	model.refreshLibraryData()
+	if model.libraryDetailModel == nil || !model.libraryDetailModel.Favorite {
+		t.Fatalf("expected detail model to rebind to refreshed row, got %+v", model.libraryDetailModel)
+	}
+}
+
+func TestLibrary_BulkVerifyUpdatesDownloadRow(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	path := filepath.Join(model.cfg.General.DownloadRoot, "model.gguf")
+	if err := os.WriteFile(path, []byte("model"), 0o644); err != nil {
+		t.Fatalf("write model: %v", err)
+	}
+	meta := state.ModelMetadata{
+		DownloadURL: "https://example.com/model.gguf",
+		ModelName:   "model",
+		Dest:        path,
+	}
+	if err := db.UpsertMetadata(&meta); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+	model.refreshLibraryData()
+
+	msg := model.verifyLibraryRowsCmd(model.libraryRows)()
+	result, ok := msg.(libraryBulkMsg)
+	if !ok {
+		t.Fatalf("expected libraryBulkMsg, got %T", msg)
+	}
+	if result.err != nil || result.count != 1 {
+		t.Fatalf("verify failed: %+v", result)
+	}
+	rows, err := db.ListDownloads()
+	if err != nil {
+		t.Fatalf("list downloads: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Status != "completed" || rows[0].ActualSHA256 == "" {
+		t.Fatalf("expected completed verified row, got %+v", rows)
+	}
+}
+
+func TestLibrary_DeleteStagedDataRequiresConfirmation(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	path := filepath.Join(model.cfg.General.DownloadRoot, "staged.gguf")
+	if err := os.WriteFile(path, []byte("staged"), 0o644); err != nil {
+		t.Fatalf("write staged: %v", err)
+	}
+	meta := state.ModelMetadata{
+		DownloadURL: "https://example.com/staged.gguf",
+		ModelName:   "staged",
+		Dest:        path,
+	}
+	if err := db.UpsertMetadata(&meta); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+	if err := db.UpsertDownload(state.DownloadRow{URL: meta.DownloadURL, Dest: meta.Dest, Status: "completed"}); err != nil {
+		t.Fatalf("seed download: %v", err)
+	}
+	model.activeTab = 4
+	model.refreshLibraryData()
+
+	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")})
+	if cmd != nil {
+		t.Fatal("delete should wait for confirmation")
+	}
+	if model.libraryConfirm == nil {
+		t.Fatal("expected confirmation state")
+	}
+
+	_, cmd = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected delete command after confirmation")
+	}
+	msg := cmd()
+	result, ok := msg.(libraryBulkMsg)
+	if !ok {
+		t.Fatalf("expected libraryBulkMsg, got %T", msg)
+	}
+	if result.err != nil {
+		t.Fatalf("delete failed: %v", result.err)
+	}
+	if len(result.keys) != 1 || result.keys[0] != libraryKey(meta) {
+		t.Fatalf("expected acted key in delete result, got %+v", result.keys)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected staged file to be removed, err=%v", err)
+	}
+	rows, err := db.ListDownloads()
+	if err != nil {
+		t.Fatalf("list downloads: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("expected download row deleted, got %+v", rows)
+	}
+	if _, err := db.GetMetadata(meta.DownloadURL); err != nil {
+		t.Fatalf("metadata should be kept: %v", err)
+	}
+}
+
+func TestLibrary_DeleteSkipsNonStagedRows(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	meta := state.ModelMetadata{
+		DownloadURL: "https://example.com/placed.gguf",
+		ModelName:   "placed",
+		Dest:        filepath.Join(t.TempDir(), "placed.gguf"),
+	}
+	if err := db.UpsertMetadata(&meta); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+	model.activeTab = 4
+	model.refreshLibraryData()
+
+	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")})
+	if cmd != nil {
+		t.Fatal("non-staged delete should not start a command")
+	}
+	if model.libraryConfirm != nil {
+		t.Fatal("non-staged delete should not open confirmation")
+	}
+}
+
+func TestLibrary_StagedPathRejectsRootAndDirectories(t *testing.T) {
+	model, _, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	root := model.cfg.General.DownloadRoot
+	dir := filepath.Join(root, "nested")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("make dir: %v", err)
+	}
+	file := filepath.Join(root, "model.gguf")
+	if err := os.WriteFile(file, []byte("model"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	if model.isStagedLibraryPath(root) {
+		t.Fatal("download root should not be deletable")
+	}
+	if model.isStagedLibraryPath(dir) {
+		t.Fatal("directories under download root should not be deletable")
+	}
+	if !model.isStagedLibraryPath(file) {
+		t.Fatal("files under download root should be staged")
+	}
 }
 
 // Helper function to create pointer to time

@@ -90,7 +90,7 @@ func (m *Model) renderCommandsBar() string {
 
 func (m *Model) renderLibraryCommandsBar() string {
 	// Library tab commands reference
-	return m.th.footer.Render("j/k navigate • Enter details • Esc back • / search • S scan directories • f favorite • H toasts • ? help • q quit")
+	return m.th.footer.Render("j/k navigate • Space select • A all • X clear • F filters • f favorite • r retry • V verify • p place • E export • D delete staged • ? help • q quit")
 }
 
 func (m *Model) renderSettingsCommandsBar() string {
@@ -119,9 +119,10 @@ func (m *Model) renderHelp() string {
 	sb.WriteString("\n")
 	sb.WriteString(m.th.head.Render("Library Tab (5/L)") + "\n")
 	sb.WriteString("Nav: j/k up/down • Enter view details • Esc back to list\n")
-	sb.WriteString("Search: / to enter; Enter to apply; Esc to clear\n")
+	sb.WriteString("Search/filter: / search • F filter menu for search, type, source, favorites\n")
+	sb.WriteString("Select: Space toggle • A select visible • X clear selection\n")
 	sb.WriteString("Scan: S scan configured directories for existing models\n")
-	sb.WriteString("Favorite: f toggle favorite on selected model\n")
+	sb.WriteString("Bulk actions: r retry • V verify files • p place • f favorite/unfavorite • E export catalog • D delete staged data\n")
 	sb.WriteString("\n")
 	sb.WriteString(m.th.head.Render("Settings Tab (6/M)") + "\n")
 	sb.WriteString("View current configuration including paths, tokens, and preferences\n")
