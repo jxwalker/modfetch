@@ -1,4 +1,4 @@
-# Maintainer: James Walker <james@jimm5.local>
+# Maintainer: James Walker <james@jameswalker.org.uk>
 pkgname=modfetch-bin
 _pkgname=modfetch
 pkgver=0.7.0
