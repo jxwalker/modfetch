@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+Added
+- Added AUR `modfetch-bin` packaging metadata for the published Linux release
+  binaries.
+- Added portable AUR package validation that checks `PKGBUILD`, `.SRCINFO`, and
+  published release checksums.
+
+Docs
+- Documented Arch Linux AUR package maintenance and release checklist coverage.
+
 ## v0.7.0 — 2026-04-28
 
 Added

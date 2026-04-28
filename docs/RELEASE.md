@@ -42,6 +42,26 @@ Use this checklist from a clean `main` checkout before tagging a modfetch releas
   ```
 - Open and merge a tap PR, then confirm the tap branch was deleted.
 
+## AUR Package
+
+- Update `packaging/aur/PKGBUILD` and `packaging/aur/.SRCINFO` after release
+  assets are published.
+- Set `pkgver` to the release version without the leading `v`.
+- Update SHA256 values from the published Linux release assets and LICENSE file.
+- Validate the packaged metadata and published checksums:
+  ```bash
+  scripts/check-aur-package.sh vX.Y.Z
+  ```
+- On an Arch Linux machine, validate the source package before pushing to AUR:
+  ```bash
+  cd packaging/aur
+  makepkg --printsrcinfo > .SRCINFO
+  makepkg -si
+  modfetch version
+  namcap PKGBUILD
+  ```
+- Push the package files to `ssh://aur@aur.archlinux.org/modfetch-bin.git`.
+
 ## Final Verification
 
 - Ensure `git status --short --branch` is clean on `main`.

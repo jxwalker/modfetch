@@ -450,6 +450,7 @@ Contributing
     - macOS: amd64, arm64, universal (fat) binary
     - Checksums (.sha256) for all artifacts
   - Release notes are extracted from the matching `CHANGELOG.md` section by `scripts/release-notes.sh`
+  - Package metadata is tracked under `packaging/homebrew/` and `packaging/aur/`
   - Optional (local): `make release-dist` and `make macos-universal` if you want to reproduce artifacts locally
 
 See CONTRIBUTING.md for full guidelines.
@@ -477,10 +478,9 @@ Troubleshooting
 
 Roadmap
 - See docs/ROADMAP.md for the active, prioritized roadmap
-- v0.7.0 focus:
-  - Package distribution
-  - Library catalog export/import
-  - TUI bulk operations and filter menu
-  - Placement presets
-  - Scanner performance and repair UX
-  - Release hardening
+- v0.7.x focus:
+  - AUR package publication
+  - Metadata enrichment from additional registries
+  - Remote catalog sync targets
+  - User-driven archive format expansion
+  - Non-interactive TUI scripting hooks
