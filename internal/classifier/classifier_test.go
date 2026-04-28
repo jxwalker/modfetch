@@ -36,3 +36,29 @@ func TestDetectCustomRuleOverrides(t *testing.T) {
 		t.Fatalf("expected sd.lora, got %s", got)
 	}
 }
+
+func TestAnalyzeReportsAmbiguousSafetensorsConfidence(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "model.safetensors")
+	if err := os.WriteFile(p, []byte("dummy"), 0o644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	got := Analyze(nil, p)
+	if got.Type != "sd.checkpoint" || got.Confidence != "low" {
+		t.Fatalf("expected low-confidence checkpoint, got %+v", got)
+	}
+}
+
+func TestAnalyzeReportsFilenameHeuristicConfidence(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "portrait-lora.safetensors")
+	if err := os.WriteFile(p, []byte("dummy"), 0o644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	got := Analyze(nil, p)
+	if got.Type != "sd.lora" || got.Confidence != "medium" {
+		t.Fatalf("expected medium-confidence LoRA, got %+v", got)
+	}
+}

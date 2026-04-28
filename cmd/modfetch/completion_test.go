@@ -20,7 +20,7 @@ func TestCompletionCurrentFlags(t *testing.T) {
 	tests := map[string][]string{
 		"config":   {"--strict", "--out"},
 		"download": {"--no-resume", "--summary-json", "--batch-parallel", "--dry-run", "--force", "--no-auth-preflight", "--quant", "--list-quants"},
-		"place":    {"--dry-run"},
+		"place":    {"--dry-run", "--preset", "--list-presets"},
 		"batch":    {"--naming-pattern"},
 		"hostcaps": {"--config", "--list", "--clear", "--clear-all", "--json"},
 		"tui":      {"--json"},

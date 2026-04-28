@@ -304,6 +304,9 @@ modfetch verify --all
 # Place model into app directory
 modfetch place --path /path/to/model.safetensors
 
+# Preview a named preset without editing config first
+modfetch place --path /path/to/model.gguf --preset ollama --dry-run
+
 # Batch downloads
 modfetch download --batch jobs.yml --place
 

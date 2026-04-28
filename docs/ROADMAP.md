@@ -84,16 +84,16 @@ Acceptance checks:
 - Destructive actions require confirmation and show the exact affected count.
 - Keyboard help and TUI guide match the implemented controls.
 
-### 4. Placement and Classifier Presets [TODO]
+### 4. Placement and Classifier Presets [DONE]
 
 Outcome: first-time setup for common local AI tools needs less custom YAML.
 
-- [TODO] Add named placement presets for common targets such as Ollama,
+- [DONE] Add named placement presets for common targets such as Ollama,
   ComfyUI, AUTOMATIC1111/Forge-style Stable Diffusion layouts, and generic
   Hugging Face cache exports where appropriate.
-- [TODO] Add `modfetch config wizard` support for selecting presets.
-- [TODO] Add `modfetch place --preset NAME --dry-run` preview behavior.
-- [TODO] Improve classifier confidence reporting for ambiguous artifacts.
+- [DONE] Add `modfetch config wizard` support for selecting presets.
+- [DONE] Add `modfetch place --preset NAME --dry-run` preview behavior.
+- [DONE] Improve classifier confidence reporting for ambiguous artifacts.
 
 Acceptance checks:
 - Preset output is explicit YAML that users can inspect and edit.

@@ -309,6 +309,8 @@ modfetch place --path FILE [OPTIONS]
 
 **Optional:**
 - `--dry-run` - Preview placement without writing
+- `--preset NAME[,NAME]` - Apply named placement presets for this run
+- `--list-presets` - Print available placement presets and exit
 
 **Examples:**
 
@@ -318,15 +320,21 @@ modfetch place --path ~/Downloads/llama-2-7b.gguf
 
 # Preview placement
 modfetch place --path ~/models/sdxl.safetensors --dry-run
+
+# Preview an Ollama placement without writing a config first
+modfetch place --path ~/Downloads/llama-2-7b.Q4_K_M.gguf --preset ollama --dry-run
+
+# Overlay ComfyUI and AUTOMATIC1111 preset targets onto an existing config
+modfetch place --config ./config.yml --path ~/models/sdxl.safetensors --preset comfyui,automatic1111 --dry-run
 ```
 
 **Output:**
 
 ```
-Placing: ~/Downloads/llama-2-7b.gguf
-Matched rule: *.gguf → /opt/ollama/models
+Would place ~/Downloads/llama-2-7b.gguf
+Detected type: llm.gguf (confidence=high; file extension .gguf)
 Placement mode: symlink
-✓ Created symlink: /opt/ollama/models/llama-2-7b.gguf → ~/Downloads/llama-2-7b.gguf
+  symlink -> /Users/me/.ollama/models/llama-2-7b.gguf
 ```
 
 See [PLACEMENT.md](PLACEMENT.md) for configuration details.

@@ -913,30 +913,90 @@ func handlePlace(ctx context.Context, args []string) error {
 	filePath := fs.String("path", "", "path to file to place")
 	artType := fs.String("type", "", "artifact type override (optional)")
 	mode := fs.String("mode", "", "placement mode override: symlink|hardlink|copy (optional)")
+	preset := fs.String("preset", "", "placement preset(s) to apply: "+strings.Join(placer.PresetNames(), ", "))
+	listPresets := fs.Bool("list-presets", false, "list available placement presets")
 	dryRun := fs.Bool("dry-run", false, "print planned destinations only; do not modify files")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if *listPresets {
+		for _, name := range placer.PresetNames() {
+			p := placer.Presets()[name]
+			fmt.Printf("%-14s %s\n", name, p.Description)
+		}
+		return nil
+	}
 	if *filePath == "" {
 		return errors.New("--path is required")
 	}
+	presetNames := placer.ParsePresetList(*preset)
 	c, _, err := loadConfig(*common.configPath)
 	if err != nil {
+		canUsePresetOnly := len(presetNames) > 0 &&
+			strings.TrimSpace(*common.configPath) == "" &&
+			strings.TrimSpace(os.Getenv("MODFETCH_CONFIG")) == "" &&
+			errors.Is(err, os.ErrNotExist)
+		if !canUsePresetOnly {
+			return err
+		}
+		c = &config.Config{Version: 1, General: config.General{PlacementMode: "symlink"}}
+	}
+	if err := placer.ApplyPresets(c, presetNames); err != nil {
 		return err
 	}
 	log := logging.New(*common.logLevel, *common.jsonOut)
 	if *dryRun {
-		atype := *artType
-		if atype == "" {
-			atype = classifier.Detect(c, *filePath)
+		result := classifier.Result{Type: strings.TrimSpace(*artType), Confidence: "override", Reason: "--type override"}
+		if result.Type == "" {
+			result = classifier.Analyze(c, *filePath)
 		}
-		targets, err := placer.ComputeTargets(c, atype)
+		targets, err := placer.ComputeTargets(c, result.Type)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Would place %s (type=%s) to:\n", *filePath, atype)
+		placeMode := strings.TrimSpace(*mode)
+		if placeMode == "" {
+			placeMode = c.General.PlacementMode
+		}
+		if placeMode == "" {
+			placeMode = "symlink"
+		}
+		if *common.jsonOut {
+			planned := make([]map[string]string, 0, len(targets))
+			for _, t := range targets {
+				planned = append(planned, map[string]string{
+					"action": "place",
+					"mode":   placeMode,
+					"source": *filePath,
+					"target": filepath.Join(t, filepath.Base(*filePath)),
+				})
+			}
+			if len(planned) == 0 {
+				planned = append(planned, map[string]string{
+					"action": "skip",
+					"reason": "no mapping targets for type " + result.Type,
+					"source": *filePath,
+				})
+			}
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(map[string]any{
+				"type":       result.Type,
+				"confidence": result.Confidence,
+				"reason":     result.Reason,
+				"preset":     presetNames,
+				"planned":    planned,
+			})
+		}
+		fmt.Printf("Would place %s\n", *filePath)
+		fmt.Printf("Detected type: %s (confidence=%s; %s)\n", result.Type, result.Confidence, result.Reason)
+		fmt.Printf("Placement mode: %s\n", placeMode)
+		if len(targets) == 0 {
+			fmt.Printf("Would skip: no mapping targets for type %s\n", result.Type)
+			return nil
+		}
 		for _, t := range targets {
-			fmt.Printf("  %s\n", t)
+			fmt.Printf("  %s -> %s\n", placeMode, filepath.Join(t, filepath.Base(*filePath)))
 		}
 		return nil
 	}
