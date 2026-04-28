@@ -1,7 +1,7 @@
 # Roadmap
 
-This is the active project roadmap after the v0.6.3 release. Historical backlog
-items that shipped in v0.6.x are summarized at the end for traceability.
+This is the active project roadmap after the v0.7.0 release. Historical backlog
+items that shipped in v0.6.x and v0.7.0 are summarized at the end for traceability.
 
 Status key:
 - [PLANNED] not started
@@ -11,7 +11,7 @@ Status key:
 
 ## Current Baseline
 
-Current release: v0.6.3, tagged 2026-04-27.
+Current release: v0.7.0, tagged 2026-04-28.
 
 Shipped baseline:
 - Reliable direct, Hugging Face, and CivitAI downloads with resume, retries,
@@ -24,7 +24,7 @@ Shipped baseline:
 - Release automation that builds Linux/macOS artifacts, publishes checksums, and
   uses `CHANGELOG.md` sections for GitHub Release notes.
 
-## v0.7.0 Goal
+## v0.7.0 Goal [DONE]
 
 Make modfetch easier to adopt and easier to use for real model-library
 maintenance. v0.7.0 should focus on distribution polish, library portability,
@@ -116,7 +116,7 @@ Acceptance checks:
 - Benchmarks show the change helps on large directories without regressing small
   scans materially.
 
-### 6. Release and Documentation Hardening [PLANNED]
+### 6. Release and Documentation Hardening [DONE]
 
 Outcome: release quality stays repeatable as install surfaces expand.
 
@@ -144,8 +144,12 @@ These are useful, but not required for the first v0.7.0 release:
 - More archive formats if users report concrete needs.
 - Non-interactive TUI scripting hooks.
 
-## Completed v0.6.x History
+## Completed Release History
 
+- v0.7.0: delivered Homebrew distribution docs, portable library catalog
+  export/import, TUI bulk library operations, placement presets, scanner
+  performance and stale repair UX, real integration test hardening, and
+  release docs drift validation.
 - v0.6.3: fixed Hugging Face shorthand alias downloads and refreshed resolver
   documentation.
 - v0.6.2: delivered storage, archive extraction, duplicate linking, schema,

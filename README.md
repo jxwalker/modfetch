@@ -77,7 +77,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║  modfetch v0.6.3                    Tab: [2] Active                       ║
+║  modfetch v0.7.0                    Tab: [2] Active                       ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
 ║  🔄 Active: 2   ✓ Completed: 45   ⏳ Pending: 3   ✗ Failed: 1           ║
 ║  Throughput: 32.5 MB/s   •   Auth: HF ✓  CivitAI ✓                       ║
