@@ -71,7 +71,7 @@ for file in README.md docs/QUICKSTART.md docs/USER_GUIDE.md docs/CLI_GUIDE.md do
 done
 
 check_not_contains README.md "What's new in v0\\.6\\.x" "README current release summary is stale"
-check_not_contains docs/TUI_ANALYSIS_SUMMARY.txt "v0\\.5\\.2|TUI v1|TUI v2|--v1|internal/tui/v2|docs/T[O]DO" "TUI analysis summary contains stale pre-v0.7 implementation notes"
+check_not_contains docs/TUI_ANALYSIS_SUMMARY.txt "v0\\.5\\.2|TUI v[12]|--v[1]|internal/tui/v[2]|docs/T[O]DO" "TUI analysis summary contains stale pre-v0.7 implementation notes"
 
 if [[ "$failures" -gt 0 ]]; then
   exit 1

@@ -1,8 +1,8 @@
 # AUR Packaging
 
 This directory stages the `modfetch-bin` AUR package. It packages the published
-Linux release binaries instead of rebuilding from source. The package has not
-been published to AUR until a maintainer account with an AUR-registered SSH key
+Linux release binaries instead of rebuilding from source. The package will not
+be published to AUR until a maintainer account with an AUR-registered SSH key
 pushes these files.
 
 Validate metadata and live release checksums from the repository root:
