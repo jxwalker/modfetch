@@ -142,9 +142,27 @@ require_file_contains "$pkgbuild" 'source_aarch64=("${_pkgname}-${pkgver}-linux-
 require_file_contains "$pkgbuild" 'install -Dm755 "$binary" "${pkgdir}/usr/bin/${_pkgname}"' "PKGBUILD must install modfetch into /usr/bin"
 require_file_contains "$pkgbuild" 'install -Dm644 "${srcdir}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"' "PKGBUILD must install the license"
 
-require_equal "$pkgbuild_license_sha" "$(fetch_sha256_body "https://raw.githubusercontent.com/jxwalker/modfetch/v${pkgver}/LICENSE")" "LICENSE checksum"
-require_equal "$pkgbuild_x86_sha" "$(fetch_sha256_file "${release_base}/modfetch_linux_amd64.sha256")" "x86_64 checksum"
-require_equal "$pkgbuild_arm_sha" "$(fetch_sha256_file "${release_base}/modfetch_linux_arm64.sha256")" "aarch64 checksum"
+fetched_license_sha=""
+fetched_x86_sha=""
+fetched_arm_sha=""
+
+if ! fetched_license_sha="$(fetch_sha256_body "https://raw.githubusercontent.com/jxwalker/modfetch/v${pkgver}/LICENSE")"; then
+  fail "failed to fetch LICENSE checksum"
+else
+  require_equal "$pkgbuild_license_sha" "$fetched_license_sha" "LICENSE checksum"
+fi
+
+if ! fetched_x86_sha="$(fetch_sha256_file "${release_base}/modfetch_linux_amd64.sha256")"; then
+  fail "failed to fetch x86_64 checksum"
+else
+  require_equal "$pkgbuild_x86_sha" "$fetched_x86_sha" "x86_64 checksum"
+fi
+
+if ! fetched_arm_sha="$(fetch_sha256_file "${release_base}/modfetch_linux_arm64.sha256")"; then
+  fail "failed to fetch aarch64 checksum"
+else
+  require_equal "$pkgbuild_arm_sha" "$fetched_arm_sha" "aarch64 checksum"
+fi
 
 require_file_contains "$srcinfo" "pkgbase = modfetch-bin" ".SRCINFO pkgbase mismatch"
 require_file_contains "$srcinfo" "pkgver = ${pkgver}" ".SRCINFO pkgver mismatch"
@@ -155,11 +173,13 @@ require_file_contains "$srcinfo" "sha256sums_aarch64 = ${pkgbuild_arm_sha}" ".SR
 
 if command -v makepkg >/dev/null 2>&1; then
   tmp_srcinfo="$(mktemp)"
+  trap 'rm -f "$tmp_srcinfo"' EXIT
   (cd "$aur_dir" && makepkg --printsrcinfo > "$tmp_srcinfo")
   if ! diff -u "$srcinfo" "$tmp_srcinfo"; then
     fail ".SRCINFO does not match makepkg --printsrcinfo"
   fi
   rm -f "$tmp_srcinfo"
+  trap - EXIT
 else
   echo "makepkg not found; completed portable AUR metadata and checksum validation"
 fi
