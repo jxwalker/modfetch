@@ -14,9 +14,11 @@ import (
 
 type Wizard struct {
 	inputs []textinput.Model
+	labels []string
 	focus  int
 	done   bool
 	out    *config.Config
+	err    error
 }
 
 func New(defaults *config.Config) *Wizard {
@@ -92,6 +94,18 @@ func New(defaults *config.Config) *Wizard {
 	fields = append(fields, mk("concurrency.per_file_chunks", fmt.Sprint(pfc)))
 
 	w.inputs = fields
+	w.labels = []string{
+		"general.data_root",
+		"general.download_root",
+		"general.placement_mode",
+		"placement.presets",
+		"sources.huggingface.enabled",
+		"sources.huggingface.token_env",
+		"sources.civitai.enabled",
+		"sources.civitai.token_env",
+		"concurrency.chunk_size_mb",
+		"concurrency.per_file_chunks",
+	}
 	w.focus = 0
 	w.inputs[0].Focus()
 	return w
@@ -111,7 +125,7 @@ func (w *Wizard) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.String() == "enter" {
 				if i == len(w.inputs)-1 {
 					w.done = true
-					w.out = w.buildConfig()
+					w.out, w.err = w.buildConfig()
 					return w, tea.Quit
 				}
 			}
@@ -147,24 +161,12 @@ func (w *Wizard) View() string {
 	var b strings.Builder
 	b.WriteString(lipgloss.NewStyle().Bold(true).Render("modfetch config wizard") + "\n")
 	b.WriteString("Fill in fields. Tab/Shift-Tab to navigate, Enter to submit. q to quit.\n\n")
-	labels := []string{
-		"general.data_root",
-		"general.download_root",
-		"general.placement_mode",
-		"placement.presets",
-		"sources.huggingface.enabled",
-		"sources.huggingface.token_env",
-		"sources.civitai.enabled",
-		"sources.civitai.token_env",
-		"concurrency.chunk_size_mb",
-		"concurrency.per_file_chunks",
-	}
 	for i, input := range w.inputs {
 		marker := " "
 		if i == w.focus {
 			marker = ">"
 		}
-		b.WriteString(fmt.Sprintf("%s %-32s %s\n", marker, labels[i]+":", input.View()))
+		b.WriteString(fmt.Sprintf("%s %-32s %s\n", marker, w.labels[i]+":", input.View()))
 	}
 	if w.done {
 		b.WriteString("\nDone. Saving...\n")
@@ -172,7 +174,7 @@ func (w *Wizard) View() string {
 	return b.String()
 }
 
-func (w *Wizard) buildConfig() *config.Config {
+func (w *Wizard) buildConfig() (*config.Config, error) {
 	get := func(i int) string { return strings.TrimSpace(w.inputs[i].Value()) }
 	parseBool := func(s string) bool {
 		return strings.EqualFold(s, "true") || s == "1" || strings.EqualFold(s, "y") || strings.EqualFold(s, "yes")
@@ -191,14 +193,18 @@ func (w *Wizard) buildConfig() *config.Config {
 		pm = "symlink"
 	}
 	o.General.PlacementMode = pm
-	_ = placer.ApplyPresets(o, placer.ParsePresetList(get(3)))
+	if err := placer.ApplyPresets(o, placer.ParsePresetList(get(3))); err != nil {
+		return nil, err
+	}
 	o.Sources.HuggingFace.Enabled = parseBool(get(4))
 	o.Sources.HuggingFace.TokenEnv = get(5)
 	o.Sources.CivitAI.Enabled = parseBool(get(6))
 	o.Sources.CivitAI.TokenEnv = get(7)
 	o.Concurrency.ChunkSizeMB = parseInt(get(8), 8)
 	o.Concurrency.PerFileChunks = parseInt(get(9), 4)
-	return o
+	return o, nil
 }
 
 func (w *Wizard) Config() *config.Config { return w.out }
+
+func (w *Wizard) Err() error { return w.err }

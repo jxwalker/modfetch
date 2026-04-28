@@ -932,7 +932,11 @@ func handlePlace(ctx context.Context, args []string) error {
 	presetNames := placer.ParsePresetList(*preset)
 	c, _, err := loadConfig(*common.configPath)
 	if err != nil {
-		if len(presetNames) == 0 || strings.TrimSpace(*common.configPath) != "" || strings.TrimSpace(os.Getenv("MODFETCH_CONFIG")) != "" {
+		canUsePresetOnly := len(presetNames) > 0 &&
+			strings.TrimSpace(*common.configPath) == "" &&
+			strings.TrimSpace(os.Getenv("MODFETCH_CONFIG")) == "" &&
+			errors.Is(err, os.ErrNotExist)
+		if !canUsePresetOnly {
 			return err
 		}
 		c = &config.Config{Version: 1, General: config.General{PlacementMode: "symlink"}}

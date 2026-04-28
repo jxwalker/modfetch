@@ -46,7 +46,7 @@ func loadConfig(flagPath string) (*config.Config, string, error) {
 	c, err := config.Load(cfgPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, cfgPath, fmt.Errorf("config file not found: %s", cfgPath)
+			return nil, cfgPath, fmt.Errorf("config file not found: %s: %w", cfgPath, err)
 		}
 		return nil, cfgPath, err
 	}

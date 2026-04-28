@@ -23,17 +23,17 @@ Presets
 - `hf-cache`: generic Hugging Face-style export folder under `~/.cache/huggingface/modfetch`.
 
 List presets:
-```
+```bash
 modfetch place --list-presets
 ```
 
 Preview a preset without writing a config first:
-```
+```bash
 modfetch place --path /path/to/model.gguf --preset ollama --dry-run
 ```
 
 Apply one or more presets on top of an existing config:
-```
+```bash
 modfetch place --config ./config.yml --path /path/to/model.safetensors --preset comfyui,automatic1111 --dry-run
 ```
 

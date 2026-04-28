@@ -56,6 +56,7 @@ func captureStdout(t *testing.T, fn func()) string {
 	if err != nil {
 		t.Fatalf("pipe: %v", err)
 	}
+	defer func() { _ = r.Close() }()
 	os.Stdout = w
 	defer func() {
 		os.Stdout = old

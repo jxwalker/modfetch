@@ -40,6 +40,9 @@ func handleConfigWizard(ctx context.Context, args []string) error {
 	if !ok {
 		return errors.New("unexpected model type from wizard")
 	}
+	if err := wiz.Err(); err != nil {
+		return err
+	}
 	cfg := wiz.Config()
 	if cfg == nil {
 		return errors.New("no config produced")
