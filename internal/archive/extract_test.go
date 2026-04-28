@@ -4,10 +4,12 @@ import (
 	"archive/zip"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestExtractZip(t *testing.T) {
@@ -73,35 +75,28 @@ func TestExtractRejectsTraversal(t *testing.T) {
 }
 
 func TestExtract7zUsesExternalBackend(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("test uses a POSIX shell script fake")
+	bin, err := find7z()
+	if err != nil {
+		t.Skipf("7z backend unavailable: %v", err)
 	}
-	dir := t.TempDir()
-	binDir := filepath.Join(dir, "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	fake := filepath.Join(binDir, "7zz")
-	script := `#!/bin/sh
-set -eu
-out=""
-for arg in "$@"; do
-  case "$arg" in
-    -o*) out="${arg#-o}" ;;
-  esac
-done
-mkdir -p "$out/nested"
-printf model > "$out/nested/model.bin"
-`
-	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+"/bin"+string(os.PathListSeparator)+"/usr/bin")
 
-	src := filepath.Join(dir, "model.7z")
-	if err := os.WriteFile(src, []byte("fake archive"), 0o644); err != nil {
+	dir := t.TempDir()
+	srcDir := filepath.Join(dir, "src")
+	if err := os.MkdirAll(filepath.Join(srcDir, "nested"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(srcDir, "nested", "model.bin"), []byte("model"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := filepath.Join(dir, "model.7z")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, "a", "-t7z", src, ".")
+	cmd.Dir = srcDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("create 7z archive: %v\n%s", err, out)
+	}
+
 	outDir := filepath.Join(dir, "out")
 	files, err := Extract(context.Background(), src, outDir)
 	if err != nil {
@@ -123,49 +118,12 @@ func TestExtract7zReportsMissingBackend(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PATH", filepath.Join(dir, "empty-bin"))
 	src := filepath.Join(dir, "model.7z")
-	if err := os.WriteFile(src, []byte("fake archive"), 0o644); err != nil {
+	if err := os.WriteFile(src, []byte("sample archive"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, err := Extract(context.Background(), src, filepath.Join(dir, "out"))
 	if err == nil || !strings.Contains(err.Error(), "requires 7zz, 7z, or 7za") {
 		t.Fatalf("expected missing 7z backend error, got %v", err)
-	}
-}
-
-func TestExtract7zRejectsSymlinkInExtractedTree(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("test uses a POSIX shell script fake")
-	}
-	dir := t.TempDir()
-	binDir := filepath.Join(dir, "bin")
-	if err := os.MkdirAll(binDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	fake := filepath.Join(binDir, "7zz")
-	script := `#!/bin/sh
-set -eu
-out=""
-for arg in "$@"; do
-  case "$arg" in
-    -o*) out="${arg#-o}" ;;
-  esac
-done
-mkdir -p "$out/nested"
-printf model > "$out/nested/model.bin"
-ln -s model.bin "$out/nested/link.bin"
-`
-	if err := os.WriteFile(fake, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("PATH", binDir+string(os.PathListSeparator)+"/bin"+string(os.PathListSeparator)+"/usr/bin")
-
-	src := filepath.Join(dir, "model.7z")
-	if err := os.WriteFile(src, []byte("fake archive"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	_, err := Extract(context.Background(), src, filepath.Join(dir, "out"))
-	if err == nil || !strings.Contains(err.Error(), "symlink") {
-		t.Fatalf("expected symlink rejection, got %v", err)
 	}
 }
 

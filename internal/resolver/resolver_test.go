@@ -7,13 +7,13 @@ import (
 	"github.com/jxwalker/modfetch/internal/config"
 )
 
-type fakeResolver struct{}
+type registeredTestResolver struct{}
 
-func (fakeResolver) CanHandle(uri string) bool {
-	return uri == "fake://model"
+func (registeredTestResolver) CanHandle(uri string) bool {
+	return uri == "test://model"
 }
 
-func (fakeResolver) Resolve(context.Context, string, *config.Config) (*Resolved, error) {
+func (registeredTestResolver) Resolve(context.Context, string, *config.Config) (*Resolved, error) {
 	return &Resolved{URL: "https://example.com/model.bin"}, nil
 }
 
@@ -30,12 +30,12 @@ func (nonComparableResolver) Resolve(context.Context, string, *config.Config) (*
 }
 
 func TestRegisterResolver(t *testing.T) {
-	unregister := Register(fakeResolver{})
+	unregister := Register(registeredTestResolver{})
 	defer unregister()
 
-	res, err := Resolve(context.Background(), "fake://model", nil)
+	res, err := Resolve(context.Background(), "test://model", nil)
 	if err != nil {
-		t.Fatalf("resolve fake uri: %v", err)
+		t.Fatalf("resolve test uri: %v", err)
 	}
 	if res.URL != "https://example.com/model.bin" {
 		t.Fatalf("unexpected resolved URL: %s", res.URL)
@@ -43,11 +43,11 @@ func TestRegisterResolver(t *testing.T) {
 }
 
 func TestUnregisterResolver(t *testing.T) {
-	unregister := Register(fakeResolver{})
+	unregister := Register(registeredTestResolver{})
 	unregister()
 
-	if _, err := Resolve(context.Background(), "fake://model", nil); err == nil {
-		t.Fatal("expected fake resolver to be unavailable after unregister")
+	if _, err := Resolve(context.Background(), "test://model", nil); err == nil {
+		t.Fatal("expected test resolver to be unavailable after unregister")
 	}
 }
 
