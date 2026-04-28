@@ -12,6 +12,10 @@ Added
 
 Docs
 - Documented Arch Linux AUR package maintenance and release checklist coverage.
+- Aligned README, installation, release, roadmap, and TUI docs with the shipped
+  v0.7.0 state and the current AUR SSH publication blocker.
+- Removed obsolete top-level sprint and test status reports that described old
+  sandbox limits instead of the current validation workflow.
 
 ## v0.7.0 — 2026-04-28
 

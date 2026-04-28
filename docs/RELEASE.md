@@ -16,8 +16,8 @@ Use this checklist from a clean `main` checkout before tagging a modfetch releas
   scripts/install.sh --install-dir "$(mktemp -d)" --skip-config-wizard
   ```
 - Confirm README.md, docs/QUICKSTART.md, docs/USER_GUIDE.md, docs/CLI_GUIDE.md,
-  and docs/INSTALLATION.md mention the current release behavior and do not refer
-  to unpublished installation channels.
+  docs/TUI_WIREFRAMES.md, and docs/INSTALLATION.md mention the current release
+  behavior and clearly label any staged-but-unpublished installation channel.
 
 ## GitHub Release
 
@@ -48,6 +48,24 @@ Use this checklist from a clean `main` checkout before tagging a modfetch releas
   assets are published.
 - Set `pkgver` to the release version without the leading `v`.
 - Update SHA256 values from the published Linux release assets and LICENSE file.
+- Confirm the publishing machine can authenticate with AUR before release-day
+  publication:
+  ```bash
+  ssh -o BatchMode=yes -o ConnectTimeout=5 aur@aur.archlinux.org help
+  ```
+- If authentication fails with `Permission denied (publickey)`, create an AUR
+  account, generate a dedicated SSH key, and paste the public key into the AUR
+  account profile before retrying:
+  ```bash
+  ssh-keygen -t ed25519 -f ~/.ssh/aur -C "aur-modfetch"
+  ```
+  Then configure the private key locally:
+  ```sshconfig
+  Host aur.archlinux.org
+    User aur
+    IdentityFile ~/.ssh/aur
+    IdentitiesOnly yes
+  ```
 - Validate the packaged metadata and published checksums:
   ```bash
   scripts/check-aur-package.sh vX.Y.Z
@@ -60,7 +78,8 @@ Use this checklist from a clean `main` checkout before tagging a modfetch releas
   modfetch version
   namcap PKGBUILD
   ```
-- Push the package files to `ssh://aur@aur.archlinux.org/modfetch-bin.git`.
+- Push `PKGBUILD` and `.SRCINFO` to
+  `ssh://aur@aur.archlinux.org/modfetch-bin.git`.
 
 ## Final Verification
 

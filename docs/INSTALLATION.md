@@ -1,6 +1,7 @@
 # Installation Guide
 
-This guide covers all installation methods for modfetch across Linux and macOS platforms.
+This guide covers supported installation methods for modfetch across Linux and
+macOS platforms.
 
 ## Quick Install (Recommended)
 
@@ -62,14 +63,17 @@ sudo cp bin/modfetch /usr/local/bin/
   brew tap jxwalker/tap
   brew install jxwalker/tap/modfetch
   ```
-- **Arch Linux / AUR**: package metadata is maintained in `packaging/aur/`.
-  After `modfetch-bin` is published to AUR, install it with:
+- **Arch Linux / AUR**: package metadata is maintained in `packaging/aur/` for
+  the future `modfetch-bin` AUR package. Publication is pending an AUR account
+  with a registered maintainer SSH key. After the package is published, install
+  it with:
   ```bash
   git clone https://aur.archlinux.org/modfetch-bin.git
   cd modfetch-bin
   makepkg -si
   ```
-  Until then, use the one-line installer or manual release binary.
+  Until then, use Homebrew/Linuxbrew, the one-line installer, or the manual
+  release binary.
 - **Ubuntu/Debian**: One-liner installer handles all dependencies
 - **CentOS/RHEL**: Ensure `curl` and `tar` are installed first
 - **Other distributions**: Use the one-line installer or manual release binary.

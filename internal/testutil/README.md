@@ -1,6 +1,6 @@
 # Testing Infrastructure
 
-This package provides testing utilities for ModFetch that work without network connectivity.
+This package provides testing utilities for ModFetch unit and integration tests.
 
 ## Overview
 
@@ -75,7 +75,9 @@ Add new fixtures as needed for additional test cases.
 
 ## Running Tests
 
-The test infrastructure is designed to work without network connectivity. All external API calls are mocked with canned responses.
+Most tests run against temporary files, in-memory databases, local HTTP servers,
+or fixtures. Tests that need gated provider access read tokens from the
+environment and skip when those tokens are not set.
 
 ```bash
 # Run all tests
@@ -119,12 +121,9 @@ Current test coverage includes:
 - ✅ Tag JSON serialization/deserialization
 - ✅ Timestamp handling
 
-## Future Test Coverage Needed
+## Current Coverage
 
-- [ ] Batch package tests
-- [ ] Downloader package tests with mock HTTP servers
-- [ ] TUI model tests (unit tests for state transitions)
-- [ ] Integration tests for full download flow
-- [ ] Resolver package tests
-- [ ] Config loading and validation tests
-- [ ] Metrics package tests
+Coverage now spans batch parsing, downloader behavior, resolver behavior,
+configuration validation, metrics, archive extraction, catalog import/export,
+scanner behavior, and TUI state transitions. Keep new helpers small and prefer
+real temporary filesystem, SQLite, archive, and HTTP execution where practical.

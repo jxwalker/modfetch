@@ -57,7 +57,7 @@ Big-picture architecture
 - Placement and classification
   - internal/classifier detects artifact types (e.g., sd.checkpoint/lora/vae/controlnet, llm.gguf) with optional YAML regex overrides.
   - internal/placer maps files into app directories via placement.mapping; supports symlink, hardlink, or copy per config/general. Placement fails if overwriting different content unless allow_overwrite is true.
-- TUI (internal/tui, internal/tui/v2)
+- TUI (internal/tui)
   - Bubble Tea–based dashboard; v2 adds richer sorting/grouping and theming. Refresh cadence and column mode configurable via ui.* in YAML. See docs/TUI_GUIDE.md.
 - Logging and metrics
   - Text or JSON logs with level control; URLs are sanitized to avoid leaking secrets.
@@ -73,4 +73,3 @@ Pointers to important docs
 Notes for future Warp sessions
 - When working on features that touch resolvers or downloader, consider running a quick public download for smoke validation and use --dry-run/--summary-json to inspect plan output without network transfer.
 - If make lint fails due to missing golangci-lint, install it first or run only vet/fmt/test.
-

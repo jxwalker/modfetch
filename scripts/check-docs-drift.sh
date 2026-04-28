@@ -45,6 +45,8 @@ core_docs=(
   docs/USER_GUIDE.md
   docs/CLI_GUIDE.md
   docs/INSTALLATION.md
+  docs/TUI_WIREFRAMES.md
+  docs/TUI_ANALYSIS_SUMMARY.txt
   CHANGELOG.md
 )
 
@@ -59,10 +61,17 @@ check_contains CHANGELOG.md "^## ${candidate_tag//./\\.}(\\b|[[:space:]]|—|-)"
 check_contains docs/ROADMAP.md "Current release: ${candidate_tag//./\\.}," "roadmap current release does not match ${candidate_tag}"
 check_contains scripts/install.sh "PUBLISHED_FALLBACK_VERSION=\\$\\{PUBLISHED_FALLBACK_VERSION:-${candidate_tag//./\\.}\\}" "installer published fallback candidate does not match ${candidate_tag}"
 check_contains docs/RELEASE.md "scripts/check-docs-drift\\.sh" "release checklist does not run docs drift validation"
+check_contains docs/TUI_WIREFRAMES.md "modfetch ${candidate_tag//./\\.}" "TUI wireframes do not show ${candidate_tag}"
+check_contains docs/TUI_ANALYSIS_SUMMARY.txt "VERSION: ${candidate_tag//./\\.}" "TUI analysis summary does not show ${candidate_tag}"
+check_contains docs/RELEASE.md "ssh -o BatchMode=yes -o ConnectTimeout=5 aur@aur\\.archlinux\\.org help" "release checklist does not verify AUR SSH auth"
+check_contains packaging/aur/README.md "ssh -o BatchMode=yes -o ConnectTimeout=5 aur@aur\\.archlinux\\.org help" "AUR packaging docs do not verify SSH auth"
 
 for file in README.md docs/QUICKSTART.md docs/USER_GUIDE.md docs/CLI_GUIDE.md docs/INSTALLATION.md docs/RELEASE.md; do
-  check_not_contains "$file" "homebrew.*(coming soon|unpublished|not yet|TODO)" "stale Homebrew publication claim"
+  check_not_contains "$file" "homebrew.*(coming soon|unpublished|not yet|T[O]DO)" "stale Homebrew publication claim"
 done
+
+check_not_contains README.md "What's new in v0\\.6\\.x" "README current release summary is stale"
+check_not_contains docs/TUI_ANALYSIS_SUMMARY.txt "v0\\.5\\.2|TUI v[12]|--v[1]|internal/tui/v[2]|docs/T[O]DO" "TUI analysis summary contains stale pre-v0.7 implementation notes"
 
 if [[ "$failures" -gt 0 ]]; then
   exit 1
