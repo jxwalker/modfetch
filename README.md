@@ -4,11 +4,11 @@
 
 ```
 ╔═══════════════════════════════════════════════════════════╗
-║  🚀 Parallel Chunked Downloads with Auto-Resume          ║
-║  ✓  SHA256 Integrity Verification                        ║
-║  📚 Rich TUI with Model Library Browser                   ║
-║  🎯 Smart Classification & Auto-Placement                 ║
-║  ⚡ 10-100x Faster with Indexed Model Discovery          ║
+║   Parallel Chunked Downloads with Auto-Resume             ║
+║   SHA256 Integrity Verification                           ║
+║   Rich TUI with Model Library Browser                     ║
+║   Smart Classification & Auto-Placement                   ║
+║   10-100x Faster with Indexed Model Discovery             ║
 ╚═══════════════════════════════════════════════════════════╝
 ```
 
@@ -79,16 +79,16 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 ╔═══════════════════════════════════════════════════════════════════════════╗
 ║  modfetch v0.7.0                    Tab: [2] Active                       ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
-║  🔄 Active: 2   ✓ Completed: 45   ⏳ Pending: 3   ✗ Failed: 1           ║
-║  Throughput: 32.5 MB/s   •   Auth: HF ✓  CivitAI ✓                       ║
+║  🔄 Active: 2   ✓ Completed: 45   ⏳ Pending: 3   ✗ Failed: 1            ║
+║  Throughput: 32.5 MB/s   •   Auth: HF ✓  CivitAI ✓                        ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
-║  Status    │ Progress        │ Speed      │ ETA    │ Size  │ File        ║
-║  ──────────┼─────────────────┼────────────┼────────┼───────┼─────────    ║
-║▶ Running   │ ████████░░░ 45% │ 18.3 MB/s  │ 2m 15s │ 3.8GB │ llama-2...  ║
-║  Running   │ ██████░░░░░ 32% │ 14.2 MB/s  │ 3m 42s │ 4.1GB │ mistral...  ║
-║  Planning  │ ...             │ -          │ -      │ 2.2GB │ sdxl-base...║
+║  Status    │ Progress        │ Speed      │ ETA    │ Size  │ File         ║
+║  ──────────┼─────────────────┼────────────┼────────┼───────┼─────────     ║
+║▶ Running   │ ████████░░░ 45% │ 18.3 MB/s  │ 2m 15s │ 3.8GB │ llama-2...   ║
+║  Running   │ ██████░░░░░ 32% │ 14.2 MB/s  │ 3m 42s │ 4.1GB │ mistral...   ║
+║  Planning  │ ...             │ -          │ -      │ 2.2GB │ sdxl-base.. .║
 ╠═══════════════════════════════════════════════════════════════════════════╣
-║  n:New  y:Retry  p:Pause  5/L:Library  6/M:Settings  ?:Help  q:Quit     ║
+║  n:New  y:Retry  p:Pause  5/L:Library  6/M:Settings  ?:Help  q:Quit       ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 ```
 
