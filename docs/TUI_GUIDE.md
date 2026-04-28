@@ -118,7 +118,7 @@ help overlay.
 - `p` - Place selected files using configured placement rules
 - `E` - Export selected models to `library-selected-catalog.json`
 - `D` - Delete selected staged download data after confirmation
-- `S` - Scan directories for new models
+- `S` - Scan configured directories for new models
 
 ### Settings Tab Keys
 

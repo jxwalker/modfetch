@@ -389,7 +389,8 @@ placement:
 
 **Note:** Scanner automatically discovers all configured directories from:
 1. `cfg.General.DownloadRoot`
-2. All `cfg.Placement.Rules[].Dest` paths
+2. Each `cfg.Placement.Apps[*].Base`
+3. Each configured placement app path joined to its base
 
 ## Implementation Details
 
@@ -420,26 +421,34 @@ if err := db.UpsertMetadata(meta); err != nil {
 
 ### Concurrency
 
-**Current implementation:** Single-threaded sequential scan
+**Current implementation:** Bounded parallel scan with serialized database work.
 
-**Rationale:**
-- Simplicity and reliability
-- I/O bound (disk reads are bottleneck)
-- Database writes require serialization anyway
+- File walking feeds a fixed worker pool.
+- Workers extract file metadata in parallel.
+- Duplicate checks, metadata upserts, and stale-record deletes are serialized
+  through one database writer path.
+- Cancellation stops new work and leaves already-written rows valid.
 
-**Future enhancement:** Parallel scanning with worker pool:
+Use `Options.Workers` in Go callers or `modfetch library scan --workers N` from
+the CLI. A value of `0` uses the default bounded by CPU count with a maximum of
+8 workers.
+
 ```go
-// Sketch: concurrent scanning with a worker pool
-func (s *Scanner) ScanDirectoriesConcurrent(dirs []string, workers int) (*ScanResult, error) {
-    // Future enhancement; current scanner is intentionally sequential.
-}
+result, err := scanner.ScanWithContext(ctx, dirs, scanner.Options{
+    Workers:     4,
+    RepairStale: true,
+    Progress: func(p scanner.Progress) {
+        fmt.Printf("files=%d added=%d skipped=%d\n",
+            p.FilesScanned, p.ModelsAdded, p.ModelsSkipped)
+    },
+})
 ```
 
 ### Memory Efficiency
 
 **Current approach:**
 - Streaming file walk (low memory)
-- One file processed at a time
+- Bounded file processing through the scanner worker pool
 - No buffering of full result set
 
 **Memory usage:** O(1) per file (constant, regardless of library size)
@@ -541,7 +550,8 @@ Comprehensive test suite in `scanner_test.go`:
 1. Verify indexed queries are used
 2. Check disk I/O with `iostat`
 3. Exclude unnecessary directories
-4. Consider parallel scanning (future enhancement)
+4. Increase bounded workers with `modfetch library scan --workers 4`
+5. Benchmark on your tree with `go test -bench 'ScanDirectories.*1000' ./internal/scanner`
 
 ### Missing Models
 

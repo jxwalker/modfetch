@@ -1,12 +1,16 @@
 package scanner
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/state"
 )
 
@@ -411,6 +415,10 @@ func TestScanner_DuplicateSkipping(t *testing.T) {
 		t.Errorf("Second scan: expected 0 models added (duplicate), got %d", result2.ModelsAdded)
 	}
 
+	if result2.ModelsFound != 1 {
+		t.Errorf("Second scan: expected 1 model found before duplicate skip, got %d", result2.ModelsFound)
+	}
+
 	if result2.ModelsSkipped != 1 {
 		t.Errorf("Second scan: expected 1 model skipped, got %d", result2.ModelsSkipped)
 	}
@@ -646,5 +654,264 @@ func TestScanner_FileFormat(t *testing.T) {
 				t.Fatalf("Failed to clean up: %v", err)
 			}
 		})
+	}
+}
+
+func TestScanner_ParallelMatchesSingleWorker(t *testing.T) {
+	testDir := t.TempDir()
+	files := []string{
+		"llama-2-7b.Q4_K_M.gguf",
+		"sdxl-lora-v1.safetensors",
+		"vae-ft-mse.ckpt",
+		"nested/mistral-7b-instruct.Q5_K_S.gguf",
+	}
+	for _, name := range files {
+		createTestFile(t, testDir, name, 1024)
+	}
+
+	dbSeq, cleanupSeq := setupTestDB(t)
+	defer cleanupSeq()
+	seqScanner := NewScanner(dbSeq)
+	seqResult, err := seqScanner.ScanDirectoriesWithOptions(context.Background(), []string{testDir}, Options{Workers: 1})
+	if err != nil {
+		t.Fatalf("single-worker scan failed: %v", err)
+	}
+
+	dbParallel, cleanupParallel := setupTestDB(t)
+	defer cleanupParallel()
+	parallelScanner := NewScanner(dbParallel)
+	parallelResult, err := parallelScanner.ScanDirectoriesWithOptions(context.Background(), []string{testDir}, Options{Workers: 4})
+	if err != nil {
+		t.Fatalf("parallel scan failed: %v", err)
+	}
+
+	if seqResult.FilesScanned != parallelResult.FilesScanned ||
+		seqResult.ModelsFound != parallelResult.ModelsFound ||
+		seqResult.ModelsAdded != parallelResult.ModelsAdded ||
+		seqResult.ModelsSkipped != parallelResult.ModelsSkipped ||
+		seqResult.StaleChecked != parallelResult.StaleChecked ||
+		seqResult.StaleRemoved != parallelResult.StaleRemoved ||
+		len(seqResult.Errors) != len(parallelResult.Errors) {
+		t.Fatalf("parallel result mismatch\nsingle=%+v\nparallel=%+v", seqResult, parallelResult)
+	}
+
+	seqRows, err := dbSeq.ListMetadata(state.MetadataFilters{OrderBy: "name"})
+	if err != nil {
+		t.Fatalf("list single-worker metadata: %v", err)
+	}
+	parallelRows, err := dbParallel.ListMetadata(state.MetadataFilters{OrderBy: "name"})
+	if err != nil {
+		t.Fatalf("list parallel metadata: %v", err)
+	}
+	if len(seqRows) != len(parallelRows) {
+		t.Fatalf("metadata count mismatch: single=%d parallel=%d", len(seqRows), len(parallelRows))
+	}
+	for i := range seqRows {
+		if seqRows[i].Dest != parallelRows[i].Dest ||
+			seqRows[i].ModelName != parallelRows[i].ModelName ||
+			seqRows[i].ModelType != parallelRows[i].ModelType ||
+			seqRows[i].Quantization != parallelRows[i].Quantization {
+			t.Fatalf("metadata mismatch at %d:\nsingle=%+v\nparallel=%+v", i, seqRows[i], parallelRows[i])
+		}
+	}
+}
+
+func TestScanner_RepairStaleRecords(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	testDir := t.TempDir()
+	existingPath := createTestFile(t, testDir, "existing.gguf", 1024)
+	missingPath := filepath.Join(testDir, "missing.gguf")
+	outsideMissingPath := filepath.Join(t.TempDir(), "outside.gguf")
+
+	for _, meta := range []*state.ModelMetadata{
+		{DownloadURL: "file://" + existingPath, Dest: existingPath, ModelName: "existing", Source: "local"},
+		{DownloadURL: "file://" + missingPath, Dest: missingPath, ModelName: "missing", Source: "local"},
+		{DownloadURL: "file://" + outsideMissingPath, Dest: outsideMissingPath, ModelName: "outside", Source: "local"},
+	} {
+		if err := db.UpsertMetadata(meta); err != nil {
+			t.Fatalf("seed metadata: %v", err)
+		}
+	}
+
+	scanner := NewScanner(db)
+	result, err := scanner.ScanDirectoriesWithOptions(context.Background(), []string{testDir}, Options{
+		Workers:     2,
+		RepairStale: true,
+	})
+	if err != nil {
+		t.Fatalf("repair scan failed: %v", err)
+	}
+	if result.StaleChecked != 2 {
+		t.Fatalf("expected 2 stale checks under scan dir, got %d", result.StaleChecked)
+	}
+	if result.StaleRemoved != 1 {
+		t.Fatalf("expected 1 stale record removed, got %d", result.StaleRemoved)
+	}
+	if _, err := db.GetMetadata("file://" + missingPath); err != sql.ErrNoRows {
+		t.Fatalf("missing metadata should be deleted, got %v", err)
+	}
+	if _, err := db.GetMetadata("file://" + outsideMissingPath); err != nil {
+		t.Fatalf("outside metadata should be preserved, got %v", err)
+	}
+}
+
+func TestScanner_RepairStaleCancellationReturnsOnlyError(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	testDir := t.TempDir()
+	missingPath := filepath.Join(testDir, "missing.gguf")
+	if err := db.UpsertMetadata(&state.ModelMetadata{
+		DownloadURL: "file://" + missingPath,
+		Dest:        missingPath,
+		ModelName:   "missing",
+		Source:      "local",
+	}); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	scanner := NewScanner(db)
+	result, err := scanner.ScanDirectoriesWithOptions(ctx, []string{testDir}, Options{RepairStale: true})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got result=%+v err=%v", result, err)
+	}
+	if result == nil {
+		t.Fatal("expected scan result")
+	}
+	if len(result.Errors) != 0 {
+		t.Fatalf("cancellation should be returned once as an error, got result errors: %+v", result.Errors)
+	}
+}
+
+func TestScanner_CancellationLeavesStoredRowsValid(t *testing.T) {
+	db, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	testDir := t.TempDir()
+	for i := 0; i < 100; i++ {
+		createTestFile(t, testDir, fmt.Sprintf("model-%03d.gguf", i), 1024)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	scanner := NewScanner(db)
+	result, err := scanner.ScanDirectoriesWithOptions(ctx, []string{testDir}, Options{
+		Workers: 4,
+		Progress: func(progress Progress) {
+			if progress.FilesScanned >= 1 {
+				cancel()
+			}
+		},
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got result=%+v err=%v", result, err)
+	}
+
+	rows, err := db.ListMetadata(state.MetadataFilters{})
+	if err != nil {
+		t.Fatalf("list metadata after cancellation: %v", err)
+	}
+	for _, row := range rows {
+		if row.DownloadURL == "" || row.Dest == "" {
+			t.Fatalf("invalid stored row after cancellation: %+v", row)
+		}
+		if _, err := os.Stat(row.Dest); err != nil {
+			t.Fatalf("stored row points at missing file after cancellation: %+v err=%v", row, err)
+		}
+	}
+}
+
+func TestConfiguredDirectoriesDeterministicAndTrimmed(t *testing.T) {
+	cfg := &config.Config{
+		General: config.General{DownloadRoot: " /downloads "},
+		Placement: config.Placement{Apps: map[string]config.AppPlacement{
+			"z-app": {
+				Base: " /z ",
+				Paths: map[string]string{
+					"b": " loras ",
+					"a": " checkpoints ",
+				},
+			},
+			"a-app": {
+				Base: "   ",
+				Paths: map[string]string{
+					"abs": " /absolute/path ",
+				},
+			},
+			"m-app": {
+				Base: " /m ",
+				Paths: map[string]string{
+					"abs":   " /override ",
+					"empty": "  ",
+				},
+			},
+		}},
+	}
+
+	got := ConfiguredDirectories(cfg)
+	want := []string{
+		"/downloads",
+		"/absolute/path",
+		"/m",
+		"/override",
+		"/z",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("configured dirs mismatch\ngot:  %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestConfiguredDirectoriesFiltersRedundantSubdirectories(t *testing.T) {
+	root := t.TempDir()
+	child := filepath.Join(root, "child")
+	cfg := &config.Config{
+		General: config.General{DownloadRoot: root},
+		Placement: config.Placement{Apps: map[string]config.AppPlacement{
+			"app": {
+				Base: root,
+				Paths: map[string]string{
+					"child": child,
+				},
+			},
+		}},
+	}
+
+	got := ConfiguredDirectories(cfg)
+	if len(got) != 1 || got[0] != root {
+		t.Fatalf("expected only parent directory, got %#v", got)
+	}
+}
+
+func TestPathWithinDirsNormalizesTrailingSlash(t *testing.T) {
+	dir := t.TempDir()
+	path := createTestFile(t, dir, "model.gguf", 1024)
+
+	if !pathWithinDirs(path, []string{dir + string(os.PathSeparator)}) {
+		t.Fatalf("expected %s to be inside %s/", path, dir)
+	}
+}
+
+func TestPathWithinDirsHandlesSymlinkedDirectory(t *testing.T) {
+	parent := t.TempDir()
+	realDir := filepath.Join(parent, "real")
+	linkDir := filepath.Join(parent, "link")
+	if err := os.MkdirAll(realDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realDir, linkDir); err != nil {
+		t.Skipf("symlink not available: %v", err)
+	}
+	realPath := createTestFile(t, realDir, "model.gguf", 1024)
+	linkPath := filepath.Join(linkDir, "model.gguf")
+
+	if !pathWithinDirs(realPath, []string{linkDir}) {
+		t.Fatalf("expected real path %s to be inside symlinked dir %s", realPath, linkDir)
+	}
+	if !pathWithinDirs(linkPath, []string{linkDir}) {
+		t.Fatalf("expected symlink path %s to be inside symlinked dir %s", linkPath, linkDir)
 	}
 }

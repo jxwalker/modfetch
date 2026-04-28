@@ -25,14 +25,14 @@ func (m *Model) recoverCmd() tea.Cmd {
 		if err != nil {
 			return recoverRowsMsg{rows: nil}
 		}
-		var todo []state.DownloadRow
+		var pending []state.DownloadRow
 		for _, r := range rows {
 			st := strings.ToLower(strings.TrimSpace(r.Status))
 			if st == "running" || st == "planning" || st == "hold" {
-				todo = append(todo, r)
+				pending = append(pending, r)
 			}
 		}
-		return recoverRowsMsg{rows: todo}
+		return recoverRowsMsg{rows: pending}
 	}
 }
 

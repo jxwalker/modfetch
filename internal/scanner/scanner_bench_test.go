@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,8 +28,22 @@ func BenchmarkScanDirectories_10000Files(b *testing.B) {
 	benchmarkScanDirectories(b, 10000)
 }
 
+// BenchmarkScanDirectoriesSequential_1000Files benchmarks single-worker scans.
+func BenchmarkScanDirectoriesSequential_1000Files(b *testing.B) {
+	benchmarkScanDirectoriesWithWorkers(b, 1000, 1)
+}
+
+// BenchmarkScanDirectoriesParallel_1000Files benchmarks bounded parallel scans.
+func BenchmarkScanDirectoriesParallel_1000Files(b *testing.B) {
+	benchmarkScanDirectoriesWithWorkers(b, 1000, 4)
+}
+
 // benchmarkScanDirectories is the common benchmark implementation
 func benchmarkScanDirectories(b *testing.B, fileCount int) {
+	benchmarkScanDirectoriesWithWorkers(b, fileCount, 0)
+}
+
+func benchmarkScanDirectoriesWithWorkers(b *testing.B, fileCount, workers int) {
 	// Setup: Create temporary database and test files
 	tmpDir := b.TempDir()
 	dbPath := filepath.Join(tmpDir, "bench.db")
@@ -51,7 +66,7 @@ func benchmarkScanDirectories(b *testing.B, fileCount int) {
 
 	// Run benchmark
 	for i := 0; i < b.N; i++ {
-		result, err := scanner.ScanDirectories([]string{modelsDir})
+		result, err := scanner.ScanDirectoriesWithOptions(context.Background(), []string{modelsDir}, Options{Workers: workers})
 		if err != nil {
 			b.Fatalf("Scan failed: %v", err)
 		}
