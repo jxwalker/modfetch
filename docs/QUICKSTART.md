@@ -279,7 +279,7 @@ The **Library** tab lets you browse, search, and organize all your downloaded mo
 
 **Press `5` or `L`** from any tab
 
-```
+```text
 ╔═══════════════════════════════════════════════════════════════════════════╗
 ║  modfetch v0.7.0                    Tab: [5] Library                      ║
 ╠═══════════════════════════════════════════════════════════════════════════╣

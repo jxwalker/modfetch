@@ -14,7 +14,7 @@ if [[ -z "$candidate_tag" ]]; then
   candidate_tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)"
 fi
 if [[ -z "$candidate_tag" ]]; then
-  echo "could not determine latest release tag from CHANGELOG.md or git tags; pass one explicitly" >&2
+  echo "could not determine a release version from CHANGELOG.md or git tags; pass one explicitly" >&2
   exit 1
 fi
 
