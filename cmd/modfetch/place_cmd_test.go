@@ -57,15 +57,24 @@ func captureStdout(t *testing.T, fn func()) string {
 		t.Fatalf("pipe: %v", err)
 	}
 	defer func() { _ = r.Close() }()
+	closedWriter := false
+	closeWriter := func() {
+		if closedWriter {
+			return
+		}
+		closedWriter = true
+		if err := w.Close(); err != nil {
+			t.Fatalf("close pipe writer: %v", err)
+		}
+	}
+	defer closeWriter()
 	os.Stdout = w
 	defer func() {
 		os.Stdout = old
 	}()
 
 	fn()
-	if err := w.Close(); err != nil {
-		t.Fatalf("close pipe writer: %v", err)
-	}
+	closeWriter()
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, r); err != nil {
 		t.Fatalf("read stdout: %v", err)

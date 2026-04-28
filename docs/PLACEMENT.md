@@ -17,8 +17,8 @@ Artifact types (detected heuristically; override with `--type`)
 
 Presets
 - `comfyui`: ComfyUI `models/checkpoints`, `models/loras`, `models/vae`, `models/controlnet`, and `models/embeddings`.
-- `automatic1111`: AUTOMATIC1111 Stable Diffusion WebUI model folders.
-- `forge`: Forge Stable Diffusion WebUI model folders.
+- `automatic1111`: AUTOMATIC1111 `models/Stable-diffusion`, `models/Lora`, `models/VAE`, `extensions/sd-webui-controlnet/models`, and `embeddings`.
+- `forge`: Forge `models/Stable-diffusion`, `models/Lora`, `models/VAE`, `extensions/sd-webui-controlnet/models`, and `embeddings`.
 - `ollama`: Ollama `~/.ollama/models` for LLM artifacts.
 - `hf-cache`: generic Hugging Face-style export folder under `~/.cache/huggingface/modfetch`.
 
