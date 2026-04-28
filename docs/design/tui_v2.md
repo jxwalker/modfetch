@@ -1,4 +1,9 @@
-# TUI v2 RFC
+# Historical TUI Redesign RFC
+
+This document records the original redesign plan that led to the current
+`modfetch tui` interface. It is retained as design history; use
+`docs/TUI_GUIDE.md`, `docs/TUI_WIREFRAMES.md`, and
+`docs/TUI_ANALYSIS_SUMMARY.txt` for the current user and architecture docs.
 
 Purpose
 - Redesign the TUI to be modern, colorful, and clearly sectioned, with boxed panes, queues, and smooth realtime updates.
@@ -34,13 +39,12 @@ Technical plan
 - Tests: state transitions, rendering snapshots per theme, perf guardrails
 
 Milestones
-- M1: Scaffold and theme system; static layout with fake data; --v2 flag
+- M1: Scaffold and theme system; static layout with sample data
 - M2: Live integration with downloader state; row actions; inspector
 - M3: Filters/sorting/grouping; toasts; multi-select; perf tuning
-- M4: Flip default; remove v1 after deprecation window; docs + screenshots
+- M4: Make the redesigned interface the maintained default; docs + screenshots
 
 Risks
 - Over-rendering; mitigate with harmonica and batched updates
 - Terminal compatibility; provide ASCII fallback and color reductions
-
 

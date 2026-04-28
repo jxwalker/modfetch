@@ -24,7 +24,8 @@
 - [Library Guide](docs/LIBRARY.md) - Browse and organize your models
 - [User Guide](docs/USER_GUIDE.md) - Full feature reference
 - [Configuration](docs/CONFIG.md) - Config file options
-- [Installation Guide](docs/INSTALLATION.md) - Install with Homebrew, one-line installer, or release binaries
+- [Testing](TESTING.md) - Maintainer validation commands
+- [Installation Guide](docs/INSTALLATION.md) - Install with Homebrew, one-line installer, release binaries, or staged AUR metadata
 - [Release Checklist](docs/RELEASE.md) - Maintainer checklist for tags, artifacts, and package updates
 
 ---
@@ -108,15 +109,18 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 
 ✅ **Production Ready:** Core download, verify, and TUI features are stable
 
-🚀 **Active Development:** Library enhancements, bulk operations, advanced filters
+🚀 **Active Development:** AUR publication, catalog sync targets, and metadata enrichment
 
 📖 **Documentation:** Comprehensive guides with visual examples
 
 ---
 
-## What's new in v0.6.x
-- **v0.6.3**: Hugging Face shorthand aliases now resolve correctly, including public single-repo forms such as `hf://gpt2/README.md?rev=main`, while canonical owner/repo paths and dotted repo names remain supported.
-- **v0.6.2**: Storage, archive, schema, CLI, shell completion, and release workflow updates are shipped and documented.
+## What's new in v0.7.0
+- **Package distribution**: Homebrew/Linuxbrew installation is documented and validated against published GitHub Release artifacts.
+- **Portable library catalogs**: `modfetch library export` and `modfetch library import` support JSON backups, dry-runs, conflict reporting, and machine migration.
+- **TUI bulk maintenance**: Library filters, multi-select bulk actions, selected-entry export, and destructive-action confirmations are available in the TUI.
+- **Placement presets**: Common local AI tools can be configured through named placement presets, wizard selection, and `place --preset --dry-run` previews.
+- **Scanner repair UX**: Bounded parallel scans, progress reporting, stale-record repair, and benchmark coverage improve large library maintenance.
 - **Library View**: Browse all your downloaded models with rich metadata, search, and filters
   - View model details: type, quantization, size, source, tags, descriptions
   - Search by name, filter by type (LLM, LoRA, VAE, etc.) and source (HuggingFace, CivitAI, local)
@@ -137,6 +141,8 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 - **Documentation**: Complete user guides for Library (docs/LIBRARY.md) and Scanner (docs/SCANNER.md)
 
 Previous releases:
+- v0.6.3: Hugging Face shorthand aliases, including public single-repo forms such as `hf://gpt2/README.md?rev=main`
+- v0.6.2: Storage, archive, schema, CLI, shell completion, and release workflow updates
 - v0.6.1: Testing reliability, real API integration coverage, and TUI test expansion
 - v0.5.2: Enhanced TUI with rich UI elements and vibrant colors
 - v0.5.1: Critical installer and TUI navigation fixes
@@ -209,6 +215,11 @@ brew upgrade jxwalker/tap/modfetch
 ```
 
 The formula installs the published GitHub Release binary and verifies its SHA256 checksum.
+
+Arch Linux packaging metadata is staged under `packaging/aur/` for the
+`modfetch-bin` AUR package. Publication requires an AUR account with a
+registered SSH key; until that package is published, Arch users should use
+Homebrew/Linuxbrew, the one-line installer, or the manual release binary.
 </details>
 
 <details>
@@ -479,7 +490,7 @@ Troubleshooting
 Roadmap
 - See docs/ROADMAP.md for the active, prioritized roadmap
 - v0.7.x focus:
-  - AUR package publication
+  - AUR package publication once maintainer SSH auth is available
   - Metadata enrichment from additional registries
   - Remote catalog sync targets
   - User-driven archive format expansion

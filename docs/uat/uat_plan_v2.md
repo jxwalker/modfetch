@@ -1,12 +1,13 @@
-# Modfetch TUI v2 – Comprehensive UAT Plan
+# Modfetch TUI UAT Plan
 
-Audience: Novice-friendly checklist to validate functionality, performance, and integration of modfetch v2 (CLI and TUI), including the new batch import feature.
+Audience: Novice-friendly checklist to validate functionality, performance, and
+integration of modfetch CLI and TUI workflows, including batch import.
 
 Environment
 - OS: macOS
 - Shell: zsh 5.9
-- Project dir: /Users/James/Documents/Code/modfetch
-- Ensure Go toolchain is installed (go 1.21+ recommended)
+- Project dir: repository checkout root
+- Ensure Go toolchain is installed (Go 1.22+ recommended)
 - Set MODFETCH_CONFIG to your YAML config path if not passing --config per command
 
 Pre-UAT Preparation
@@ -94,7 +95,7 @@ B5) Failure handling
 - Temporarily set an invalid URL in input file, re-import and download.
 - Expect: Affected job logs an error; others proceed.
 
-Section C – TUI v2 Functional UAT
+Section C - TUI Functional UAT
 C1) Launch TUI
 - Command: modfetch tui --config=<cfg>
 - Expect: TUI shows header, footer, tabs, and a table.
@@ -126,7 +127,7 @@ C8) Theme presets
 - Press T repeatedly; cycle through presets (Base, Neon, Dracula, Solarized); ensure persistence on quit/restart.
 
 C9) Last column cycle
-- Press t to cycle between dest → url → host; ensure it persists.
+- Press t to cycle between dest, url, and host; ensure it persists.
 
 C10) Compact mode
 - Press v to toggle; hides speed/throughput; ensure it persists.
@@ -173,4 +174,3 @@ Troubleshooting Tips
 - If you see 401 Unauthorized for HF/CivitAI, ensure tokens are exported and that you’ve accepted license agreements where required.
 - If a dest path already exists, importer uniquifies paths (dest (2).ext, etc.). You can override with dest=... per line.
 - For SHA compute mode, be aware it fully downloads content; use selectively.
-

@@ -206,7 +206,7 @@ brew install asciinema
 - Record a session (CTRL-D to stop):
 
 ```bash
-asciinema rec -c "modfetch tui --config /path/to/config.yml --v2" out.cast
+asciinema rec -c "modfetch tui --config /path/to/config.yml" out.cast
 ```
 
 - Play locally:
