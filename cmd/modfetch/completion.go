@@ -73,7 +73,7 @@ _modfetch_completions()
             COMPREPLY=( $(compgen -W "--config --log-level --json" -- "$cur") ) ;;
         library)
             if [[ ${cword} -eq 2 ]]; then
-                COMPREPLY=( $(compgen -W "export import" -- "$cur") )
+                COMPREPLY=( $(compgen -W "export import scan" -- "$cur") )
                 return
             fi
             case ${words[2]} in
@@ -81,6 +81,8 @@ _modfetch_completions()
                     COMPREPLY=( $(compgen -W "--config --log-level --json --format --output" -- "$cur") ) ;;
                 import)
                     COMPREPLY=( $(compgen -W "--config --log-level --json --input --dry-run" -- "$cur") ) ;;
+                scan)
+                    COMPREPLY=( $(compgen -W "--config --log-level --json --dir --workers --repair-stale --no-progress" -- "$cur") ) ;;
                 *) ;;
             esac ;;
         clean)
@@ -152,7 +154,7 @@ _modfetch() {
       ;;
     library)
       if (( CURRENT == 3 )); then
-        _arguments '*:subcommands:(export import)'
+        _arguments '*:subcommands:(export import scan)'
       else
         case $words[3] in
           export)
@@ -160,6 +162,9 @@ _modfetch() {
             ;;
           import)
             _arguments '*:options:(--config --log-level --json --input --dry-run)'
+            ;;
+          scan)
+            _arguments '*:options:(--config --log-level --json --dir --workers --repair-stale --no-progress)'
             ;;
         esac
       fi
@@ -249,10 +254,15 @@ complete -c modfetch -n "__fish_seen_subcommand_from download" -l quant -d "Hugg
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l list-quants -d "List HuggingFace quantizations"
 complete -c modfetch -n "__fish_seen_subcommand_from library" -a "export" -d "Export model catalog"
 complete -c modfetch -n "__fish_seen_subcommand_from library" -a "import" -d "Import model catalog"
+complete -c modfetch -n "__fish_seen_subcommand_from library" -a "scan" -d "Scan model directories"
 complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from export" -l format -d "Catalog format"
 complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from export" -l output -d "Output catalog path"
 complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from import" -l input -d "Input catalog path"
 complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from import" -l dry-run -d "Report changes without writing"
+complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from scan" -l dir -d "Directory to scan"
+complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from scan" -l workers -d "Scanner worker count"
+complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from scan" -l repair-stale -d "Remove metadata for missing files"
+complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from scan" -l no-progress -d "Disable progress output"
 complete -c modfetch -n "__fish_seen_subcommand_from dedupe" -l mode -d "hardlink|symlink"
 complete -c modfetch -n "__fish_seen_subcommand_from dedupe" -l dry-run -d "Show dedupe changes without modifying files"
 # batch import flags

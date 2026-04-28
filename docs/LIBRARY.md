@@ -292,19 +292,26 @@ The scanner automatically discovers models in your configured directories.
 
 ### Triggering a Scan
 
-Press `S` in the Library tab to scan directories:
+Press `S` in the Library tab to scan directories, or run the same scanner from
+the CLI:
 
+```bash
+modfetch library scan
+modfetch library scan --dir ~/models --workers 4 --repair-stale
 ```
-Scanning directories...
-Found 42 models (15 new, 27 existing)
-```
+
+The TUI shows scanning state in the Library header and reports files scanned,
+models added, and duplicates skipped when the scan finishes. The CLI prints
+progress to stderr and a final summary to stdout. Stale-record repair is opt-in
+through `modfetch library scan --repair-stale`.
 
 ### What Gets Scanned
 
 The scanner searches these locations:
 
 1. **Download Root**: `cfg.General.DownloadRoot`
-2. **Placement Directories**: All `cfg.Placement.Rules[].Dest` paths
+2. **Placement App Bases**: Each `cfg.Placement.Apps[*].Base`
+3. **Placement App Paths**: Each configured app path joined to its base
 
 ### Supported File Types
 
@@ -356,7 +363,7 @@ The scanner uses **indexed database queries** for fast duplicate detection:
 After scanning, you'll see a toast notification:
 
 ```
-Scan complete: 15 new, 27 skipped, 0 errors
+scan complete: 42 files scanned, 15 models added, 27 skipped, 1 stale removed
 ```
 
 The library view automatically refreshes to show newly discovered models.
@@ -495,7 +502,8 @@ For large libraries (1000+ models):
 1. Press `S` to trigger a manual scan
 2. Check that files are in configured directories:
    - `cfg.General.DownloadRoot`
-   - `cfg.Placement.Rules[].Dest`
+   - `cfg.Placement.Apps[*].Base`
+   - configured placement app paths joined to their base
 3. Verify file extension is supported (see [Supported File Types](#supported-file-types))
 
 ### Missing Metadata

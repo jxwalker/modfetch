@@ -35,6 +35,7 @@ modfetch verify --all              # Verify all downloads
 modfetch place --path FILE         # Place model into app
 modfetch clean --days 7            # Clean old partials
 modfetch library export --output catalog.json
+modfetch library scan --repair-stale
 modfetch config validate           # Validate config
 modfetch tui                       # Launch visual TUI
 ```
@@ -153,9 +154,16 @@ Show rows from the download state database.
 
 ### library
 
-Export or import the model library catalog for backup and machine migration.
+Scan, export, or import the model library catalog for local maintenance,
+backup, and machine migration.
 
 ```bash
+# Scan configured download and placement directories into the library
+modfetch library scan
+
+# Scan a specific directory with four workers and repair stale metadata
+modfetch library scan --dir ~/models --workers 4 --repair-stale
+
 # Export metadata, favorites, source URLs, destination paths, and checksums
 modfetch library export --format json --output modfetch-catalog.json
 
@@ -165,6 +173,19 @@ modfetch library import --input modfetch-catalog.json --dry-run
 # Import catalog entries and print a machine-readable summary
 modfetch library import --input modfetch-catalog.json --json
 ```
+
+`library scan` recognizes `.gguf`, `.ggml`, `.safetensors`, `.ckpt`, `.pt`,
+`.pth`, `.bin`, `.h5`, `.pb`, and `.onnx` model files. By default, it scans the
+configured download root, each placement app base, and each placement app path
+joined to its base. Use repeated `--dir` flags to override that directory list.
+Progress is printed to stderr unless `--json` or `--no-progress` is set.
+
+Scan options:
+- `--dir PATH` - scan this directory instead of configured roots; repeatable
+- `--workers N` - set bounded scanner workers; default is CPU-bound with max 8
+- `--repair-stale` - remove library metadata for missing files under scanned roots
+- `--no-progress` - suppress progress output
+- `--json` - print a machine-readable scan summary
 
 Exported catalogs include a schema version and one entry per model metadata row.
 When a matching download row exists, the catalog also carries expected and

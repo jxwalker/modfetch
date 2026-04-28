@@ -4,7 +4,7 @@ This is the active project roadmap after the v0.6.3 release. Historical backlog
 items that shipped in v0.6.x are summarized at the end for traceability.
 
 Status key:
-- [TODO] not started
+- [PLANNED] not started
 - [NEXT] next implementation slice
 - [IN PROGRESS] active work
 - [DONE] shipped on main
@@ -99,16 +99,16 @@ Acceptance checks:
 - Preset output is explicit YAML that users can inspect and edit.
 - `--dry-run` explains every planned link/copy and every skipped artifact.
 
-### 5. Scanner Performance and Repair UX [TODO]
+### 5. Scanner Performance and Repair UX [DONE]
 
 Outcome: large model directories scan faster and failed scans are easier to
 recover from.
 
-- [TODO] Add bounded parallel directory scanning with serialized DB writes.
-- [TODO] Add scan progress reporting for CLI and TUI.
-- [TODO] Add optional stale-record repair for files moved or deleted outside
+- [DONE] Add bounded parallel directory scanning with serialized DB writes.
+- [DONE] Add scan progress reporting for CLI and TUI.
+- [DONE] Add optional stale-record repair for files moved or deleted outside
   modfetch.
-- [TODO] Benchmark sequential versus parallel scans on representative trees.
+- [DONE] Benchmark sequential versus parallel scans on representative trees.
 
 Acceptance checks:
 - Parallel scan results match sequential scan results.
@@ -116,16 +116,16 @@ Acceptance checks:
 - Benchmarks show the change helps on large directories without regressing small
   scans materially.
 
-### 6. Release and Documentation Hardening [TODO]
+### 6. Release and Documentation Hardening [PLANNED]
 
 Outcome: release quality stays repeatable as install surfaces expand.
 
 - [DONE] Add a release checklist that covers changelog section, installer,
   package formula, release notes extraction, artifacts, checksums, and smoke
   installs.
-- [TODO] Add a docs drift check for current version strings and stale installation
+- [PLANNED] Add a docs drift check for current version strings and stale installation
   claims.
-- [TODO] Keep README.md, docs/QUICKSTART.md, docs/USER_GUIDE.md,
+- [PLANNED] Keep README.md, docs/QUICKSTART.md, docs/USER_GUIDE.md,
   docs/CLI_GUIDE.md, docs/INSTALLATION.md, and CHANGELOG.md aligned before
   each tag.
 

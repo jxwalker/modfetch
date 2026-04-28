@@ -1,8 +1,8 @@
 package tui
 
 import (
+	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -106,6 +106,18 @@ func (m *Model) renderLibrary() string {
 	}
 	if m.libraryShowFavorites {
 		header += m.th.ok.Render(" • ★ Favorites")
+	}
+	if m.libraryScanning {
+		header += m.th.label.Render(fmt.Sprintf(" • Scanning: %d files, %d added, %d skipped",
+			m.libraryScanProgress.FilesScanned,
+			m.libraryScanProgress.ModelsAdded,
+			m.libraryScanProgress.ModelsSkipped))
+	} else if m.libraryScanProgress.FilesScanned > 0 || m.libraryScanProgress.StaleChecked > 0 {
+		header += m.th.label.Render(fmt.Sprintf(" • Last scan: %d files, %d added, %d skipped, %d stale removed",
+			m.libraryScanProgress.FilesScanned,
+			m.libraryScanProgress.ModelsAdded,
+			m.libraryScanProgress.ModelsSkipped,
+			m.libraryScanProgress.StaleRemoved))
 	}
 	totalSelected := len(m.librarySelectedKeys)
 	if totalSelected > 0 {
@@ -474,48 +486,60 @@ func (m *Model) updateLibrarySearch(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // scanDirectoriesCmd initiates a directory scan for models
-
 func (m *Model) scanDirectoriesCmd() tea.Cmd {
 	return func() tea.Msg {
-		if m.st == nil || m.cfg == nil {
-			return scanCompleteMsg{err: fmt.Errorf("database or config not available")}
-		}
-
-		// Get directories to scan from config
-		dirs := []string{}
-
-		// Add download root
-		if m.cfg.General.DownloadRoot != "" {
-			dirs = append(dirs, m.cfg.General.DownloadRoot)
-		}
-
-		// Add placement app base directories and subdirectories
-		for _, app := range m.cfg.Placement.Apps {
-			if app.Base != "" {
-				dirs = append(dirs, app.Base)
-			}
-			for _, path := range app.Paths {
-				if path != "" {
-					fullPath := filepath.Join(app.Base, path)
-					dirs = append(dirs, fullPath)
-				}
-			}
-		}
-
-		if len(dirs) == 0 {
-			return scanCompleteMsg{err: fmt.Errorf("no directories configured to scan")}
-		}
-
-		// Perform scan
-		scanner := scanner.NewScanner(m.st)
-		result, err := scanner.ScanDirectories(dirs)
-
-		if err != nil {
-			return scanCompleteMsg{err: err, result: result}
-		}
-
-		return scanCompleteMsg{result: result}
+		result, err := m.runDirectoryScan(context.Background(), nil)
+		return scanCompleteMsg{result: result, err: err}
 	}
+}
+
+func (m *Model) scanDirectoriesStreamCmd(ctx context.Context, ch chan tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		defer close(ch)
+
+		progressFn := func(progress scanner.Progress) {
+			select {
+			case ch <- scanProgressMsg{progress: progress, ch: ch}:
+			case <-ctx.Done():
+			default:
+			}
+		}
+		result, err := m.runDirectoryScan(ctx, progressFn)
+		select {
+		case ch <- scanCompleteMsg{result: result, err: err}:
+		case <-ctx.Done():
+		}
+		return nil
+	}
+}
+
+func (m *Model) runDirectoryScan(ctx context.Context, progress scanner.ProgressFunc) (*scanner.ScanResult, error) {
+	if m.st == nil || m.cfg == nil {
+		return nil, fmt.Errorf("database or config not available")
+	}
+
+	dirs := scanner.ConfiguredDirectories(m.cfg)
+	if len(dirs) == 0 {
+		return nil, fmt.Errorf("no directories configured to scan")
+	}
+
+	sc := scanner.NewScanner(m.st)
+	return sc.ScanWithContext(ctx, dirs, scanner.Options{Progress: progress})
+}
+
+func waitForScanMsg(ch <-chan tea.Msg) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return msg
+	}
+}
+
+type scanProgressMsg struct {
+	progress scanner.Progress
+	ch       <-chan tea.Msg
 }
 
 // scanCompleteMsg is sent when directory scan completes

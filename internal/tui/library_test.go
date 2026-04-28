@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jxwalker/modfetch/internal/catalog"
 	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/scanner"
 	"github.com/jxwalker/modfetch/internal/state"
 )
 
@@ -559,6 +561,106 @@ func TestLibrary_ScanDirectoriesCmd_NoDirectories(t *testing.T) {
 
 	if scanMsg.err == nil {
 		t.Error("Should return error when no directories configured")
+	}
+}
+
+func TestLibrary_ScanDirectoriesStreamReportsProgress(t *testing.T) {
+	model, _, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	modelPath := filepath.Join(model.cfg.General.DownloadRoot, "stream-model.gguf")
+	if err := os.WriteFile(modelPath, []byte("model"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ch := make(chan tea.Msg, 16)
+	done := make(chan tea.Msg, 1)
+	go func() {
+		done <- model.scanDirectoriesStreamCmd(context.Background(), ch)()
+	}()
+
+	sawProgress := false
+	var complete scanCompleteMsg
+	for msg := range ch {
+		switch msg := msg.(type) {
+		case scanProgressMsg:
+			if msg.progress.FilesScanned > 0 {
+				sawProgress = true
+			}
+		case scanCompleteMsg:
+			complete = msg
+		}
+	}
+	if msg := <-done; msg != nil {
+		t.Fatalf("stream command should return nil, got %T", msg)
+	}
+	if !sawProgress {
+		t.Fatal("expected scan progress message")
+	}
+	if complete.err != nil {
+		t.Fatalf("scan failed: %v", complete.err)
+	}
+	if complete.result == nil || complete.result.FilesScanned != 1 || complete.result.ModelsAdded != 1 {
+		t.Fatalf("unexpected scan result: %+v", complete.result)
+	}
+}
+
+func TestLibrary_ScanDirectoriesStreamStopsAfterCancellation(t *testing.T) {
+	model, _, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	ch := make(chan tea.Msg)
+	done := make(chan tea.Msg, 1)
+	go func() {
+		done <- model.scanDirectoriesStreamCmd(ctx, ch)()
+	}()
+
+	streamClosed := false
+	for !streamClosed {
+		select {
+		case _, ok := <-ch:
+			streamClosed = !ok
+		case <-time.After(time.Second):
+			t.Fatal("scan stream did not close after cancellation")
+		}
+	}
+
+	select {
+	case msg := <-done:
+		if msg != nil {
+			t.Fatalf("stream command should return nil, got %T", msg)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("scan stream command blocked after cancellation")
+	}
+}
+
+func TestLibrary_ScanCompleteCancelsContext(t *testing.T) {
+	model, _, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	cancelled := false
+	model.libraryScanning = true
+	model.libraryScanCancel = func() {
+		cancelled = true
+	}
+
+	updated, cmd := model.Update(scanCompleteMsg{result: &scanner.ScanResult{}})
+	if cmd != nil {
+		t.Fatalf("scan completion should not return a command, got %T", cmd)
+	}
+	updatedModel := updated.(*Model)
+	if !cancelled {
+		t.Fatal("expected scan completion to call cancel")
+	}
+	if updatedModel.libraryScanCancel != nil {
+		t.Fatal("expected scan cancel function to be cleared")
+	}
+	if updatedModel.libraryScanning {
+		t.Fatal("expected scan state to be cleared")
 	}
 }
 

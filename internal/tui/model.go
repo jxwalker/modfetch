@@ -15,6 +15,7 @@ import (
 	"github.com/jxwalker/modfetch/internal/logging"
 	"github.com/jxwalker/modfetch/internal/placer"
 	"github.com/jxwalker/modfetch/internal/resolver"
+	"github.com/jxwalker/modfetch/internal/scanner"
 	"github.com/jxwalker/modfetch/internal/state"
 )
 
@@ -185,6 +186,8 @@ type Model struct {
 	librarySearchInput   textinput.Model // Search input for library
 	librarySearchActive  bool            // Search input is active
 	libraryScanning      bool            // Currently scanning directories
+	libraryScanProgress  scanner.Progress
+	libraryScanCancel    context.CancelFunc
 	stateEvents          <-chan struct{}
 	stopStateEvents      func()
 	log                  *logging.Logger
@@ -382,15 +385,35 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Metadata was successfully stored, mark library as needing refresh
 		m.libraryNeedsRefresh = true
 		return m, nil
+	case scanProgressMsg:
+		m.libraryScanProgress = msg.progress
+		if m.libraryScanning {
+			return m, waitForScanMsg(msg.ch)
+		}
+		return m, nil
 	case scanCompleteMsg:
 		// Handle directory scan completion
 		m.libraryScanning = false
+		if m.libraryScanCancel != nil {
+			m.libraryScanCancel()
+			m.libraryScanCancel = nil
+		}
 
 		if msg.err != nil {
 			m.addToast(fmt.Sprintf("scan error: %v", msg.err))
 		} else if msg.result != nil {
-			m.addToast(fmt.Sprintf("scan complete: %d files scanned, %d models added, %d skipped",
-				msg.result.FilesScanned, msg.result.ModelsAdded, msg.result.ModelsSkipped))
+			m.libraryScanProgress = scanner.Progress{
+				Phase:         "complete",
+				FilesScanned:  msg.result.FilesScanned,
+				ModelsFound:   msg.result.ModelsFound,
+				ModelsAdded:   msg.result.ModelsAdded,
+				ModelsSkipped: msg.result.ModelsSkipped,
+				StaleChecked:  msg.result.StaleChecked,
+				StaleRemoved:  msg.result.StaleRemoved,
+				Errors:        len(msg.result.Errors),
+			}
+			m.addToast(fmt.Sprintf("scan complete: %d files scanned, %d models added, %d skipped, %d stale removed",
+				msg.result.FilesScanned, msg.result.ModelsAdded, msg.result.ModelsSkipped, msg.result.StaleRemoved))
 			// Refresh library to show new models - will be loaded when user views library tab
 			m.libraryNeedsRefresh = true
 		}
@@ -504,6 +527,10 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch s {
 	case "q", "ctrl+c":
+		if m.libraryScanCancel != nil {
+			m.libraryScanCancel()
+			m.libraryScanCancel = nil
+		}
 		if m.stopStateEvents != nil {
 			m.stopStateEvents()
 			m.stopStateEvents = nil
@@ -537,7 +564,12 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "S":
 		// Scan directories for existing models
 		if m.activeTab == 4 && !m.libraryScanning {
-			return m, m.scanDirectoriesCmd()
+			m.libraryScanning = true
+			m.libraryScanProgress = scanner.Progress{Phase: "scan"}
+			ctx, cancel := context.WithCancel(context.Background())
+			m.libraryScanCancel = cancel
+			ch := make(chan tea.Msg, 16)
+			return m, tea.Batch(m.scanDirectoriesStreamCmd(ctx, ch), waitForScanMsg(ch))
 		}
 		return m, nil
 	case "F":

@@ -125,8 +125,9 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 - **Directory Scanner**: Automatically discover models in your configured directories
   - Scans download_root and placement directories
   - Extracts metadata from filenames (quantization, parameter count, version)
+  - Uses bounded parallel scanning with serialized database writes
   - O(log n) duplicate detection with database indexes (10-100x faster than linear scan)
-  - Press `S` in Library view to trigger a scan
+  - Press `S` in Library view or run `modfetch library scan --repair-stale`
 - **Settings Tab**: View your configuration at a glance
   - See directory paths, API token status, placement rules, download settings
   - Visual indicators for HuggingFace and CivitAI token status
@@ -313,6 +314,9 @@ modfetch download --batch jobs.yml --place
 # Back up or migrate your model library catalog
 modfetch library export --output modfetch-catalog.json
 modfetch library import --input modfetch-catalog.json --dry-run
+
+# Discover existing local models and remove missing-file metadata
+modfetch library scan --repair-stale
 ```
 
 ### Detailed Examples
@@ -468,8 +472,8 @@ Troubleshooting
 - Missing tokens: Set `HF_TOKEN` or `CIVITAI_TOKEN` in your environment when accessing private resources.
 - TLS or HEAD failures: Downloader falls back to single‑stream when Range/HEAD is unsupported.
 - Resume: Re‑running the same download will resume and verify integrity.
-- Library not showing models: Press `S` in Library view to scan your directories.
-- Slow scanning: First scan may take time; subsequent scans use indexed duplicate detection (10-100x faster).
+- Library not showing models: Press `S` in Library view or run `modfetch library scan`.
+- Slow scanning: Use `modfetch library scan --workers 4`; subsequent scans also use indexed duplicate detection.
 
 Roadmap
 - See docs/ROADMAP.md for the active, prioritized roadmap
@@ -478,5 +482,5 @@ Roadmap
   - Library catalog export/import
   - TUI bulk operations and filter menu
   - Placement presets
-  - Parallel scanner improvements
+  - Scanner performance and repair UX
   - Release hardening
