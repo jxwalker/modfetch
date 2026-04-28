@@ -16,9 +16,19 @@ import (
 // sd.checkpoint, sd.lora, sd.vae, sd.controlnet, sd.embedding,
 // llm.gguf, llm.safetensors, generic
 
+type Result struct {
+	Type       string
+	Confidence string
+	Reason     string
+}
+
 // Detect attempts to determine the artifact type of a file.
 // Custom rules from the config are consulted before built-ins.
 func Detect(cfg *config.Config, filePath string) string {
+	return Analyze(cfg, filePath).Type
+}
+
+func Analyze(cfg *config.Config, filePath string) Result {
 	name := strings.ToLower(filepath.Base(filePath))
 
 	// Custom rules first
@@ -29,7 +39,7 @@ func Detect(cfg *config.Config, filePath string) string {
 				continue
 			}
 			if re.MatchString(name) {
-				return r.Type
+				return Result{Type: r.Type, Confidence: "high", Reason: "matched classifier rule " + r.Regex}
 			}
 		}
 	}
@@ -37,32 +47,32 @@ func Detect(cfg *config.Config, filePath string) string {
 	ext := strings.ToLower(filepath.Ext(name))
 	switch ext {
 	case ".gguf":
-		return "llm.gguf"
+		return Result{Type: "llm.gguf", Confidence: "high", Reason: "file extension .gguf"}
 	case ".ckpt":
-		return "sd.checkpoint"
+		return Result{Type: "sd.checkpoint", Confidence: "high", Reason: "file extension .ckpt"}
 	case ".safetensors":
 		// heuristics based on name
 		if strings.Contains(name, "lora") || strings.Contains(name, "lycoris") || strings.Contains(name, "locon") {
-			return "sd.lora"
+			return Result{Type: "sd.lora", Confidence: "medium", Reason: "safetensors filename suggests LoRA"}
 		}
 		if strings.Contains(name, "vae") {
-			return "sd.vae"
+			return Result{Type: "sd.vae", Confidence: "medium", Reason: "safetensors filename suggests VAE"}
 		}
 		if strings.Contains(name, "controlnet") {
-			return "sd.controlnet"
+			return Result{Type: "sd.controlnet", Confidence: "medium", Reason: "safetensors filename suggests ControlNet"}
 		}
 		// Ambiguous: default to sd.checkpoint for SD ecosystem, can be overridden
-		return "sd.checkpoint"
+		return Result{Type: "sd.checkpoint", Confidence: "low", Reason: "ambiguous .safetensors default"}
 	case ".pt":
 		if strings.Contains(name, "embed") || strings.Contains(name, "embedding") {
-			return "sd.embedding"
+			return Result{Type: "sd.embedding", Confidence: "medium", Reason: "filename suggests embedding"}
 		}
-		return "generic"
+		return Result{Type: "generic", Confidence: "low", Reason: "unrecognized .pt filename"}
 	default:
 		if t := detectMagic(filePath); t != "" {
-			return t
+			return Result{Type: t, Confidence: "medium", Reason: "file header matched " + t}
 		}
-		return "generic"
+		return Result{Type: "generic", Confidence: "low", Reason: "no extension or header rule matched"}
 	}
 }
 

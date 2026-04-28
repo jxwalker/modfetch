@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/jxwalker/modfetch/internal/config"
+	"github.com/jxwalker/modfetch/internal/placer"
 )
 
 type Wizard struct {
@@ -20,7 +21,7 @@ type Wizard struct {
 
 func New(defaults *config.Config) *Wizard {
 	w := &Wizard{}
-	fields := make([]textinput.Model, 0, 9)
+	fields := make([]textinput.Model, 0, 10)
 	mk := func(ph, val string) textinput.Model {
 		ti := textinput.New()
 		ti.Prompt = "> "
@@ -47,6 +48,7 @@ func New(defaults *config.Config) *Wizard {
 	fields = append(fields, mk("general.data_root", dr))
 	fields = append(fields, mk("general.download_root", dd))
 	fields = append(fields, mk("general.placement_mode (symlink|hardlink|copy)", pm))
+	fields = append(fields, mk("placement.presets (comma list or none)", "none"))
 	// hf enabled, token env
 	hfEn := "true"
 	hfTok := "HF_TOKEN"
@@ -149,6 +151,7 @@ func (w *Wizard) View() string {
 		"general.data_root",
 		"general.download_root",
 		"general.placement_mode",
+		"placement.presets",
 		"sources.huggingface.enabled",
 		"sources.huggingface.token_env",
 		"sources.civitai.enabled",
@@ -188,12 +191,13 @@ func (w *Wizard) buildConfig() *config.Config {
 		pm = "symlink"
 	}
 	o.General.PlacementMode = pm
-	o.Sources.HuggingFace.Enabled = parseBool(get(3))
-	o.Sources.HuggingFace.TokenEnv = get(4)
-	o.Sources.CivitAI.Enabled = parseBool(get(5))
-	o.Sources.CivitAI.TokenEnv = get(6)
-	o.Concurrency.ChunkSizeMB = parseInt(get(7), 8)
-	o.Concurrency.PerFileChunks = parseInt(get(8), 4)
+	_ = placer.ApplyPresets(o, placer.ParsePresetList(get(3)))
+	o.Sources.HuggingFace.Enabled = parseBool(get(4))
+	o.Sources.HuggingFace.TokenEnv = get(5)
+	o.Sources.CivitAI.Enabled = parseBool(get(6))
+	o.Sources.CivitAI.TokenEnv = get(7)
+	o.Concurrency.ChunkSizeMB = parseInt(get(8), 8)
+	o.Concurrency.PerFileChunks = parseInt(get(9), 4)
 	return o
 }
 

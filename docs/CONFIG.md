@@ -87,6 +87,10 @@ Strict validation is intended as a v1.0 readiness check. Regular validation rema
 ## Placement mapping
 - Map artifact types to target apps/paths. Common types:
   - `sd.checkpoint`, `sd.lora`, `sd.vae`, `sd.controlnet`, `sd.embedding`, `llm.gguf`, `llm.safetensors`, `generic`.
+- The config wizard can add named presets through the `placement.presets`
+  prompt. Preset choices include `comfyui`, `automatic1111`, `forge`,
+  `ollama`, and `hf-cache`. Presets are emitted as normal `placement.apps` and
+  `placement.mapping` YAML, so you can inspect and edit the resulting config.
 - Example:
 ```
 placement:

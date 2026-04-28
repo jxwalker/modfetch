@@ -59,7 +59,7 @@ _modfetch_completions()
         dedupe)
             COMPREPLY=( $(compgen -W "--config --log-level --json --mode --dry-run" -- "$cur") ) ;;
         place)
-            COMPREPLY=( $(compgen -W "--config --log-level --json --path --type --mode --dry-run" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --path --type --mode --preset --list-presets --dry-run" -- "$cur") ) ;;
         verify)
             COMPREPLY=( $(compgen -W "--config --path --all --safetensors --safetensors-deep --scan-dir --repair --quarantine-incomplete --only-errors --summary --fix-sidecar --log-level --json" -- "$cur") ) ;;
         status)
@@ -134,7 +134,7 @@ _modfetch() {
       _arguments '*:options:(--config --log-level --json --mode --dry-run)'
       ;;
     place)
-      _arguments '*:options:(--config --log-level --json --path --type --mode --dry-run)'
+      _arguments '*:options:(--config --log-level --json --path --type --mode --preset --list-presets --dry-run)'
       ;;
     verify)
       _arguments '*:options:(--config --path --all --safetensors --safetensors-deep --scan-dir --repair --quarantine-incomplete --only-errors --summary --fix-sidecar --log-level --json)'
@@ -267,6 +267,8 @@ complete -c modfetch -n "__fish_seen_subcommand_from batch; and __fish_seen_subc
 complete -c modfetch -n "__fish_seen_subcommand_from place" -l path -d "File to place"
 complete -c modfetch -n "__fish_seen_subcommand_from place" -l type -d "Artifact type override"
 complete -c modfetch -n "__fish_seen_subcommand_from place" -l mode -d "Placement mode"
+complete -c modfetch -n "__fish_seen_subcommand_from place" -l preset -d "Apply placement preset"
+complete -c modfetch -n "__fish_seen_subcommand_from place" -l list-presets -d "List placement presets"
 complete -c modfetch -n "__fish_seen_subcommand_from place" -l dry-run -d "Show planned placements only"
 complete -c modfetch -n "__fish_seen_subcommand_from verify" -l path -d "File to verify"
 complete -c modfetch -n "__fish_seen_subcommand_from verify" -l all -d "Verify all"
