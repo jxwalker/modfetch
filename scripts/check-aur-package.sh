@@ -34,14 +34,26 @@ extract_pkgbuild_scalar() {
 extract_pkgbuild_array_first() {
   local file="$1"
   local var_name="$2"
-  local line
+  local block value
 
-  line="$(grep -E "^[[:space:]]*${var_name}=\\(" "$file" | head -n 1 || true)"
-  if [[ -z "$line" ]]; then
+  block="$(awk -v var_name="$var_name" '
+    $0 ~ "^[[:space:]]*" var_name "=\\(" {
+      in_array = 1
+    }
+    in_array {
+      print
+      if ($0 ~ /\)/) {
+        exit
+      }
+    }
+  ' "$file")"
+  if [[ -z "$block" ]]; then
     return 1
   fi
 
-  printf '%s\n' "$line" | sed -E "s/^[^(]*\\([[:space:]]*['\"]([^'\"]+)['\"].*/\\1/"
+  value="$(printf '%s\n' "$block" | sed -nE "s/^[^(]*\\([[:space:]]*['\"]([^'\"]+)['\"].*/\\1/p; s/^[[:space:]]*['\"]([^'\"]+)['\"].*/\\1/p" | head -n 1)"
+  [[ -n "$value" ]] || return 1
+  printf '%s\n' "$value"
 }
 
 pkgname="$(extract_pkgbuild_scalar "$pkgbuild" "pkgname")"
