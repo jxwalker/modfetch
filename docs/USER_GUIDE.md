@@ -4,7 +4,7 @@ This guide walks you through configuration, common workflows, and tips to get th
 
 - Build: `make build` (produces `./bin/modfetch`)
 - Config file path can be passed with `--config` or via the environment variable `MODFETCH_CONFIG`.
-- Current release: v0.6.3. The examples below include the Hugging Face shorthand URI form fixed in v0.6.3.
+- Current release: v0.7.0. The examples below include the Hugging Face shorthand URI form fixed in v0.6.3 and the v0.7.0 library maintenance workflows.
 
 ## Configure
 

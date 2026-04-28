@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v0.7.0 — 2026-04-28
+
+Added
+- Added Homebrew tap installation documentation and release checklist coverage.
+- Added `library export` and `library import` for portable JSON catalog backups, dry-runs, conflict reporting, and idempotent restores.
+- Added TUI library filtering, multi-select bulk operations, confirmation summaries, and selected catalog export.
+- Added placement presets for common local AI tools, config wizard preset selection, `place --preset`, and dry-run placement previews.
+- Added bounded parallel library scanning with CLI/TUI progress reporting and optional stale-record repair.
+
+Changed
+- Improved classifier confidence reporting for ambiguous artifacts.
+- Hardened release validation with a docs drift check in CI and the release checklist.
+- Replaced material metadata HTTP test doubles and fake 7z execution with real local HTTP and archive integration coverage.
+
+Testing
+- Added scanner performance benchmarks and cancellation consistency tests.
+- Expanded real CLI, SQLite, TUI command, metadata HTTP, archive, and docs drift validation.
+
+Docs
+- Refreshed README, installation, CLI, TUI, library, scanner, and release workflow documentation for the v0.7.0 feature set.
+
 ## v0.6.3 — 2026-04-27
 
 Fixes

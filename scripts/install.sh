@@ -4,6 +4,8 @@ set -euo pipefail
 #
 
 VERSION=${MODFETCH_VERSION:-latest}
+PUBLISHED_FALLBACK_VERSION=${PUBLISHED_FALLBACK_VERSION:-v0.7.0}
+LAST_KNOWN_PUBLISHED_VERSION=${LAST_KNOWN_PUBLISHED_VERSION:-v0.6.3}
 INSTALL_DIR=${INSTALL_DIR:-/usr/local/bin}
 CONFIG_DIR=${CONFIG_DIR:-"${XDG_CONFIG_HOME:-$HOME/.config}/modfetch"}
 DATA_DIR=${DATA_DIR:-"$HOME/modfetch-data"}
@@ -28,6 +30,26 @@ success() { printf "${GREEN}✓${NC} %s\n" "$*" >&2; }
 
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 is_root() { [[ $EUID -eq 0 ]]; }
+
+fetch_url() {
+    local url="$1"
+    if have_cmd curl; then
+        curl -fsSL "$url" 2>/dev/null || true
+    elif have_cmd wget; then
+        wget -qO- "$url" 2>/dev/null || true
+    fi
+}
+
+release_tag_exists() {
+    local tag="$1"
+    if have_cmd curl; then
+        curl -fsIL "https://github.com/jxwalker/modfetch/releases/tag/${tag}" >/dev/null 2>&1
+    elif have_cmd wget; then
+        wget --spider -q "https://github.com/jxwalker/modfetch/releases/tag/${tag}" >/dev/null 2>&1
+    else
+        return 1
+    fi
+}
 
 detect_os() {
     if [[ "$OSTYPE" == "linux-gnu"* ]]; then
@@ -92,16 +114,19 @@ check_prerequisites() {
 
 get_latest_version() {
     if [[ "$VERSION" == "latest" ]]; then
+        local response
         log "Fetching latest version from GitHub..."
-        if have_cmd curl; then
-            VERSION=$(curl -fsSL https://api.github.com/repos/jxwalker/modfetch/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-        elif have_cmd wget; then
-            VERSION=$(wget -qO- https://api.github.com/repos/jxwalker/modfetch/releases/latest | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-        fi
+        response=$(fetch_url "https://api.github.com/repos/jxwalker/modfetch/releases/latest")
+        VERSION=$(printf '%s\n' "$response" | sed -nE 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n 1 || true)
         
         if [[ -z "$VERSION" ]]; then
-            warn "Could not fetch latest version, using v0.6.3 as fallback"
-            VERSION="v0.6.3"
+            if release_tag_exists "$PUBLISHED_FALLBACK_VERSION"; then
+                warn "Could not fetch latest version, using ${PUBLISHED_FALLBACK_VERSION} as fallback"
+                VERSION="$PUBLISHED_FALLBACK_VERSION"
+            else
+                warn "Could not fetch latest version, using ${LAST_KNOWN_PUBLISHED_VERSION} as fallback"
+                VERSION="$LAST_KNOWN_PUBLISHED_VERSION"
+            fi
         fi
     fi
     
