@@ -31,23 +31,23 @@ The Scanner provides automatic model discovery with:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Scanner System                        │
+│                    Scanner System                       │
 ├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  ┌──────────────┐         ┌───────────────────┐        │
-│  │  Scanner     │─────────▶  State/Database   │        │
-│  │  (walker)    │         │  (SQLite + GORM)  │        │
-│  └──────┬───────┘         └───────────────────┘        │
-│         │                                                │
+│                                                         │
+│  ┌──────────────┐         ┌───────────────────┐         │
+│  │  Scanner     │─────────▶  State/Database   │         │
+│  │  (walker)    │         │  (SQLite + GORM)  │         │
+│  └──────┬───────┘         └───────────────────┘         │
+│         │                                               │
 │         ├──▶ File Type Detection                        │
 │         │   (extension matching)                        │
-│         │                                                │
+│         │                                               │
 │         ├──▶ Metadata Extraction                        │
 │         │   (filename parsing)                          │
-│         │                                                │
+│         │                                               │
 │         └──▶ Duplicate Detection                        │
 │             (indexed DB query)                          │
-│                                                          │
+│                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
