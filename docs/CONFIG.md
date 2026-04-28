@@ -4,11 +4,11 @@ All configuration is provided via a single YAML file. No secrets are stored in t
 
 Quick start: interactive wizard
 - Generate a starter config interactively:
-  ```
+  ```bash
   modfetch config wizard --out ~/modfetch/config.yml
   ```
 - Or print to stdout:
-  ```
+  ```bash
   modfetch config wizard
   ```
 

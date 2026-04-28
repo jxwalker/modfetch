@@ -51,7 +51,7 @@ Use this checklist from a clean `main` checkout before tagging a modfetch releas
 - Confirm the publishing machine can authenticate with AUR before release-day
   publication:
   ```bash
-  ssh aur@aur.archlinux.org help
+  ssh -o BatchMode=yes -o ConnectTimeout=5 aur@aur.archlinux.org help
   ```
 - If authentication fails with `Permission denied (publickey)`, create an AUR
   account, generate a dedicated SSH key, and paste the public key into the AUR

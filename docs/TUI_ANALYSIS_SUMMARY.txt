@@ -102,7 +102,7 @@ Current TUI test coverage includes:
 
 Run these checks from the repository root:
 
-  go test -count=1 ./internal/tui ./cmd/modfetch
+  go test -count=1 ./internal/tui/... ./cmd/modfetch
   scripts/check-docs-drift.sh
 
 ================================================================================
@@ -111,10 +111,10 @@ Run these checks from the repository root:
 
 Keep future TUI changes in the current package structure:
 
-  - Put rendering changes in the relevant *_view.go file.
-  - Put modal behavior in modals.go.
-  - Put library mutations and confirmations in library_actions.go.
-  - Put shared resolver/page normalization in url_resolution.go.
+  - Place rendering changes in the relevant *_view.go file.
+  - Define modal behavior in modals.go.
+  - Handle library mutations and confirmations in library_actions.go.
+  - Implement shared resolver/page normalization in url_resolution.go.
   - Add focused tests beside the touched behavior.
   - Keep docs/TUI_GUIDE.md, docs/TUI_WIREFRAMES.md, and this summary aligned
     when shortcuts, tabs, or major workflows change.
@@ -123,7 +123,7 @@ Keep future TUI changes in the current package structure:
                               CONCLUSION
 ================================================================================
 
-The current v0.7.0 TUI is a single maintained interface with download
+The current v0.7.0 TUI is a single, maintained interface with download
 management, library maintenance, settings inspection, bulk operations, and
 state persistence. The older dual-implementation comparison has been superseded
 by the current package layout and test coverage.

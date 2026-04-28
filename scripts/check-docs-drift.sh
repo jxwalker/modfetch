@@ -63,8 +63,8 @@ check_contains scripts/install.sh "PUBLISHED_FALLBACK_VERSION=\\$\\{PUBLISHED_FA
 check_contains docs/RELEASE.md "scripts/check-docs-drift\\.sh" "release checklist does not run docs drift validation"
 check_contains docs/TUI_WIREFRAMES.md "modfetch ${candidate_tag//./\\.}" "TUI wireframes do not show ${candidate_tag}"
 check_contains docs/TUI_ANALYSIS_SUMMARY.txt "VERSION: ${candidate_tag//./\\.}" "TUI analysis summary does not show ${candidate_tag}"
-check_contains docs/RELEASE.md "ssh aur@aur\\.archlinux\\.org help" "release checklist does not verify AUR SSH auth"
-check_contains packaging/aur/README.md "ssh aur@aur\\.archlinux\\.org help" "AUR packaging docs do not verify SSH auth"
+check_contains docs/RELEASE.md "ssh -o BatchMode=yes -o ConnectTimeout=5 aur@aur\\.archlinux\\.org help" "release checklist does not verify AUR SSH auth"
+check_contains packaging/aur/README.md "ssh -o BatchMode=yes -o ConnectTimeout=5 aur@aur\\.archlinux\\.org help" "AUR packaging docs do not verify SSH auth"
 
 for file in README.md docs/QUICKSTART.md docs/USER_GUIDE.md docs/CLI_GUIDE.md docs/INSTALLATION.md docs/RELEASE.md; do
   check_not_contains "$file" "homebrew.*(coming soon|unpublished|not yet|T[O]DO)" "stale Homebrew publication claim"

@@ -16,7 +16,7 @@ make build
 ```
 
 `scripts/check-aur-package.sh` validates the staged AUR metadata and published
-release checksums. On macOS it reports that `makepkg` is unavailable and skips
+release checksums. On macOS, it reports that `makepkg` is unavailable and skips
 only the Arch-specific `.SRCINFO` regeneration check.
 
 ## Auth-Gated Coverage
@@ -36,7 +36,7 @@ Do not print token values in logs or test output.
 ## Focused TUI Checks
 
 ```bash
-go test -count=1 ./internal/tui ./internal/tui/configwizard ./cmd/modfetch
+go test -count=1 ./internal/tui/... ./cmd/modfetch
 ```
 
 These cover navigation, filter persistence, library filters, multi-select bulk
@@ -48,9 +48,10 @@ and shell completion drift for removed TUI selector flags.
 After `make build`, verify non-gated behavior with a public URL:
 
 ```bash
+export MODFETCH_CONFIG="${MODFETCH_CONFIG:-$HOME/.config/modfetch/config.yml}"
 ./bin/modfetch version
-./bin/modfetch download --url 'https://proof.ovh.net/files/1Mb.dat' --summary-json
-./bin/modfetch verify --all
+./bin/modfetch download --config "$MODFETCH_CONFIG" --url 'https://proof.ovh.net/files/1Mb.dat' --summary-json
+./bin/modfetch verify --config "$MODFETCH_CONFIG" --all
 ```
 
 For TUI validation:

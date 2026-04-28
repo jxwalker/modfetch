@@ -41,7 +41,7 @@ Host aur.archlinux.org
 Verify auth before publishing:
 
 ```bash
-ssh aur@aur.archlinux.org help
+ssh -o BatchMode=yes -o ConnectTimeout=5 aur@aur.archlinux.org help
 ```
 
 To publish, push `PKGBUILD` and `.SRCINFO` to:
