@@ -2,9 +2,7 @@ package metadata
 
 import (
 	"context"
-	"io"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 )
@@ -49,8 +47,7 @@ func TestHuggingFaceFetcher_CanHandle(t *testing.T) {
 }
 
 func TestHuggingFaceFetcher_FetchMetadata_Success(t *testing.T) {
-	// Mock HTTP response
-	mockResponse := `{
+	response := `{
 		"id": "TheBloke/Llama-2-7B-GGUF",
 		"modelId": "TheBloke/Llama-2-7B-GGUF",
 		"author": "TheBloke",
@@ -64,15 +61,15 @@ func TestHuggingFaceFetcher_FetchMetadata_Success(t *testing.T) {
 		}
 	}`
 
-	client := &http.Client{
-		Transport: &mockTransport{
-			response: &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(mockResponse)),
-				Header:     make(http.Header),
-			},
-		},
-	}
+	client := routedHTTPClient(t, "huggingface.co", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/models/TheBloke/Llama-2-7B-GGUF" {
+			t.Errorf("unexpected Hugging Face API path: %s", r.URL.Path)
+			http.Error(w, "unexpected path", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(response))
+	}))
 
 	f := NewHuggingFaceFetcher(client)
 	ctx := context.Background()
@@ -114,16 +111,14 @@ func TestHuggingFaceFetcher_FetchMetadata_Success(t *testing.T) {
 }
 
 func TestHuggingFaceFetcher_FetchMetadata_APIFailure(t *testing.T) {
-	// Mock HTTP error
-	client := &http.Client{
-		Transport: &mockTransport{
-			response: &http.Response{
-				StatusCode: http.StatusNotFound,
-				Body:       io.NopCloser(strings.NewReader("not found")),
-				Header:     make(http.Header),
-			},
-		},
-	}
+	client := routedHTTPClient(t, "huggingface.co", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/models/TheBloke/Llama-2-7B-GGUF" {
+			t.Errorf("unexpected Hugging Face API path: %s", r.URL.Path)
+			http.Error(w, "unexpected path", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
 
 	f := NewHuggingFaceFetcher(client)
 	ctx := context.Background()
@@ -237,7 +232,7 @@ func TestRegistry_FetchMetadata(t *testing.T) {
 
 			meta, err := registry.FetchMetadata(ctx, tt.url)
 			if err != nil && tt.wantSource != "direct" {
-				// Network errors expected for non-mocked requests
+				// Network errors are expected when this reaches a live registry.
 				t.Skipf("Skipping due to network requirement: %v", err)
 			}
 

@@ -2,21 +2,10 @@ package metadata
 
 import (
 	"context"
-	"io"
 	"net/http"
 	"strings"
 	"testing"
 )
-
-// mockTransport is a mock HTTP transport for testing
-type mockTransport struct {
-	response *http.Response
-	err      error
-}
-
-func (mt *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	return mt.response, mt.err
-}
 
 func TestCivitAIFetcher_CanHandle(t *testing.T) {
 	tests := []struct {
@@ -58,7 +47,7 @@ func TestCivitAIFetcher_CanHandle(t *testing.T) {
 }
 
 func TestCivitAIFetcher_FetchMetadata_Success(t *testing.T) {
-	mockResponse := `{
+	response := `{
 		"id": 12345,
 		"name": "Realistic Vision",
 		"description": "A photorealistic checkpoint model",
@@ -90,15 +79,15 @@ func TestCivitAIFetcher_FetchMetadata_Success(t *testing.T) {
 		}]
 	}`
 
-	client := &http.Client{
-		Transport: &mockTransport{
-			response: &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(mockResponse)),
-				Header:     make(http.Header),
-			},
-		},
-	}
+	client := routedHTTPClient(t, "civitai.com", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/models/12345" {
+			t.Errorf("unexpected CivitAI API path: %s", r.URL.Path)
+			http.Error(w, "unexpected path", http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(response))
+	}))
 
 	f := NewCivitAIFetcher(client)
 	ctx := context.Background()
@@ -147,15 +136,14 @@ func TestCivitAIFetcher_FetchMetadata_Success(t *testing.T) {
 }
 
 func TestCivitAIFetcher_FetchMetadata_Unauthorized(t *testing.T) {
-	client := &http.Client{
-		Transport: &mockTransport{
-			response: &http.Response{
-				StatusCode: http.StatusUnauthorized,
-				Body:       io.NopCloser(strings.NewReader("unauthorized")),
-				Header:     make(http.Header),
-			},
-		},
-	}
+	client := routedHTTPClient(t, "civitai.com", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/models/12345" {
+			t.Errorf("unexpected CivitAI API path: %s", r.URL.Path)
+			http.Error(w, "unexpected path", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	}))
 
 	f := NewCivitAIFetcher(client)
 	ctx := context.Background()

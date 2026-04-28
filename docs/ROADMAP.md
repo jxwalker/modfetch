@@ -123,16 +123,16 @@ Outcome: release quality stays repeatable as install surfaces expand.
 - [DONE] Add a release checklist that covers changelog section, installer,
   package formula, release notes extraction, artifacts, checksums, and smoke
   installs.
-- [PLANNED] Add a docs drift check for current version strings and stale installation
+- [DONE] Add a docs drift check for current version strings and stale installation
   claims.
-- [PLANNED] Keep README.md, docs/QUICKSTART.md, docs/USER_GUIDE.md,
+- [DONE] Keep README.md, docs/QUICKSTART.md, docs/USER_GUIDE.md,
   docs/CLI_GUIDE.md, docs/INSTALLATION.md, and CHANGELOG.md aligned before
   each tag.
 
 Acceptance checks:
-- A release candidate can be validated from a clean checkout using documented
+- [DONE] A release candidate can be validated from a clean checkout using documented
   commands.
-- CI or a local script catches missing changelog release notes before tagging.
+- [DONE] CI or a local script catches missing changelog release notes before tagging.
 
 ## v0.7.x Candidates
 

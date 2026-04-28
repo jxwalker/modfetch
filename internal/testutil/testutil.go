@@ -3,9 +3,6 @@ package testutil
 import (
 	"database/sql"
 	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,72 +14,6 @@ import (
 
 // MaxAPIRetries is the default number of retries for flaky external API calls
 const MaxAPIRetries = 3
-
-// MockHTTPServer creates a test HTTP server that serves canned responses from fixtures
-type MockHTTPServer struct {
-	*httptest.Server
-	Responses map[string]MockResponse
-}
-
-// MockResponse represents a canned HTTP response
-type MockResponse struct {
-	StatusCode int
-	Body       string
-	Headers    map[string]string
-}
-
-// NewMockHTTPServer creates a new mock HTTP server
-func NewMockHTTPServer() *MockHTTPServer {
-	ms := &MockHTTPServer{
-		Responses: make(map[string]MockResponse),
-	}
-
-	ms.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Look up response by path
-		key := r.URL.Path
-		if r.URL.RawQuery != "" {
-			key += "?" + r.URL.RawQuery
-		}
-
-		resp, ok := ms.Responses[key]
-		if !ok {
-			// Try without query parameters
-			resp, ok = ms.Responses[r.URL.Path]
-		}
-
-		if !ok {
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = fmt.Fprintf(w, "No mock response configured for %s", key)
-			return
-		}
-
-		// Set headers
-		for k, v := range resp.Headers {
-			w.Header().Set(k, v)
-		}
-
-		w.WriteHeader(resp.StatusCode)
-		_, _ = fmt.Fprint(w, resp.Body)
-	}))
-
-	return ms
-}
-
-// AddResponse adds a canned response for a specific path
-func (ms *MockHTTPServer) AddResponse(path string, response MockResponse) {
-	ms.Responses[path] = response
-}
-
-// AddJSONResponse adds a JSON response for a specific path
-func (ms *MockHTTPServer) AddJSONResponse(path string, statusCode int, body string) {
-	ms.Responses[path] = MockResponse{
-		StatusCode: statusCode,
-		Body:       body,
-		Headers: map[string]string{
-			"Content-Type": "application/json",
-		},
-	}
-}
 
 // TestDB creates an in-memory SQLite database for testing
 func TestDB(t *testing.T) *state.DB {
@@ -207,59 +138,6 @@ func TempFile(t *testing.T, name, content string) string {
 	}
 
 	return path
-}
-
-// MockRoundTripper implements http.RoundTripper for testing
-type MockRoundTripper struct {
-	Responses map[string]*http.Response
-	Requests  []*http.Request
-}
-
-// RoundTrip implements http.RoundTripper
-func (m *MockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	m.Requests = append(m.Requests, req)
-
-	key := req.URL.String()
-	resp, ok := m.Responses[key]
-	if !ok {
-		return &http.Response{
-			StatusCode: http.StatusNotFound,
-			Body:       io.NopCloser(strings.NewReader("not found")),
-			Request:    req,
-		}, nil
-	}
-
-	return resp, nil
-}
-
-// NewMockRoundTripper creates a new mock round tripper
-func NewMockRoundTripper() *MockRoundTripper {
-	return &MockRoundTripper{
-		Responses: make(map[string]*http.Response),
-		Requests:  make([]*http.Request, 0),
-	}
-}
-
-// AddStringResponse adds a simple string response
-func (m *MockRoundTripper) AddStringResponse(url string, statusCode int, body string) {
-	m.Responses[url] = &http.Response{
-		StatusCode: statusCode,
-		Body:       io.NopCloser(strings.NewReader(body)),
-		Header:     make(http.Header),
-	}
-}
-
-// AssertRequestMade checks if a request was made to a specific URL
-func (m *MockRoundTripper) AssertRequestMade(t *testing.T, url string) {
-	t.Helper()
-
-	for _, req := range m.Requests {
-		if req.URL.String() == url {
-			return
-		}
-	}
-
-	t.Errorf("expected request to %s, but none was made", url)
 }
 
 // StringPtr returns a pointer to a string (useful for optional fields)

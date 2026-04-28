@@ -7,6 +7,7 @@ Use this checklist from a clean `main` checkout before tagging a modfetch releas
 - Confirm `CHANGELOG.md` has a section for the exact release version.
 - Run the local validation suite:
   ```bash
+  scripts/check-docs-drift.sh
   go test ./...
   make build
   ```
