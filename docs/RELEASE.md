@@ -59,6 +59,13 @@ Use this checklist from a clean `main` checkout before tagging a modfetch releas
   ```bash
   ssh-keygen -t ed25519 -f ~/.ssh/aur -C "aur-modfetch"
   ```
+  Then configure the private key locally:
+  ```sshconfig
+  Host aur.archlinux.org
+    User aur
+    IdentityFile ~/.ssh/aur
+    IdentitiesOnly yes
+  ```
 - Validate the packaged metadata and published checksums:
   ```bash
   scripts/check-aur-package.sh vX.Y.Z
