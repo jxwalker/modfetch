@@ -69,11 +69,12 @@ type probeMsg struct {
 }
 
 type libraryBulkMsg struct {
-	action string
-	count  int
-	path   string
-	keys   []string
-	err    error
+	action      string
+	count       int
+	path        string
+	keys        []string
+	runningKeys []string
+	err         error
 }
 
 type obs struct {
@@ -395,11 +396,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case libraryBulkMsg:
+		for _, key := range msg.runningKeys {
+			if cancel, ok := m.running[key]; ok {
+				cancel()
+				delete(m.running, key)
+			}
+			delete(m.retrying, key)
+		}
 		for _, key := range msg.keys {
 			delete(m.librarySelectedKeys, key)
 		}
 		if msg.err != nil {
-			m.addToast(fmt.Sprintf("%s failed: %v", msg.action, msg.err))
+			if msg.count > 0 {
+				m.addToast(fmt.Sprintf("%s partial: %d item(s), error: %v", msg.action, msg.count, msg.err))
+			} else {
+				m.addToast(fmt.Sprintf("%s failed: %v", msg.action, msg.err))
+			}
 		} else if msg.path != "" {
 			m.addToast(fmt.Sprintf("%s: %d item(s) → %s", msg.action, msg.count, truncateMiddle(msg.path, 48)))
 		} else {
@@ -807,7 +819,17 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if len(targets) == 0 {
 				return m, nil
 			}
-			m.libraryConfirm = &libraryConfirmAction{action: "delete-staged", rows: targets}
+			deletableTargets := make([]state.ModelMetadata, 0, len(targets))
+			for _, row := range targets {
+				if m.isStagedLibraryPath(row.Dest) {
+					deletableTargets = append(deletableTargets, row)
+				}
+			}
+			if len(deletableTargets) == 0 {
+				m.addToast("no staged library files selected")
+				return m, nil
+			}
+			m.libraryConfirm = &libraryConfirmAction{action: "delete-staged", rows: deletableTargets}
 			return m, nil
 		}
 		rows := m.selectionOrCurrent()

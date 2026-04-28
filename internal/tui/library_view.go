@@ -390,7 +390,7 @@ func (m *Model) renderLibraryFilterMenu() string {
 		}
 	}
 	sb.WriteString("\n")
-	sb.WriteString(m.th.footer.Render("↑↓ choose • Enter cycle/edit • Esc close"))
+	sb.WriteString(m.th.footer.Render("↑↓ choose • Enter/Space cycle/edit • Esc close"))
 	return sb.String()
 }
 

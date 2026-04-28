@@ -866,25 +866,41 @@ func TestLibrary_SelectionPersistsAcrossFiltersAndTabs(t *testing.T) {
 		}
 	}
 	_, _ = model.Update(tea.KeyMsg{Type: tea.KeySpace})
-	if !model.librarySelectedKeys[selected.DownloadURL] {
+	selectedKey := libraryKey(selected)
+	if !model.librarySelectedKeys[selectedKey] {
 		t.Fatal("expected selected model to be tracked")
 	}
 
 	model.libraryFilterType = "LoRA"
 	model.refreshLibraryData()
-	if model.librarySelectedKeys[selected.DownloadURL] != true {
+	if model.librarySelectedKeys[selectedKey] != true {
 		t.Fatal("selection should remain tracked while filtered out")
 	}
 	model.libraryFilterType = ""
 	model.refreshLibraryData()
-	if !model.librarySelectedKeys[selected.DownloadURL] {
+	if !model.librarySelectedKeys[selectedKey] {
 		t.Fatal("selection should survive clearing filters")
 	}
 
 	model.activeTab = 0
 	_, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
-	if model.activeTab != 4 || !model.librarySelectedKeys[selected.DownloadURL] {
+	if model.activeTab != 4 || !model.librarySelectedKeys[selectedKey] {
 		t.Fatal("library selection should survive tab navigation")
+	}
+}
+
+func TestLibraryKeyUsesURLAndDest(t *testing.T) {
+	first := state.ModelMetadata{
+		DownloadURL: "https://example.com/model.gguf",
+		Dest:        "/models/a.gguf",
+	}
+	second := state.ModelMetadata{
+		DownloadURL: "https://example.com/model.gguf",
+		Dest:        "/models/b.gguf",
+	}
+
+	if libraryKey(first) == libraryKey(second) {
+		t.Fatal("expected same URL in different destinations to have distinct library keys")
 	}
 }
 
@@ -967,6 +983,46 @@ func TestLibrary_RetrySkipsLocalURLs(t *testing.T) {
 	msg := cmd()
 	if msg != nil {
 		t.Fatalf("local retry should not start a command, got %T", msg)
+	}
+}
+
+func TestLibrary_RetryCleansRunningStateOnUpsertError(t *testing.T) {
+	model, db, _ := setupTestLibrary(t)
+
+	row := state.ModelMetadata{
+		DownloadURL: "https://example.com/model.gguf",
+		ModelName:   "remote",
+		Dest:        "/models/model.gguf",
+	}
+	cmd := model.retryLibraryRows([]state.ModelMetadata{row})
+	if cmd == nil {
+		t.Fatal("expected retry command")
+	}
+	key := row.DownloadURL + "|" + row.Dest
+	if _, ok := model.running[key]; !ok {
+		t.Fatal("expected retry to register running state before command executes")
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close db: %v", err)
+	}
+
+	raw := cmd()
+	if batch, ok := raw.(tea.BatchMsg); ok && len(batch) == 1 {
+		raw = batch[0]()
+	}
+	msg, ok := raw.(libraryBulkMsg)
+	if !ok {
+		t.Fatalf("expected libraryBulkMsg, got %T", raw)
+	}
+	if msg.err == nil || len(msg.runningKeys) != 1 || msg.runningKeys[0] != key {
+		t.Fatalf("expected retry upsert error with cleanup key, got %+v", msg)
+	}
+	_, _ = model.Update(msg)
+	if _, ok := model.running[key]; ok {
+		t.Fatal("expected failed retry to clear running state")
+	}
+	if _, ok := model.retrying[key]; ok {
+		t.Fatal("expected failed retry to clear retrying state")
 	}
 }
 
@@ -1080,7 +1136,7 @@ func TestLibrary_DeleteStagedDataRequiresConfirmation(t *testing.T) {
 	if result.err != nil {
 		t.Fatalf("delete failed: %v", result.err)
 	}
-	if len(result.keys) != 1 || result.keys[0] != meta.DownloadURL {
+	if len(result.keys) != 1 || result.keys[0] != libraryKey(meta) {
 		t.Fatalf("expected acted key in delete result, got %+v", result.keys)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -1095,6 +1151,30 @@ func TestLibrary_DeleteStagedDataRequiresConfirmation(t *testing.T) {
 	}
 	if _, err := db.GetMetadata(meta.DownloadURL); err != nil {
 		t.Fatalf("metadata should be kept: %v", err)
+	}
+}
+
+func TestLibrary_DeleteSkipsNonStagedRows(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	meta := state.ModelMetadata{
+		DownloadURL: "https://example.com/placed.gguf",
+		ModelName:   "placed",
+		Dest:        filepath.Join(t.TempDir(), "placed.gguf"),
+	}
+	if err := db.UpsertMetadata(&meta); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+	model.activeTab = 4
+	model.refreshLibraryData()
+
+	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")})
+	if cmd != nil {
+		t.Fatal("non-staged delete should not start a command")
+	}
+	if model.libraryConfirm != nil {
+		t.Fatal("non-staged delete should not open confirmation")
 	}
 }
 

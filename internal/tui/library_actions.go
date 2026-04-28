@@ -19,10 +19,16 @@ import (
 )
 
 func libraryKey(meta state.ModelMetadata) string {
-	if strings.TrimSpace(meta.DownloadURL) != "" {
-		return meta.DownloadURL
+	url := strings.TrimSpace(meta.DownloadURL)
+	dest := strings.TrimSpace(meta.Dest)
+	switch {
+	case url != "" && dest != "":
+		return url + "|" + dest
+	case url != "":
+		return url
+	default:
+		return dest
 	}
-	return meta.Dest
 }
 
 func (m *Model) currentLibraryKey() string {
@@ -104,14 +110,12 @@ func normalizeLibraryRows(rows []state.ModelMetadata) []state.ModelMetadata {
 
 func (m *Model) updateLibraryFilterMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s := msg.String()
-	selectedKey := m.currentLibraryKey()
 	if m.libraryFilterEditing {
 		switch s {
 		case "enter", "ctrl+j":
 			m.libraryFilterEditing = false
 			m.librarySearch = strings.TrimSpace(m.librarySearchInput.Value())
 			m.refreshLibraryData()
-			m.restoreLibrarySelection(selectedKey)
 			return m, nil
 		case "esc":
 			m.libraryFilterEditing = false
@@ -146,15 +150,12 @@ func (m *Model) updateLibraryFilterMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case 1:
 			m.libraryFilterType = nextValue(m.libraryFilterType, m.libraryFilterValues("type"))
 			m.refreshLibraryData()
-			m.restoreLibrarySelection(selectedKey)
 		case 2:
 			m.libraryFilterSource = nextValue(m.libraryFilterSource, m.libraryFilterValues("source"))
 			m.refreshLibraryData()
-			m.restoreLibrarySelection(selectedKey)
 		case 3:
 			m.libraryShowFavorites = !m.libraryShowFavorites
 			m.refreshLibraryData()
-			m.restoreLibrarySelection(selectedKey)
 		case 4:
 			m.librarySearch = ""
 			m.librarySearchInput.SetValue("")
@@ -162,7 +163,6 @@ func (m *Model) updateLibraryFilterMenu(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.libraryFilterSource = ""
 			m.libraryShowFavorites = false
 			m.refreshLibraryData()
-			m.restoreLibrarySelection(selectedKey)
 		}
 		return m, nil
 	}
@@ -246,7 +246,7 @@ func (m *Model) retryLibraryRows(rows []state.ModelMetadata) tea.Cmd {
 		ctx, cancel := context.WithCancel(context.Background())
 		m.running[key] = cancel
 		m.retrying[key] = now
-		cmds = append(cmds, m.retryLibraryRowCmd(ctx, row))
+		cmds = append(cmds, m.retryLibraryRowCmd(ctx, row, key))
 	}
 	if len(cmds) > 0 {
 		m.addToast(fmt.Sprintf("retrying %d library item(s)", len(cmds)))
@@ -257,10 +257,10 @@ func (m *Model) retryLibraryRows(rows []state.ModelMetadata) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m *Model) retryLibraryRowCmd(ctx context.Context, row state.ModelMetadata) tea.Cmd {
+func (m *Model) retryLibraryRowCmd(ctx context.Context, row state.ModelMetadata, key string) tea.Cmd {
 	return func() tea.Msg {
 		if err := m.st.UpsertDownload(state.DownloadRow{URL: row.DownloadURL, Dest: row.Dest, Status: "pending"}); err != nil {
-			return libraryBulkMsg{action: "retry", err: err}
+			return libraryBulkMsg{action: "retry", runningKeys: []string{key}, err: err}
 		}
 		return m.startDownloadCmdCtx(ctx, row.DownloadURL, row.Dest, false, row.ModelType)()
 	}
