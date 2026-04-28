@@ -174,19 +174,19 @@ modfetch tui
 ║  modfetch v0.7.0                    Tab: [0] All                          ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
 ║  Summary                                                                  ║
-║  ┌──────────────────────────────────────────────────────────────────────┐║
-║  │ ✓ Completed: 1   🔄 Active: 0   ⏳ Pending: 0   ✗ Failed: 0         │║
-║  │ Auth Status: HF ✓  Civ ✓                                             │║
-║  └──────────────────────────────────────────────────────────────────────┘║
+║  ┌───────────────────────────────────────────────────────────────────────┐║
+║  │ ✓ Completed: 1   🔄 Active: 0   ⏳ Pending: 0   ✗ Failed: 0          │║
+║  │ Auth Status: HF ✓  Civ ✓                                              │║
+║  └───────────────────────────────────────────────────────────────────────┘║
 ╠═══════════════════════════════════════════════════════════════════════════╣
 ║  Downloads Table                                                          ║
-║  ┌──────────────────────────────────────────────────────────────────────┐║
-║  │ Status      │ Progress  │ Speed  │ ETA  │ Size   │ File              │║
-║  ├──────────────────────────────────────────────────────────────────────┤║
-║  │▶ Completed  │ 100%      │ -      │ -    │ 1.0 MB │ 1Mb.dat           │║
-║  └──────────────────────────────────────────────────────────────────────┘║
+║  ┌───────────────────────────────────────────────────────────────────────┐║
+║  │ Status      │ Progress  │ Speed  │ ETA  │ Size   │ File               │║
+║  ├───────────────────────────────────────────────────────────────────────┤║
+║  │▶ Completed  │ 100%      │ -      │ -    │ 1.0 MB │ 1Mb.dat            │║
+║  └───────────────────────────────────────────────────────────────────────┘║
 ╠═══════════════════════════════════════════════════════════════════════════╣
-║  n:New  y:Retry  p:Pause  D:Delete  ?:Help  q:Quit                       ║
+║  n:New  y:Retry  p:Pause  D:Delete  ?:Help  q:Quit                        ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -226,7 +226,7 @@ modfetch tui
    ┌────────────────────────────────────────┐
    │ New Download                           │
    ├────────────────────────────────────────┤
-   │ URL: hf://gpt2/README.md?rev=main     │
+   │ URL: hf://gpt2/README.md?rev=main      │
    │                                        │
    │ Enter/Tab: Continue  Esc: Cancel       │
    └────────────────────────────────────────┘
@@ -237,8 +237,8 @@ modfetch tui
    ┌────────────────────────────────────────┐
    │ New Download                           │
    ├────────────────────────────────────────┤
-   │ URL: hf://gpt2/README.md?rev=main     │
-   │ Dest: ~/Downloads/modfetch/README.md  │
+   │ URL: hf://gpt2/README.md?rev=main      │
+   │ Dest: ~/Downloads/modfetch/README.md   │
    │                                        │
    │ Enter: Start  Esc: Cancel              │
    └────────────────────────────────────────┘
@@ -285,14 +285,14 @@ The **Library** tab lets you browse, search, and organize all your downloaded mo
 ╠═══════════════════════════════════════════════════════════════════════════╣
 ║  Model Library                      Showing: 1 of 1 models                ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
-║  ┌──────────────────────────────────────────────────────────────────────┐║
-║  │                                                                        │║
+║  ┌───────────────────────────────────────────────────────────────────────┐║
+║  │                                                                       │║
 ║  │▶ llama-2-7b.Q4_K_M.gguf                                               │║
 ║  │   LLM • 3.8 GB • Q4_K_M • huggingface                                 │║
-║  │                                                                        │║
-║  └──────────────────────────────────────────────────────────────────────┘║
+║  │                                                                       │║
+║  └───────────────────────────────────────────────────────────────────────┘║
 ╠═══════════════════════════════════════════════════════════════════════════╣
-║  Enter:Details  /:Search  f:Favorite  S:Scan  ?:Help                     ║
+║  Enter:Details  /:Search  f:Favorite  S:Scan  ?:Help                      ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -318,30 +318,30 @@ Found: 42 models (15 new, 27 existing)
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║  llama-2-7b.Q4_K_M.gguf                                          ★ Favorite║
-║  ┌──────────────────────────────────────────────────────────────────────┐║
-║  │ Basic Info                                                             │║
-║  │ Type: LLM                    Source: huggingface                       │║
-║  │ Version: main                Author: TheBloke                          │║
-║  │                                                                        │║
-║  │ Specifications                                                         │║
+║  llama-2-7b.Q4_K_M.gguf                                         ★ Favorite║
+║  ┌───────────────────────────────────────────────────────────────────────┐║
+║  │ Basic Info                                                            │║
+║  │ Type: LLM                    Source: huggingface                      │║
+║  │ Version: main                Author: TheBloke                         │║
+║  │                                                                       │║
+║  │ Specifications                                                        │║
 ║  │ Architecture: Llama 2        Parameters: 7B                           │║
 ║  │ Quantization: Q4_K_M         Base Model: Llama-2                      │║
-║  │                                                                        │║
-║  │ File Information                                                       │║
+║  │                                                                       │║
+║  │ File Information                                                      │║
 ║  │ Size: 3.8 GB                 Format: .gguf                            │║
 ║  │ Path: ~/Downloads/modfetch/llama-2-7b.Q4_K_M.gguf                     │║
-║  │                                                                        │║
-║  │ Description                                                            │║
+║  │                                                                       │║
+║  │ Description                                                           │║
 ║  │ Llama 2 is a family of LLMs fine-tuned for dialogue. The 7B model     │║
 ║  │ uses Q4_K_M quantization for efficient inference while maintaining    │║
-║  │ good quality.                                                          │║
-║  │                                                                        │║
-║  │ Links                                                                  │║
+║  │ good quality.                                                         │║
+║  │                                                                       │║
+║  │ Links                                                                 │║
 ║  │ Homepage: https://huggingface.co/TheBloke/Llama-2-7B-GGUF             │║
-║  └──────────────────────────────────────────────────────────────────────┘║
+║  └───────────────────────────────────────────────────────────────────────┘║
 ╠═══════════════════════════════════════════════════════════════════════════╣
-║  Esc:Back  f:Toggle Favorite  Q:Quit                                     ║
+║  Esc:Back  f:Toggle Favorite  Q:Quit                                      ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -536,24 +536,24 @@ Save this for easy reference:
 │  MODFETCH QUICK REFERENCE                                │
 ├──────────────────────────────────────────────────────────┤
 │  CLI                                                     │
-│  modfetch download --url 'URL'      Download a file     │
-│  modfetch tui                       Launch TUI          │
-│  modfetch verify --all              Verify downloads    │
-│  modfetch place --path FILE         Place into app      │
+│  modfetch download --url 'URL'      Download a file      │
+│  modfetch tui                       Launch TUI           │
+│  modfetch verify --all              Verify downloads     │
+│  modfetch place --path FILE         Place into app       │
 │                                                          │
 │  TUI                                                     │
-│  0-4    Download tabs               L/5  Library        │
-│  M/6    Settings                    n    New download   │
-│  j/k    Navigate                    y    Retry          │
-│  /      Search                      f    Favorite       │
-│  Enter  Details                     S    Scan dirs      │
-│  ?      Help                        q    Quit           │
+│  0-4    Download tabs               L/5  Library         │
+│  M/6    Settings                    n    New download    │
+│  j/k    Navigate                    y    Retry           │
+│  /      Search                      f    Favorite        │
+│  Enter  Details                     S    Scan dirs       │
+│  ?      Help                        q    Quit            │
 │                                                          │
 │  URLs                                                    │
-│  hf://repo/file?rev=main            Hugging Face        │
-│  hf://org/repo/file?rev=main        Hugging Face        │
-│  civitai://model/ID                 CivitAI             │
-│  https://example.com/file           Direct URL          │
+│  hf://repo/file?rev=main            Hugging Face         │
+│  hf://org/repo/file?rev=main        Hugging Face         │
+│  civitai://model/ID                 CivitAI              │
+│  https://example.com/file           Direct URL           │
 └──────────────────────────────────────────────────────────┘
 ```
 
