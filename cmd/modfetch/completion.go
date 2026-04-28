@@ -139,7 +139,7 @@ _modfetch() {
       _arguments '*:options:(--config --log-level --json --mode --dry-run)'
       ;;
     place)
-      _arguments '--preset[Apply placement preset]:preset:(automatic1111 comfyui forge hf-cache ollama)' '*:options:(--config --log-level --json --path --type --mode --preset --list-presets --dry-run)'
+      _arguments '--preset[Apply placement preset]:preset:_values -s , preset automatic1111 comfyui forge hf-cache ollama' '*:options:(--config --log-level --json --path --type --mode --list-presets --dry-run)'
       ;;
     verify)
       _arguments '*:options:(--config --path --all --safetensors --safetensors-deep --scan-dir --repair --quarantine-incomplete --only-errors --summary --fix-sidecar --log-level --json)'

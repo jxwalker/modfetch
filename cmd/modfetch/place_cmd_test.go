@@ -30,6 +30,12 @@ func TestHandlePlacePresetDryRunWithoutConfig(t *testing.T) {
 	if !strings.Contains(out, "Detected type: llm.gguf") {
 		t.Fatalf("expected detected type in output, got:\n%s", out)
 	}
+	if !strings.Contains(out, "confidence=high") {
+		t.Fatalf("expected confidence in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Placement mode: symlink") {
+		t.Fatalf("expected placement mode in output, got:\n%s", out)
+	}
 	want := filepath.Join(home, ".ollama", "models", "model.gguf")
 	if !strings.Contains(out, want) {
 		t.Fatalf("expected planned ollama target %q in output:\n%s", want, out)

@@ -17,94 +17,96 @@ type Preset struct {
 	Mapping     []config.MappingRule
 }
 
+var presetCatalog = map[string]Preset{
+	"automatic1111": {
+		Name:        "automatic1111",
+		Description: "AUTOMATIC1111 Stable Diffusion WebUI layout",
+		Apps: map[string]config.AppPlacement{
+			"automatic1111": {
+				Base: "~/stable-diffusion-webui",
+				Paths: map[string]string{
+					"checkpoints": "models/Stable-diffusion",
+					"loras":       "models/Lora",
+					"vae":         "models/VAE",
+					"controlnet":  "extensions/sd-webui-controlnet/models",
+					"embeddings":  "embeddings",
+				},
+			},
+		},
+		Mapping: sdMapping("automatic1111"),
+	},
+	"comfyui": {
+		Name:        "comfyui",
+		Description: "ComfyUI models directory layout",
+		Apps: map[string]config.AppPlacement{
+			"comfyui": {
+				Base: "~/ComfyUI",
+				Paths: map[string]string{
+					"checkpoints": "models/checkpoints",
+					"loras":       "models/loras",
+					"vae":         "models/vae",
+					"controlnet":  "models/controlnet",
+					"embeddings":  "models/embeddings",
+				},
+			},
+		},
+		Mapping: sdMapping("comfyui"),
+	},
+	"forge": {
+		Name:        "forge",
+		Description: "Forge Stable Diffusion WebUI layout",
+		Apps: map[string]config.AppPlacement{
+			"forge": {
+				Base: "~/stable-diffusion-webui-forge",
+				Paths: map[string]string{
+					"checkpoints": "models/Stable-diffusion",
+					"loras":       "models/Lora",
+					"vae":         "models/VAE",
+					"controlnet":  "extensions/sd-webui-controlnet/models",
+					"embeddings":  "embeddings",
+				},
+			},
+		},
+		Mapping: sdMapping("forge"),
+	},
+	"hf-cache": {
+		Name:        "hf-cache",
+		Description: "Generic Hugging Face cache/export directory",
+		Apps: map[string]config.AppPlacement{
+			"hf-cache": {
+				Base: "~/.cache/huggingface/modfetch",
+				Paths: map[string]string{
+					"models": "models",
+				},
+			},
+		},
+		Mapping: []config.MappingRule{
+			{Match: "generic", Targets: []config.MappingTarget{{App: "hf-cache", PathKey: "models"}}},
+			{Match: "llm.gguf", Targets: []config.MappingTarget{{App: "hf-cache", PathKey: "models"}}},
+			{Match: "llm.safetensors", Targets: []config.MappingTarget{{App: "hf-cache", PathKey: "models"}}},
+			{Match: "sd.checkpoint", Targets: []config.MappingTarget{{App: "hf-cache", PathKey: "models"}}},
+		},
+	},
+	"ollama": {
+		Name:        "ollama",
+		Description: "Ollama local models directory for LLM artifacts",
+		Apps: map[string]config.AppPlacement{
+			"ollama": {
+				Base: "~/.ollama",
+				Paths: map[string]string{
+					"models": "models",
+				},
+			},
+		},
+		Mapping: []config.MappingRule{
+			{Match: "llm.gguf", Targets: []config.MappingTarget{{App: "ollama", PathKey: "models"}}},
+			{Match: "llm.safetensors", Targets: []config.MappingTarget{{App: "ollama", PathKey: "models"}}},
+		},
+	},
+}
+
 func Presets() map[string]Preset {
-	return map[string]Preset{
-		"automatic1111": {
-			Name:        "automatic1111",
-			Description: "AUTOMATIC1111 Stable Diffusion WebUI layout",
-			Apps: map[string]config.AppPlacement{
-				"automatic1111": {
-					Base: "~/stable-diffusion-webui",
-					Paths: map[string]string{
-						"checkpoints": "models/Stable-diffusion",
-						"loras":       "models/Lora",
-						"vae":         "models/VAE",
-						"controlnet":  "extensions/sd-webui-controlnet/models",
-						"embeddings":  "embeddings",
-					},
-				},
-			},
-			Mapping: sdMapping("automatic1111"),
-		},
-		"comfyui": {
-			Name:        "comfyui",
-			Description: "ComfyUI models directory layout",
-			Apps: map[string]config.AppPlacement{
-				"comfyui": {
-					Base: "~/ComfyUI",
-					Paths: map[string]string{
-						"checkpoints": "models/checkpoints",
-						"loras":       "models/loras",
-						"vae":         "models/vae",
-						"controlnet":  "models/controlnet",
-						"embeddings":  "models/embeddings",
-					},
-				},
-			},
-			Mapping: sdMapping("comfyui"),
-		},
-		"forge": {
-			Name:        "forge",
-			Description: "Forge Stable Diffusion WebUI layout",
-			Apps: map[string]config.AppPlacement{
-				"forge": {
-					Base: "~/stable-diffusion-webui-forge",
-					Paths: map[string]string{
-						"checkpoints": "models/Stable-diffusion",
-						"loras":       "models/Lora",
-						"vae":         "models/VAE",
-						"controlnet":  "extensions/sd-webui-controlnet/models",
-						"embeddings":  "embeddings",
-					},
-				},
-			},
-			Mapping: sdMapping("forge"),
-		},
-		"hf-cache": {
-			Name:        "hf-cache",
-			Description: "Generic Hugging Face cache/export directory",
-			Apps: map[string]config.AppPlacement{
-				"hf-cache": {
-					Base: "~/.cache/huggingface/modfetch",
-					Paths: map[string]string{
-						"models": "models",
-					},
-				},
-			},
-			Mapping: []config.MappingRule{
-				{Match: "generic", Targets: []config.MappingTarget{{App: "hf-cache", PathKey: "models"}}},
-				{Match: "llm.gguf", Targets: []config.MappingTarget{{App: "hf-cache", PathKey: "models"}}},
-				{Match: "llm.safetensors", Targets: []config.MappingTarget{{App: "hf-cache", PathKey: "models"}}},
-				{Match: "sd.checkpoint", Targets: []config.MappingTarget{{App: "hf-cache", PathKey: "models"}}},
-			},
-		},
-		"ollama": {
-			Name:        "ollama",
-			Description: "Ollama local models directory for LLM artifacts",
-			Apps: map[string]config.AppPlacement{
-				"ollama": {
-					Base: "~/.ollama",
-					Paths: map[string]string{
-						"models": "models",
-					},
-				},
-			},
-			Mapping: []config.MappingRule{
-				{Match: "llm.gguf", Targets: []config.MappingTarget{{App: "ollama", PathKey: "models"}}},
-				{Match: "llm.safetensors", Targets: []config.MappingTarget{{App: "ollama", PathKey: "models"}}},
-			},
-		},
-	}
+	return presetCatalog
 }
 
 func PresetNames() []string {
