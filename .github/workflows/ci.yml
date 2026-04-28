@@ -33,7 +33,7 @@ jobs:
       - name: Docs drift check
         run: scripts/check-docs-drift.sh
       - name: AUR package check
-        run: scripts/check-aur-package.sh v0.7.0
+        run: scripts/check-aur-package.sh
 
   test:
     needs: [lint]

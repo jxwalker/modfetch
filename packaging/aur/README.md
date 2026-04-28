@@ -6,7 +6,7 @@ Linux release binaries instead of rebuilding from source.
 Validate metadata and live release checksums from the repository root:
 
 ```bash
-scripts/check-aur-package.sh v0.7.0
+scripts/check-aur-package.sh
 ```
 
 Before publishing from an Arch Linux machine:
