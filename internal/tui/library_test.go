@@ -1029,6 +1029,7 @@ func TestLibrary_RetryCleansRunningStateOnUpsertError(t *testing.T) {
 func TestLibrary_BulkExportSelectedCatalog(t *testing.T) {
 	model, db, cleanup := setupTestLibrary(t)
 	defer cleanup()
+	model.cfg.General.DataRoot = t.TempDir()
 
 	createTestMetadata(t, db, 2)
 	model.activeTab = 4
@@ -1056,6 +1057,32 @@ func TestLibrary_BulkExportSelectedCatalog(t *testing.T) {
 	}
 	if len(exported.Models) != 1 {
 		t.Fatalf("expected one catalog model, got %d", len(exported.Models))
+	}
+}
+
+func TestLibrary_DetailModelRebindsAfterRefresh(t *testing.T) {
+	model, db, cleanup := setupTestLibrary(t)
+	defer cleanup()
+
+	meta := state.ModelMetadata{
+		DownloadURL: "https://example.com/detail.gguf",
+		ModelName:   "detail",
+		Dest:        "/models/detail.gguf",
+	}
+	if err := db.UpsertMetadata(&meta); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+	model.refreshLibraryData()
+	model.libraryViewingDetail = true
+	model.libraryDetailModel = &model.libraryRows[0]
+
+	meta.Favorite = true
+	if err := db.UpsertMetadata(&meta); err != nil {
+		t.Fatalf("update metadata: %v", err)
+	}
+	model.refreshLibraryData()
+	if model.libraryDetailModel == nil || !model.libraryDetailModel.Favorite {
+		t.Fatalf("expected detail model to rebind to refreshed row, got %+v", model.libraryDetailModel)
 	}
 }
 

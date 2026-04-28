@@ -19,6 +19,10 @@ func (m *Model) refreshLibraryData() {
 		return
 	}
 	selectedKey := m.currentLibraryKey()
+	detailKey := ""
+	if m.libraryDetailModel != nil {
+		detailKey = libraryKey(*m.libraryDetailModel)
+	}
 
 	baseFilters := state.MetadataFilters{
 		OrderBy: "updated_at",
@@ -64,6 +68,18 @@ func (m *Model) refreshLibraryData() {
 
 	m.libraryFilterRows = baseRows
 	m.libraryRows = rows
+	if m.libraryViewingDetail && detailKey != "" {
+		m.libraryDetailModel = nil
+		for i := range m.libraryRows {
+			if libraryKey(m.libraryRows[i]) == detailKey {
+				m.libraryDetailModel = &m.libraryRows[i]
+				break
+			}
+		}
+		if m.libraryDetailModel == nil {
+			m.libraryViewingDetail = false
+		}
+	}
 	m.libraryNeedsRefresh = false
 	m.restoreLibrarySelection(selectedKey)
 }
