@@ -32,6 +32,8 @@ jobs:
           args: --timeout=5m
       - name: Docs drift check
         run: scripts/check-docs-drift.sh
+      - name: AUR package check
+        run: scripts/check-aur-package.sh
 
   test:
     needs: [lint]

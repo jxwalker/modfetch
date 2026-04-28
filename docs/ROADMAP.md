@@ -138,7 +138,9 @@ Acceptance checks:
 
 These are useful, but not required for the first v0.7.0 release:
 
-- AUR packaging after Homebrew is stable.
+- [IN PROGRESS] AUR packaging after Homebrew is stable:
+  package metadata and validation are staged in `packaging/aur/`; AUR
+  publication is pending an AUR-registered SSH key.
 - Metadata enrichment from additional model registries.
 - Remote catalog sync targets.
 - More archive formats if users report concrete needs.
