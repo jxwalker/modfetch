@@ -725,7 +725,7 @@ fi
 | `HF_TOKEN` | HuggingFace API token |
 | `CIVITAI_TOKEN` | CivitAI API token |
 | `MODFETCH_SYNC_TOKEN` | Default bearer token env var used by `--token-env` for HTTP(S) `library sync` targets |
-| `MODFETCH_ALLOW_INSECURE_HTTP` | Set to `1` only to allow bearer auth over trusted plain-HTTP sync targets |
+| `MODFETCH_ALLOW_INSECURE_HTTP` | Set to `1` only to allow bearer auth over trusted plain HTTP sync targets |
 
 **Example:**
 ```bash

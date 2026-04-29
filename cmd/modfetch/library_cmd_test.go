@@ -444,6 +444,49 @@ func TestHandleLibrarySyncPullHTTPStatusError(t *testing.T) {
 	}
 }
 
+func TestCheckSyncRedirectRejectsUnsafeRedirects(t *testing.T) {
+	putReq, err := http.NewRequest(http.MethodPut, "https://sync.example/catalog.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextReq, err := http.NewRequest(http.MethodGet, "https://sync.example/catalog.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkSyncRedirect(nextReq, []*http.Request{putReq}); err == nil || !strings.Contains(err.Error(), "non-GET") {
+		t.Fatalf("expected non-GET redirect rejection, got %v", err)
+	}
+
+	authReq, err := http.NewRequest(http.MethodGet, "https://sync.example/catalog.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authReq.Header.Set("Authorization", "Bearer token")
+	downgradeReq, err := http.NewRequest(http.MethodGet, "http://sync.example/catalog.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkSyncRedirect(downgradeReq, []*http.Request{authReq}); err == nil || !strings.Contains(err.Error(), "scheme or host") {
+		t.Fatalf("expected authenticated downgrade rejection, got %v", err)
+	}
+
+	crossHostReq, err := http.NewRequest(http.MethodGet, "https://other.example/catalog.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkSyncRedirect(crossHostReq, []*http.Request{authReq}); err == nil || !strings.Contains(err.Error(), "scheme or host") {
+		t.Fatalf("expected authenticated cross-host rejection, got %v", err)
+	}
+
+	sameHostReq, err := http.NewRequest(http.MethodGet, "https://sync.example/next.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkSyncRedirect(sameHostReq, []*http.Request{authReq}); err != nil {
+		t.Fatalf("same-host authenticated redirect should be allowed: %v", err)
+	}
+}
+
 func TestFileSyncTargetPathTreatsDriveLetterAsPlainPath(t *testing.T) {
 	target := `C:\backup\catalog.json`
 	got, err := fileSyncTargetPath(target)

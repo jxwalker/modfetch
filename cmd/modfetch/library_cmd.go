@@ -254,7 +254,30 @@ const (
 	allowInsecureSyncHTTPEnv = "MODFETCH_ALLOW_INSECURE_HTTP"
 )
 
-var syncHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var syncHTTPClient = &http.Client{
+	Timeout:       30 * time.Second,
+	CheckRedirect: checkSyncRedirect,
+}
+
+func checkSyncRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) == 0 {
+		return nil
+	}
+	first := via[0]
+	if first.Method != http.MethodGet && first.Method != http.MethodHead {
+		return errors.New("refusing to redirect non-GET sync request")
+	}
+	if first.Header.Get("Authorization") == "" {
+		return nil
+	}
+	if first.URL == nil || req.URL == nil {
+		return errors.New("refusing to redirect authenticated sync request without a URL")
+	}
+	if !strings.EqualFold(first.URL.Scheme, req.URL.Scheme) || !strings.EqualFold(first.URL.Host, req.URL.Host) {
+		return errors.New("refusing to redirect authenticated sync request across scheme or host")
+	}
+	return nil
+}
 
 func (f *stringListFlag) String() string {
 	return strings.Join(*f, ",")

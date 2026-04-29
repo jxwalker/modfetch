@@ -80,7 +80,7 @@ Strict validation is intended as a v1.0 readiness check. Regular validation rema
   - `MODFETCH_SYNC_TOKEN`: optional bearer token for HTTP(S) `library sync`
     targets; override the env name with `--token-env`
   - `MODFETCH_ALLOW_INSECURE_HTTP=1`: opt in to sending sync bearer auth over
-    trusted plain-HTTP endpoints, primarily for local testing
+    trusted plain HTTP endpoints, primarily for local testing
 - Do not print secrets back to the terminal; export them in your shell profile or a secure env file
 
 ## Resolver cache
