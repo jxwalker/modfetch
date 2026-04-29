@@ -128,6 +128,27 @@ Use --dry-run to preview without writing.
 
 See docs/PLACEMENT.md and docs/RESOLVERS.md for details and examples.
 
+### Library backup and sync
+
+Export a portable catalog from your local library:
+
+modfetch library export --config ~/.config/modfetch/config.yml \
+  --output modfetch-catalog.json
+
+Preview an import before writing to your local library:
+
+modfetch library import --config ~/.config/modfetch/config.yml \
+  --input modfetch-catalog.json --dry-run
+
+Push or pull the same catalog through a sync target:
+
+modfetch library sync push --config ~/.config/modfetch/config.yml \
+  --target file:///srv/modfetch/catalog.json
+modfetch library sync pull --config ~/.config/modfetch/config.yml \
+  --target file:///srv/modfetch/catalog.json --dry-run
+
+The first supported sync target is `file://`. Plain filesystem paths are accepted too, which is useful for mounted shares or a local backup directory.
+
 ### TUI dashboard
 
 modfetch tui --config ~/.config/modfetch/config.yml

@@ -73,7 +73,7 @@ _modfetch_completions()
             COMPREPLY=( $(compgen -W "--config --log-level --json" -- "$cur") ) ;;
         library)
             if [[ ${cword} -eq 2 ]]; then
-                COMPREPLY=( $(compgen -W "export import scan" -- "$cur") )
+                COMPREPLY=( $(compgen -W "export import scan sync" -- "$cur") )
                 return
             fi
             case ${words[2]} in
@@ -83,6 +83,12 @@ _modfetch_completions()
                     COMPREPLY=( $(compgen -W "--config --log-level --json --input --dry-run" -- "$cur") ) ;;
                 scan)
                     COMPREPLY=( $(compgen -W "--config --log-level --json --dir --workers --repair-stale --no-progress" -- "$cur") ) ;;
+                sync)
+                    if [[ ${cword} -eq 3 ]]; then
+                        COMPREPLY=( $(compgen -W "push pull" -- "$cur") )
+                    else
+                        COMPREPLY=( $(compgen -W "--config --log-level --json --target --dry-run" -- "$cur") )
+                    fi ;;
                 *) ;;
             esac ;;
         clean)
@@ -154,7 +160,7 @@ _modfetch() {
       ;;
     library)
       if (( CURRENT == 3 )); then
-        _arguments '*:subcommands:(export import scan)'
+        _arguments '*:subcommands:(export import scan sync)'
       else
         case $words[3] in
           export)
@@ -165,6 +171,13 @@ _modfetch() {
             ;;
           scan)
             _arguments '*:options:(--config --log-level --json --dir --workers --repair-stale --no-progress)'
+            ;;
+          sync)
+            if (( CURRENT == 4 )); then
+              _arguments '*:subcommands:(push pull)'
+            else
+              _arguments '*:options:(--config --log-level --json --target --dry-run)'
+            fi
             ;;
         esac
       fi
@@ -255,6 +268,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from download" -l list-quants -d
 complete -c modfetch -n "__fish_seen_subcommand_from library" -a "export" -d "Export model catalog"
 complete -c modfetch -n "__fish_seen_subcommand_from library" -a "import" -d "Import model catalog"
 complete -c modfetch -n "__fish_seen_subcommand_from library" -a "scan" -d "Scan model directories"
+complete -c modfetch -n "__fish_seen_subcommand_from library" -a "sync" -d "Sync model catalog"
 complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from export" -l format -d "Catalog format"
 complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from export" -l output -d "Output catalog path"
 complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from import" -l input -d "Input catalog path"
@@ -263,6 +277,10 @@ complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_su
 complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from scan" -l workers -d "Scanner worker count"
 complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from scan" -l repair-stale -d "Remove metadata for missing files"
 complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from scan" -l no-progress -d "Disable progress output"
+complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from sync" -a "push" -d "Push catalog to target"
+complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from sync" -a "pull" -d "Pull catalog from target"
+complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from sync" -l target -d "Catalog sync target"
+complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from sync" -l dry-run -d "Report without writing"
 complete -c modfetch -n "__fish_seen_subcommand_from dedupe" -l mode -d "hardlink|symlink"
 complete -c modfetch -n "__fish_seen_subcommand_from dedupe" -l dry-run -d "Show dedupe changes without modifying files"
 # batch import flags

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -116,6 +117,99 @@ func TestHandleLibraryImportJSONReturnsErrorOnConflicts(t *testing.T) {
 	}
 }
 
+func TestHandleLibrarySyncPushPullFileTarget(t *testing.T) {
+	dir := t.TempDir()
+	sourceCfg := writeLibraryConfig(t, filepath.Join(dir, "source"))
+	source, err := state.Open(&config.Config{General: config.General{
+		DataRoot:     filepath.Join(dir, "source", "data"),
+		DownloadRoot: filepath.Join(dir, "source", "downloads"),
+	}})
+	if err != nil {
+		t.Fatalf("open source db: %v", err)
+	}
+	if err := source.UpsertMetadata(&state.ModelMetadata{
+		DownloadURL: "https://example.com/synced.gguf",
+		Dest:        filepath.Join(dir, "source", "downloads", "synced.gguf"),
+		ModelName:   "Synced Model",
+		Source:      "direct",
+		Favorite:    true,
+	}); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+	if err := source.Close(); err != nil {
+		t.Fatalf("close source db: %v", err)
+	}
+
+	targetPath := filepath.Join(dir, "remote", "catalog.json")
+	targetURI := fileURI(targetPath)
+	if err := handleLibrary(context.Background(), []string{"sync", "push", "--config", sourceCfg, "--target", targetURI}); err != nil {
+		t.Fatalf("library sync push: %v", err)
+	}
+	if _, err := os.Stat(targetPath); err != nil {
+		t.Fatalf("expected sync target catalog: %v", err)
+	}
+
+	targetCfg := writeLibraryConfig(t, filepath.Join(dir, "target"))
+	if err := handleLibrary(context.Background(), []string{"sync", "pull", "--config", targetCfg, "--target", targetURI, "--dry-run"}); err != nil {
+		t.Fatalf("library sync pull dry-run: %v", err)
+	}
+	targetDB, err := state.Open(&config.Config{General: config.General{
+		DataRoot:     filepath.Join(dir, "target", "data"),
+		DownloadRoot: filepath.Join(dir, "target", "downloads"),
+	}})
+	if err != nil {
+		t.Fatalf("open target db after dry-run: %v", err)
+	}
+	if meta, err := targetDB.GetMetadata("https://example.com/synced.gguf"); !errors.Is(err, sql.ErrNoRows) || meta != nil {
+		t.Fatalf("dry-run should not write metadata, meta=%+v err=%v", meta, err)
+	}
+	if err := targetDB.Close(); err != nil {
+		t.Fatalf("close target db after dry-run: %v", err)
+	}
+
+	if err := handleLibrary(context.Background(), []string{"sync", "pull", "--config", targetCfg, "--target", targetURI}); err != nil {
+		t.Fatalf("library sync pull: %v", err)
+	}
+	targetDB, err = state.Open(&config.Config{General: config.General{
+		DataRoot:     filepath.Join(dir, "target", "data"),
+		DownloadRoot: filepath.Join(dir, "target", "downloads"),
+	}})
+	if err != nil {
+		t.Fatalf("open target db: %v", err)
+	}
+	defer func() { _ = targetDB.Close() }()
+	meta, err := targetDB.GetMetadata("https://example.com/synced.gguf")
+	if err != nil {
+		t.Fatalf("get synced metadata: %v", err)
+	}
+	if meta.ModelName != "Synced Model" || !meta.Favorite {
+		t.Fatalf("unexpected synced metadata: %+v", meta)
+	}
+}
+
+func TestHandleLibrarySyncPushDryRunDoesNotWriteTarget(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := writeLibraryConfig(t, filepath.Join(dir, "cfg"))
+	targetPath := filepath.Join(dir, "remote", "catalog.json")
+
+	if err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", fileURI(targetPath), "--dry-run"}); err != nil {
+		t.Fatalf("library sync push dry-run: %v", err)
+	}
+	if _, err := os.Stat(targetPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("dry-run should not write target, err=%v", err)
+	}
+}
+
+func TestHandleLibrarySyncRejectsUnsupportedTarget(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := writeLibraryConfig(t, filepath.Join(dir, "cfg"))
+
+	err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", "https://example.com/catalog.json"})
+	if err == nil || !strings.Contains(err.Error(), "unsupported sync target scheme") {
+		t.Fatalf("expected unsupported target scheme error, got %v", err)
+	}
+}
+
 func TestHandleLibraryScanConfiguredDirectory(t *testing.T) {
 	dir := t.TempDir()
 	cfgRoot := filepath.Join(dir, "cfg")
@@ -210,4 +304,8 @@ func writeLibraryConfig(t *testing.T, root string) string {
 		t.Fatal(err)
 	}
 	return cfgPath
+}
+
+func fileURI(path string) string {
+	return (&url.URL{Scheme: "file", Path: path}).String()
 }

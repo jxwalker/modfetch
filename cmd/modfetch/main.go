@@ -108,6 +108,7 @@ Commands:
   library export    Export model library catalog as JSON
   library import    Import model library catalog JSON
   library scan      Scan configured model directories into the library
+  library sync      Push or pull a catalog through a sync target
   batch import      Import URLs from a text file and produce a YAML batch
   version           Print version
   help              Show this help

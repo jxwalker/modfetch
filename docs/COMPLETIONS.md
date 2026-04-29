@@ -32,4 +32,5 @@ Notable flags and commands covered
 
 Notes
 - The provided completions are lightweight and cover subcommands and common flags. They do not shell out to the binary for dynamic completions.
-- Regenerate completions after new releases to pick up added flags/commands.
+- Regenerate completions after new releases to pick up added flags/commands,
+  including nested library commands such as `library sync push/pull`.
