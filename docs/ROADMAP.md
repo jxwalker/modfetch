@@ -142,8 +142,11 @@ These are useful, but not required for the first v0.7.0 release:
   package metadata and validation are staged in `packaging/aur/`; AUR
   publication is pending a maintainer AUR account with an AUR-registered SSH
   public key.
+- [DONE] Remote catalog sync foundation:
+  `library sync push/pull --target file://...` reuses the portable catalog
+  schema for shared folders, mounted drives, and local filesystem sync tests.
 - Metadata enrichment from additional model registries.
-- Remote catalog sync targets.
+- Additional remote catalog sync targets beyond `file://`.
 - More archive formats if users report concrete needs.
 - Non-interactive TUI scripting hooks.
 

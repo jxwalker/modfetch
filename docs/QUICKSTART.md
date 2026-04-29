@@ -452,6 +452,11 @@ modfetch download --url 'hf://gpt2/README.md?rev=main' --dry-run
 
 # JSON output for scripting
 modfetch download --url 'https://...' --summary-json
+
+# Back up and sync the library catalog
+modfetch library export --output modfetch-catalog.json
+modfetch library sync push --target file:///srv/modfetch/catalog.json
+modfetch library sync pull --target file:///srv/modfetch/catalog.json --dry-run
 ```
 
 ---

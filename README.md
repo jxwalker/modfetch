@@ -325,6 +325,8 @@ modfetch download --batch jobs.yml --place
 # Back up or migrate your model library catalog
 modfetch library export --output modfetch-catalog.json
 modfetch library import --input modfetch-catalog.json --dry-run
+modfetch library sync push --target file:///srv/modfetch/catalog.json
+modfetch library sync pull --target file:///srv/modfetch/catalog.json --dry-run
 
 # Discover existing local models and remove missing-file metadata
 modfetch library scan --repair-stale
@@ -492,6 +494,6 @@ Roadmap
 - v0.7.x focus:
   - AUR package publication once maintainer SSH auth is available
   - Metadata enrichment from additional registries
-  - Remote catalog sync targets
+  - Additional remote catalog sync targets beyond `file://`
   - User-driven archive format expansion
   - Non-interactive TUI scripting hooks

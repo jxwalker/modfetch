@@ -35,6 +35,7 @@ modfetch verify --all              # Verify all downloads
 modfetch place --path FILE         # Place model into app
 modfetch clean --days 7            # Clean old partials
 modfetch library export --output catalog.json
+modfetch library sync push --target file:///srv/modfetch/catalog.json
 modfetch library scan --repair-stale
 modfetch config validate           # Validate config
 modfetch tui                       # Launch visual TUI
@@ -172,6 +173,12 @@ modfetch library import --input modfetch-catalog.json --dry-run
 
 # Import catalog entries and print a machine-readable summary
 modfetch library import --input modfetch-catalog.json --json
+
+# Push the current catalog to a filesystem sync target
+modfetch library sync push --target file:///srv/modfetch/catalog.json
+
+# Preview pulling updates from a filesystem sync target
+modfetch library sync pull --target file:///srv/modfetch/catalog.json --dry-run
 ```
 
 `library scan` recognizes `.gguf`, `.ggml`, `.safetensors`, `.ckpt`, `.pt`,
@@ -196,6 +203,18 @@ Import is idempotent:
 - new entries are reported as `create`
 - changed entries with the same source URL are reported as `update`
 - destination collisions with a different source URL are reported as `conflict`
+
+Sync targets build on the same catalog schema and import conflict behavior.
+`library sync push` writes the current catalog to a target, and
+`library sync pull` imports from that target. The first supported target is
+`file://`, which is useful for shared folders, mounted drives, and locally
+validated sync workflows. Plain filesystem paths are also accepted.
+
+Sync options:
+- `--target URI` - sync target URI or path; `file://` targets are supported
+- `--dry-run` - for `push`, report without writing the target; for `pull`, report
+  import changes without writing to the local library
+- `--json` - print the push or pull result as JSON
 
 ### dedupe
 

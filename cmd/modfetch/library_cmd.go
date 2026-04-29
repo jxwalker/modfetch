@@ -7,7 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/jxwalker/modfetch/internal/catalog"
@@ -18,7 +21,7 @@ import (
 
 func handleLibrary(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return errors.New("library subcommand required: export, import, or scan")
+		return errors.New("library subcommand required: export, import, scan, or sync")
 	}
 	switch args[0] {
 	case "export":
@@ -27,6 +30,8 @@ func handleLibrary(ctx context.Context, args []string) error {
 		return handleLibraryImport(ctx, args[1:])
 	case "scan":
 		return handleLibraryScan(ctx, args[1:])
+	case "sync":
+		return handleLibrarySync(ctx, args[1:])
 	default:
 		return fmt.Errorf("unknown library subcommand: %s", args[0])
 	}
@@ -89,7 +94,116 @@ func handleLibraryImport(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	return printCatalogImportResult(result, *common.jsonOut)
+}
+
+func handleLibrarySync(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		return errors.New("library sync subcommand required: push or pull")
+	}
+	switch args[0] {
+	case "push":
+		return handleLibrarySyncPush(ctx, args[1:])
+	case "pull":
+		return handleLibrarySyncPull(ctx, args[1:])
+	default:
+		return fmt.Errorf("unknown library sync subcommand: %s", args[0])
+	}
+}
+
+func handleLibrarySyncPush(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("library sync push", flag.ContinueOnError)
+	common := addCommonConfigLogFlags(fs, "print sync push result as JSON")
+	target := fs.String("target", "", "sync target URI or path; file:// targets are supported")
+	dryRun := fs.Bool("dry-run", false, "report without writing the target catalog")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	targetPath, err := fileSyncTargetPath(*target)
+	if err != nil {
+		return err
+	}
+	db, err := openLibraryDB(*common.configPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+
+	cat, err := catalog.Build(db)
+	if err != nil {
+		return err
+	}
+	if !*dryRun {
+		if err := writeCatalogFile(targetPath, cat); err != nil {
+			return err
+		}
+	}
+	result := librarySyncPushResult{
+		Action: "push",
+		Target: *target,
+		Path:   targetPath,
+		Models: len(cat.Models),
+		DryRun: *dryRun,
+	}
 	if *common.jsonOut {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(result)
+	}
+	if *dryRun {
+		fmt.Printf("Sync push dry-run: target=%s models=%d\n", targetPath, len(cat.Models))
+	} else {
+		fmt.Printf("Sync push complete: target=%s models=%d\n", targetPath, len(cat.Models))
+	}
+	return nil
+}
+
+func handleLibrarySyncPull(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("library sync pull", flag.ContinueOnError)
+	common := addCommonConfigLogFlags(fs, "print sync pull result as JSON")
+	target := fs.String("target", "", "sync target URI or path; file:// targets are supported")
+	dryRun := fs.Bool("dry-run", false, "report changes without writing to the library")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	targetPath, err := fileSyncTargetPath(*target)
+	if err != nil {
+		return err
+	}
+	db, err := openLibraryDB(*common.configPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = db.Close() }()
+
+	f, err := os.Open(targetPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+	result, err := catalog.Import(db, f, catalog.ImportOptions{DryRun: *dryRun})
+	if err != nil {
+		return err
+	}
+	return printCatalogImportResult(result, *common.jsonOut)
+}
+
+type librarySyncPushResult struct {
+	Action string `json:"action"`
+	Target string `json:"target"`
+	Path   string `json:"path"`
+	Models int    `json:"models"`
+	DryRun bool   `json:"dry_run"`
+}
+
+func printCatalogImportResult(result *catalog.ImportResult, jsonOut bool) error {
+	if jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(result); err != nil {
@@ -249,6 +363,100 @@ func outputWriter(path string) (io.Writer, func(), error) {
 		return nil, func() {}, err
 	}
 	return f, func() { _ = f.Close() }, nil
+}
+
+func fileSyncTargetPath(target string) (string, error) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return "", errors.New("library sync requires --target")
+	}
+	if !strings.Contains(target, "://") && !strings.HasPrefix(strings.ToLower(target), "file:") {
+		return filepath.Clean(target), nil
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return "", fmt.Errorf("parse sync target: %w", err)
+	}
+	if u.Scheme != "file" {
+		return "", fmt.Errorf("unsupported sync target scheme %q; only file:// is supported", u.Scheme)
+	}
+	if u.RawQuery != "" || u.Fragment != "" {
+		return "", errors.New("file sync target must not include query or fragment")
+	}
+	if u.Host != "" && u.Host != "localhost" {
+		return "", fmt.Errorf("unsupported file sync target host %q", u.Host)
+	}
+	targetPath := u.EscapedPath()
+	if targetPath == "" && u.Opaque != "" {
+		targetPath = u.Opaque
+	}
+	if targetPath == "" {
+		return "", errors.New("file sync target path is empty")
+	}
+	decodedPath, err := url.PathUnescape(targetPath)
+	if err != nil {
+		return "", fmt.Errorf("decode file sync target path: %w", err)
+	}
+	return filepath.Clean(filepath.FromSlash(decodedPath)), nil
+}
+
+func writeCatalogFile(path string, cat *catalog.Catalog) error {
+	if path == "" {
+		return errors.New("catalog target path is empty")
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create catalog target directory: %w", err)
+	}
+	tmp, err := os.CreateTemp(dir, ".modfetch-catalog-*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp catalog: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	if err := tmp.Chmod(catalogTargetMode(path)); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("set catalog permissions: %w", err)
+	}
+	enc := json.NewEncoder(tmp)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(cat); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write catalog: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close catalog: %w", err)
+	}
+	if err := replaceCatalogFile(tmpPath, path); err != nil {
+		return err
+	}
+	return nil
+}
+
+func catalogTargetMode(path string) os.FileMode {
+	info, err := os.Stat(path)
+	if err == nil {
+		return info.Mode().Perm()
+	}
+	return 0o644
+}
+
+func replaceCatalogFile(tmpPath, path string) error {
+	if err := os.Rename(tmpPath, path); err == nil {
+		return nil
+	} else if runtime.GOOS != "windows" {
+		return fmt.Errorf("replace catalog target: %w", err)
+	} else if _, statErr := os.Stat(path); statErr != nil {
+		return fmt.Errorf("replace catalog target: %w", err)
+	}
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("remove existing catalog target: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("replace catalog target after removing existing file: %w", err)
+	}
+	return nil
 }
 
 func inputReader(path string) (io.Reader, func(), error) {

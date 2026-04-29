@@ -9,6 +9,8 @@ Added
   binaries.
 - Added portable AUR package validation that checks `PKGBUILD`, `.SRCINFO`, and
   published release checksums.
+- Added `library sync push` and `library sync pull` for `file://` catalog sync
+  targets, including dry-run and JSON output support.
 
 Docs
 - Documented Arch Linux AUR package maintenance and release checklist coverage.
