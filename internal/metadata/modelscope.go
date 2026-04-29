@@ -58,7 +58,7 @@ func (f *ModelScopeFetcher) FetchMetadata(ctx context.Context, rawURL string) (*
 	if resp.StatusCode != http.StatusOK {
 		return f.basicMetadata(rawURL, modelID, owner, repo, revision, filename), nil
 	}
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
 	if err != nil {
 		return f.basicMetadata(rawURL, modelID, owner, repo, revision, filename), nil
 	}
@@ -96,7 +96,7 @@ func (f *ModelScopeFetcher) FetchMetadata(ctx context.Context, rawURL string) (*
 	}
 	meta.Quantization = ExtractQuantization(filename)
 	if filename != "" {
-		meta.FileFormat = strings.TrimPrefix(strings.ToLower(filepath.Ext(filename)), ".")
+		meta.FileFormat = strings.ToLower(filepath.Ext(filename))
 	}
 	return meta, nil
 }
@@ -114,7 +114,7 @@ func (f *ModelScopeFetcher) basicMetadata(rawURL, modelID, owner, repo, revision
 		HomepageURL:  fmt.Sprintf("https://modelscope.cn/models/%s", modelID),
 		ModelType:    inferModelType(filename, nil),
 		Quantization: ExtractQuantization(filename),
-		FileFormat:   strings.TrimPrefix(strings.ToLower(filepath.Ext(filename)), "."),
+		FileFormat:   strings.ToLower(filepath.Ext(filename)),
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}

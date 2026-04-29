@@ -83,7 +83,7 @@ func TestModelScopeFetcherFetchMetadataSuccess(t *testing.T) {
 	if meta.ModelName != "Qwen2.5-7B-Instruct" || meta.Author != "qwen" {
 		t.Fatalf("unexpected identity metadata: %+v", meta)
 	}
-	if meta.ModelType != "LLM" || meta.Quantization != "Q4_K_M" || meta.FileFormat != "gguf" {
+	if meta.ModelType != "LLM" || meta.Quantization != "Q4_K_M" || meta.FileFormat != ".gguf" {
 		t.Fatalf("unexpected model specs: %+v", meta)
 	}
 	if meta.DownloadCount != 4200 || meta.License != "apache-2.0" {
@@ -103,7 +103,7 @@ func TestModelScopeFetcherAPIFailureFallsBack(t *testing.T) {
 	if meta.Source != "modelscope" || meta.ModelID != "qwen/Qwen2.5-7B-Instruct" {
 		t.Fatalf("unexpected fallback metadata: %+v", meta)
 	}
-	if meta.Quantization != "Q5_K_M" || meta.FileFormat != "gguf" {
+	if meta.Quantization != "Q5_K_M" || meta.FileFormat != ".gguf" {
 		t.Fatalf("unexpected fallback file metadata: %+v", meta)
 	}
 }
