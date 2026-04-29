@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -20,6 +21,9 @@ type OllamaFetcher struct {
 }
 
 func NewOllamaFetcher(client *http.Client) *OllamaFetcher {
+	if client == nil {
+		client = http.DefaultClient
+	}
 	return &OllamaFetcher{client: client}
 }
 
@@ -70,6 +74,7 @@ func (f *OllamaFetcher) FetchMetadata(ctx context.Context, rawURL string) (*stat
 }
 
 func (f *OllamaFetcher) basicMetadata(rawURL, model, tag string) *state.ModelMetadata {
+	now := time.Now()
 	tags := []string{"ollama"}
 	if tag != "" {
 		tags = append(tags, tag)
@@ -85,8 +90,8 @@ func (f *OllamaFetcher) basicMetadata(rawURL, model, tag string) *state.ModelMet
 		HomepageURL: ollamaLibraryURL(model),
 		ModelType:   "LLM",
 		FileFormat:  "ollama",
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 }
 
@@ -249,7 +254,12 @@ func parseCompactCount(value string) int {
 	if err != nil {
 		return 0
 	}
-	return int(count * multiplier)
+	result := math.Round(count * multiplier)
+	maxInt := float64(int(^uint(0) >> 1))
+	if result > maxInt {
+		return int(maxInt)
+	}
+	return int(result)
 }
 
 func appendUniqueStrings(values []string, additions ...string) []string {

@@ -29,6 +29,13 @@ func TestOllamaFetcherCanHandle(t *testing.T) {
 	}
 }
 
+func TestNewOllamaFetcherDefaultsNilClient(t *testing.T) {
+	f := NewOllamaFetcher(nil)
+	if f.client == nil {
+		t.Fatal("NewOllamaFetcher(nil) should default to a non-nil HTTP client")
+	}
+}
+
 func TestOllamaFetcherFetchMetadataSuccess(t *testing.T) {
 	client := routedHTTPClient(t, "ollama.com", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/library/llama3.2" {
@@ -127,6 +134,7 @@ func TestRegistryIncludesOllamaFetcher(t *testing.T) {
 func TestParseCompactCount(t *testing.T) {
 	tests := map[string]int{
 		"67.2M": 67_200_000,
+		"1.2K":  1_200,
 		"120K":  120_000,
 		"1,250": 1_250,
 		"2B":    2_000_000_000,
