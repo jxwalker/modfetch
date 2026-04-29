@@ -80,6 +80,10 @@ Use this checklist from a clean `main` checkout before tagging a modfetch releas
   ```
 - Push `PKGBUILD` and `.SRCINFO` to
   `ssh://aur@aur.archlinux.org/modfetch-bin.git`.
+  From this repository, prefer the checked publish helper:
+  ```bash
+  scripts/publish-aur.sh vX.Y.Z
+  ```
 
 ## Final Verification
 

@@ -25,7 +25,7 @@
 - [User Guide](docs/USER_GUIDE.md) - Full feature reference
 - [Configuration](docs/CONFIG.md) - Config file options
 - [Testing](TESTING.md) - Maintainer validation commands
-- [Installation Guide](docs/INSTALLATION.md) - Install with Homebrew, one-line installer, release binaries, or staged AUR metadata
+- [Installation Guide](docs/INSTALLATION.md) - Install with Homebrew, AUR, one-line installer, or release binaries
 - [Release Checklist](docs/RELEASE.md) - Maintainer checklist for tags, artifacts, and package updates
 
 ---
@@ -110,7 +110,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 
 ✅ **Production Ready:** Core download, verify, and TUI features are stable
 
-🚀 **Active Development:** AUR publication and metadata enrichment
+🚀 **Active Development:** metadata enrichment and user-driven archive support
 
 📖 **Documentation:** Comprehensive guides with visual examples
 
@@ -217,10 +217,13 @@ brew upgrade jxwalker/tap/modfetch
 
 The formula installs the published GitHub Release binary and verifies its SHA256 checksum.
 
-Arch Linux packaging metadata is staged under `packaging/aur/` for the
-`modfetch-bin` AUR package. Publication requires an AUR account with a
-registered SSH key; until that package is published, Arch users should use
-Homebrew/Linuxbrew, the one-line installer, or the manual release binary.
+Arch Linux users can install the published `modfetch-bin` AUR package:
+
+```bash
+git clone https://aur.archlinux.org/modfetch-bin.git
+cd modfetch-bin
+makepkg -si
+```
 </details>
 
 <details>
@@ -494,7 +497,7 @@ Troubleshooting
 Roadmap
 - See docs/ROADMAP.md for the active, prioritized roadmap
 - v0.7.x focus:
-  - AUR package publication once maintainer SSH auth is available
+  - Completed: AUR `modfetch-bin` publication
   - Completed: Ollama Library metadata enrichment beyond ModelScope
   - Completed: authenticated HTTP(S) catalog sync push/pull
   - User-driven archive format expansion

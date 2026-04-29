@@ -15,9 +15,11 @@ go vet ./...
 make build
 ```
 
-`scripts/check-aur-package.sh` validates the staged AUR metadata and published
+`scripts/check-aur-package.sh` validates the AUR metadata and published
 release checksums. On macOS, it reports that `makepkg` is unavailable and skips
 only the Arch-specific `.SRCINFO` regeneration check.
+`scripts/publish-aur.sh vX.Y.Z` wraps the publish flow and fails before clone or
+push when AUR SSH authentication is not configured.
 
 ## Auth-Gated Coverage
 
