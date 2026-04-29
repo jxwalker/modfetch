@@ -13,6 +13,7 @@ Common commands
   - ./bin/modfetch download --config ~/.config/modfetch/config.yml --url 'hf://gpt2/README.md?rev=main'
   - TUI: ./bin/modfetch tui --config ~/.config/modfetch/config.yml
   - TUI snapshot: ./bin/modfetch tui --config ~/.config/modfetch/config.yml --snapshot --json
+  - Catalog sync push: ./bin/modfetch library sync push --config ~/.config/modfetch/config.yml --target https://example.com/modfetch-catalog.json --token-env MODFETCH_SYNC_TOKEN
 - Tests
   - All tests: make test (go test ./...)
   - With coverage: go test ./... -cover

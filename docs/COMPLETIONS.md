@@ -29,6 +29,7 @@ Notable flags and commands covered
 - --quiet, --json, --log-level
 - --summary-json, --no-resume, --batch-parallel, --naming-pattern, --no-auth-preflight, --dry-run
 - --strict, --force, --quant, --list-quants
+- library sync --target, --dry-run, --token-env
 - tui --snapshot for non-interactive state snapshots
 
 Notes

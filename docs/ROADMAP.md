@@ -152,7 +152,9 @@ These are useful, but not required for the first v0.7.0 release:
   ModelScope URLs are recognized as `modelscope` sources and enrich library
   records from the ModelScope model API with best-effort offline fallback.
 - Metadata enrichment from additional model registries beyond ModelScope.
-- Authenticated and writable remote catalog sync targets.
+- [DONE] Authenticated and writable remote catalog sync targets:
+  HTTP(S) sync targets can use bearer tokens from `--token-env`, and
+  `library sync push --target https://...` publishes catalogs with `PUT`.
 - More archive formats if users report concrete needs.
 - [DONE] Non-interactive TUI scripting hooks:
   `modfetch tui --snapshot` exits without launching the Bubble Tea interface

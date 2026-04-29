@@ -76,7 +76,11 @@ Strict validation is intended as a v1.0 readiness check. Regular validation rema
 ## Tokens / environment variables
 - Set in environment, not in YAML:
   - `HF_TOKEN`: Hugging Face token (Bearer), used when sources.huggingface.enabled is true
-- `CIVITAI_TOKEN`: CivitAI token (Bearer), used when sources.civitai.enabled is true
+  - `CIVITAI_TOKEN`: CivitAI token (Bearer), used when sources.civitai.enabled is true
+  - `MODFETCH_SYNC_TOKEN`: optional bearer token for HTTP(S) `library sync`
+    targets; override the env name with `--token-env`
+  - `MODFETCH_ALLOW_INSECURE_HTTP=1`: opt in to sending sync bearer auth over
+    trusted plain HTTP endpoints, primarily for local testing
 - Do not print secrets back to the terminal; export them in your shell profile or a secure env file
 
 ## Resolver cache

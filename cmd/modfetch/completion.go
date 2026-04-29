@@ -87,7 +87,7 @@ _modfetch_completions()
                     if [[ ${cword} -eq 3 ]]; then
                         COMPREPLY=( $(compgen -W "push pull" -- "$cur") )
                     else
-                        COMPREPLY=( $(compgen -W "--config --log-level --json --target --dry-run" -- "$cur") )
+                        COMPREPLY=( $(compgen -W "--config --log-level --json --target --dry-run --token-env" -- "$cur") )
                     fi ;;
                 *) ;;
             esac ;;
@@ -176,7 +176,7 @@ _modfetch() {
             if (( CURRENT == 4 )); then
               _arguments '*:subcommands:(push pull)'
             else
-              _arguments '*:options:(--config --log-level --json --target --dry-run)'
+              _arguments '*:options:(--config --log-level --json --target --dry-run --token-env)'
             fi
             ;;
         esac
@@ -282,6 +282,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_su
 complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from sync" -a "pull" -d "Pull catalog from target"
 complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from sync" -l target -d "Catalog sync target"
 complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from sync" -l dry-run -d "Report without writing"
+complete -c modfetch -n "__fish_seen_subcommand_from library; and __fish_seen_subcommand_from sync" -l token-env -d "Bearer token environment variable"
 complete -c modfetch -n "__fish_seen_subcommand_from dedupe" -l mode -d "hardlink|symlink"
 complete -c modfetch -n "__fish_seen_subcommand_from dedupe" -l dry-run -d "Show dedupe changes without modifying files"
 # batch import flags

@@ -177,11 +177,15 @@ modfetch library import --input modfetch-catalog.json --json
 # Push the current catalog to a filesystem sync target
 modfetch library sync push --target file:///srv/modfetch/catalog.json
 
+# Push the current catalog to an HTTP(S) target with bearer auth
+export MODFETCH_SYNC_TOKEN="..."
+modfetch library sync push --target https://example.com/modfetch-catalog.json --token-env MODFETCH_SYNC_TOKEN
+
 # Preview pulling updates from a filesystem sync target
 modfetch library sync pull --target file:///srv/modfetch/catalog.json --dry-run
 
-# Preview pulling updates from a published HTTP(S) catalog
-modfetch library sync pull --target https://example.com/modfetch-catalog.json --dry-run
+# Preview pulling updates from a published or authenticated HTTP(S) catalog
+modfetch library sync pull --target https://example.com/modfetch-catalog.json --token-env MODFETCH_SYNC_TOKEN --dry-run
 ```
 
 `library scan` recognizes `.gguf`, `.ggml`, `.safetensors`, `.ckpt`, `.pt`,
@@ -208,16 +212,21 @@ Import is idempotent:
 - destination collisions with a different source URL are reported as `conflict`
 
 Sync targets build on the same catalog schema and import conflict behavior.
-`library sync push` writes the current catalog to a local target, and
+`library sync push` writes the current catalog to a local or remote target, and
 `library sync pull` imports from a local or remote target. Push supports
-`file://` and plain filesystem paths, which are useful for shared folders,
-mounted drives, and locally validated sync workflows. Pull supports those local
-targets plus read-only `http://` and `https://` catalog URLs.
+`file://`, plain filesystem paths, and writable `http://` or `https://` targets
+using `PUT`. Pull supports those local targets plus `http://` and `https://`
+catalog URLs. HTTP(S) push and pull can add `Authorization: Bearer ...` from an
+environment variable without storing secrets in the config file.
+Bearer tokens are only sent to HTTPS targets unless
+`MODFETCH_ALLOW_INSECURE_HTTP=1` is set for trusted local HTTP test endpoints.
 
 Sync options:
 - `--target URI` - sync target URI or path
 - `--dry-run` - for `push`, report without writing the target; for `pull`, report
   import changes without writing to the local library
+- `--token-env NAME` - read a bearer token for HTTP(S) targets from this
+  environment variable; defaults to `MODFETCH_SYNC_TOKEN` when set
 - `--json` - print the push or pull result as JSON
 
 ### dedupe
@@ -715,12 +724,15 @@ fi
 | `MODFETCH_CONFIG` | Default config file path |
 | `HF_TOKEN` | HuggingFace API token |
 | `CIVITAI_TOKEN` | CivitAI API token |
+| `MODFETCH_SYNC_TOKEN` | Default bearer token env var used by `--token-env` for HTTP(S) `library sync` targets |
+| `MODFETCH_ALLOW_INSECURE_HTTP` | Set to `1` only to allow bearer auth over trusted plain HTTP sync targets |
 
 **Example:**
 ```bash
 export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 export HF_TOKEN="hf_..."
 export CIVITAI_TOKEN="..."
+export MODFETCH_SYNC_TOKEN="..."
 
 modfetch download --url 'hf://private/repo/model.gguf'
 ```

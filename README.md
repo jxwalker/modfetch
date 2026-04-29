@@ -110,7 +110,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 
 ✅ **Production Ready:** Core download, verify, and TUI features are stable
 
-🚀 **Active Development:** AUR publication, catalog sync targets, and metadata enrichment
+🚀 **Active Development:** AUR publication and metadata enrichment
 
 📖 **Documentation:** Comprehensive guides with visual examples
 
@@ -496,6 +496,6 @@ Roadmap
 - v0.7.x focus:
   - AUR package publication once maintainer SSH auth is available
   - Metadata enrichment from additional registries beyond ModelScope
-  - Authenticated and writable remote catalog sync targets
+  - Completed: authenticated HTTP(S) catalog sync push/pull
   - User-driven archive format expansion
   - Completed: non-interactive TUI snapshots with `modfetch tui --snapshot --json`
