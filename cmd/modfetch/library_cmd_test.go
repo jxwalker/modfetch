@@ -205,11 +205,91 @@ func TestHandleLibrarySyncPushDryRunDoesNotWriteTarget(t *testing.T) {
 	}
 }
 
+func TestHandleLibrarySyncPushHTTPTargetWithBearerToken(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := writeLibraryConfig(t, filepath.Join(dir, "cfg"))
+	db, err := state.Open(&config.Config{General: config.General{
+		DataRoot:     filepath.Join(dir, "cfg", "data"),
+		DownloadRoot: filepath.Join(dir, "cfg", "downloads"),
+	}})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	if err := db.UpsertMetadata(&state.ModelMetadata{
+		DownloadURL: "https://example.com/http-pushed.gguf",
+		Dest:        filepath.Join(dir, "cfg", "downloads", "http-pushed.gguf"),
+		ModelName:   "HTTP Pushed Model",
+		Source:      "direct",
+	}); err != nil {
+		t.Fatalf("seed metadata: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close db: %v", err)
+	}
+
+	t.Setenv("MODFETCH_TEST_SYNC_TOKEN", "secret-token")
+	var received bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received = true
+		if r.Method != http.MethodPut {
+			t.Errorf("unexpected method %s", r.Method)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer secret-token" {
+			t.Errorf("unexpected authorization header %q", got)
+		}
+		if got := r.Header.Get("Content-Type"); got != "application/json" {
+			t.Errorf("unexpected content-type %q", got)
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Errorf("decode pushed catalog: %v", err)
+		}
+		if payload["app"] != "modfetch" {
+			t.Errorf("unexpected catalog app %v", payload["app"])
+		}
+		models, ok := payload["models"].([]any)
+		if !ok || len(models) != 1 {
+			t.Errorf("unexpected catalog models %v", payload["models"])
+		}
+		w.WriteHeader(http.StatusCreated)
+	}))
+	defer server.Close()
+
+	out := captureStdout(t, func() {
+		if err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", server.URL, "--token-env", "MODFETCH_TEST_SYNC_TOKEN", "--json"}); err != nil {
+			t.Fatalf("library sync push HTTP: %v", err)
+		}
+	})
+	if !received {
+		t.Fatal("expected HTTP sync target to receive a request")
+	}
+	var result librarySyncPushResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("decode sync push result: %v\n%s", err, out)
+	}
+	if result.Method != http.MethodPut || result.Status != "201 Created" || !result.Authenticated || result.Models != 1 {
+		t.Fatalf("unexpected sync push result: %+v", result)
+	}
+}
+
+func TestHandleLibrarySyncPushHTTPDryRunDoesNotContactTarget(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := writeLibraryConfig(t, filepath.Join(dir, "cfg"))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("dry-run should not contact HTTP target")
+	}))
+	defer server.Close()
+
+	if err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", server.URL, "--dry-run"}); err != nil {
+		t.Fatalf("library sync push HTTP dry-run: %v", err)
+	}
+}
+
 func TestHandleLibrarySyncRejectsUnsupportedTarget(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := writeLibraryConfig(t, filepath.Join(dir, "cfg"))
 
-	err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", "https://example.com/catalog.json"})
+	err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", "s3://example/catalog.json"})
 	if err == nil || !strings.Contains(err.Error(), "unsupported sync target scheme") {
 		t.Fatalf("expected unsupported target scheme error, got %v", err)
 	}
@@ -279,6 +359,56 @@ func TestHandleLibrarySyncPullHTTPTarget(t *testing.T) {
 		t.Fatalf("get HTTP synced metadata: %v", err)
 	}
 	if meta.ModelName != "HTTP Synced Model" || !meta.Favorite {
+		t.Fatalf("unexpected HTTP metadata: %+v", meta)
+	}
+}
+
+func TestHandleLibrarySyncPullHTTPTargetWithBearerToken(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := writeLibraryConfig(t, filepath.Join(dir, "cfg"))
+	payload, err := json.Marshal(map[string]any{
+		"app":             "modfetch",
+		"catalog_version": 1,
+		"models": []map[string]any{{
+			"metadata": map[string]any{
+				"download_url": "https://example.com/auth-http-synced.gguf",
+				"dest":         filepath.Join(dir, "downloads", "auth-http-synced.gguf"),
+				"model_name":   "Auth HTTP Synced Model",
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MODFETCH_TEST_SYNC_TOKEN", "secret-token")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("unexpected method %s", r.Method)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer secret-token" {
+			t.Errorf("unexpected authorization header %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	if err := handleLibrary(context.Background(), []string{"sync", "pull", "--config", cfgPath, "--target", server.URL, "--token-env", "MODFETCH_TEST_SYNC_TOKEN"}); err != nil {
+		t.Fatalf("library sync pull HTTP with token: %v", err)
+	}
+	db, err := state.Open(&config.Config{General: config.General{
+		DataRoot:     filepath.Join(dir, "cfg", "data"),
+		DownloadRoot: filepath.Join(dir, "cfg", "downloads"),
+	}})
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+	meta, err := db.GetMetadata("https://example.com/auth-http-synced.gguf")
+	if err != nil {
+		t.Fatalf("get HTTP synced metadata: %v", err)
+	}
+	if meta.ModelName != "Auth HTTP Synced Model" {
 		t.Fatalf("unexpected HTTP metadata: %+v", meta)
 	}
 }

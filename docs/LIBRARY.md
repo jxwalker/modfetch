@@ -380,7 +380,9 @@ modfetch library import --input modfetch-catalog.json --dry-run
 modfetch library import --input modfetch-catalog.json
 modfetch library sync push --target file:///srv/modfetch/catalog.json
 modfetch library sync pull --target file:///srv/modfetch/catalog.json --dry-run
-modfetch library sync pull --target https://example.com/modfetch-catalog.json --dry-run
+export MODFETCH_SYNC_TOKEN="..."
+modfetch library sync push --target https://example.com/modfetch-catalog.json --token-env MODFETCH_SYNC_TOKEN
+modfetch library sync pull --target https://example.com/modfetch-catalog.json --token-env MODFETCH_SYNC_TOKEN --dry-run
 ```
 
 The JSON catalog includes:
@@ -394,12 +396,15 @@ counts without writing. Re-importing the same catalog is idempotent and reports
 unchanged entries as skips.
 
 For repeatable backups or shared-machine handoff, use `library sync`. Push
-supports `file://` and plain local paths, so it works with shared folders,
-mounted storage, and local filesystem paths. Pull supports those same local
-targets plus read-only HTTP(S) catalog URLs. All pull targets preserve the same
+supports `file://`, plain local paths, and writable HTTP(S) endpoints using
+`PUT`, so it works with shared folders, mounted storage, local filesystem paths,
+and simple catalog services. Pull supports those same local targets plus
+HTTP(S) catalog URLs. HTTP(S) sync can read a bearer token from
+`--token-env NAME` without storing secrets in the config file; the default env
+name is `MODFETCH_SYNC_TOKEN` when set. All pull targets preserve the same
 conflict checks as import. `sync push --dry-run` reports the target and model
-count without writing, and `sync pull --dry-run` reports import actions without
-changing the local database.
+count without writing or contacting HTTP targets, and `sync pull --dry-run`
+reports import actions without changing the local database.
 
 ## Metadata Sources
 

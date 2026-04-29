@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -116,16 +117,13 @@ func handleLibrarySync(ctx context.Context, args []string) error {
 func handleLibrarySyncPush(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("library sync push", flag.ContinueOnError)
 	common := addCommonConfigLogFlags(fs, "print sync push result as JSON")
-	target := fs.String("target", "", "sync target URI or path; file:// targets and plain paths are supported")
+	target := fs.String("target", "", "sync target URI or path; file://, http://, https://, and plain paths are supported")
 	dryRun := fs.Bool("dry-run", false, "report without writing the target catalog")
+	tokenEnv := fs.String("token-env", "MODFETCH_SYNC_TOKEN", "environment variable containing a bearer token for HTTP(S) sync targets")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
-		return err
-	}
-	targetPath, err := fileSyncTargetPath(*target)
-	if err != nil {
 		return err
 	}
 	db, err := openLibraryDB(*common.configPath)
@@ -138,17 +136,28 @@ func handleLibrarySyncPush(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if !*dryRun {
-		if err := writeCatalogFile(targetPath, cat); err != nil {
-			return err
-		}
-	}
 	result := librarySyncPushResult{
 		Action: "push",
 		Target: *target,
-		Path:   targetPath,
 		Models: len(cat.Models),
 		DryRun: *dryRun,
+	}
+	if !*dryRun {
+		outcome, err := writeCatalogSyncTarget(ctx, *target, cat, *tokenEnv)
+		if err != nil {
+			return err
+		}
+		result.Path = outcome.Path
+		result.Method = outcome.Method
+		result.Status = outcome.Status
+		result.Authenticated = outcome.Authenticated
+	} else {
+		outcome, err := describeCatalogSyncTarget(*target)
+		if err != nil {
+			return err
+		}
+		result.Path = outcome.Path
+		result.Method = outcome.Method
 	}
 	if *common.jsonOut {
 		enc := json.NewEncoder(os.Stdout)
@@ -156,9 +165,9 @@ func handleLibrarySyncPush(ctx context.Context, args []string) error {
 		return enc.Encode(result)
 	}
 	if *dryRun {
-		fmt.Printf("Sync push dry-run: target=%s models=%d\n", targetPath, len(cat.Models))
+		fmt.Printf("Sync push dry-run: target=%s models=%d\n", result.DisplayTarget(), len(cat.Models))
 	} else {
-		fmt.Printf("Sync push complete: target=%s models=%d\n", targetPath, len(cat.Models))
+		fmt.Printf("Sync push complete: target=%s models=%d\n", result.DisplayTarget(), len(cat.Models))
 	}
 	return nil
 }
@@ -168,13 +177,14 @@ func handleLibrarySyncPull(ctx context.Context, args []string) error {
 	common := addCommonConfigLogFlags(fs, "print sync pull result as JSON")
 	target := fs.String("target", "", "sync target URI or path; file://, http://, https://, and plain paths are supported")
 	dryRun := fs.Bool("dry-run", false, "report changes without writing to the library")
+	tokenEnv := fs.String("token-env", "MODFETCH_SYNC_TOKEN", "environment variable containing a bearer token for HTTP(S) sync targets")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	r, closeFn, err := syncTargetReader(ctx, *target)
+	r, closeFn, err := syncTargetReader(ctx, *target, *tokenEnv)
 	if err != nil {
 		return err
 	}
@@ -193,11 +203,21 @@ func handleLibrarySyncPull(ctx context.Context, args []string) error {
 }
 
 type librarySyncPushResult struct {
-	Action string `json:"action"`
-	Target string `json:"target"`
-	Path   string `json:"path"`
-	Models int    `json:"models"`
-	DryRun bool   `json:"dry_run"`
+	Action        string `json:"action"`
+	Target        string `json:"target"`
+	Path          string `json:"path,omitempty"`
+	Method        string `json:"method,omitempty"`
+	Status        string `json:"status,omitempty"`
+	Models        int    `json:"models"`
+	DryRun        bool   `json:"dry_run"`
+	Authenticated bool   `json:"authenticated,omitempty"`
+}
+
+func (r librarySyncPushResult) DisplayTarget() string {
+	if r.Path != "" {
+		return r.Path
+	}
+	return r.Target
 }
 
 func printCatalogImportResult(result *catalog.ImportResult, jsonOut bool) error {
@@ -363,7 +383,7 @@ func outputWriter(path string) (io.Writer, func(), error) {
 	return f, func() { _ = f.Close() }, nil
 }
 
-func syncTargetReader(ctx context.Context, target string) (io.Reader, func(), error) {
+func syncTargetReader(ctx context.Context, target, tokenEnv string) (io.Reader, func(), error) {
 	target = strings.TrimSpace(target)
 	if target == "" {
 		return nil, func() {}, errors.New("library sync requires --target")
@@ -394,6 +414,9 @@ func syncTargetReader(ctx context.Context, target string) (io.Reader, func(), er
 		return nil, func() {}, fmt.Errorf("create sync request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
+	if _, err := addBearerAuthFromEnv(req, tokenEnv); err != nil {
+		return nil, func() {}, err
+	}
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -404,6 +427,96 @@ func syncTargetReader(ctx context.Context, target string) (io.Reader, func(), er
 		return nil, func() {}, fmt.Errorf("fetch sync target: HTTP %s", resp.Status)
 	}
 	return resp.Body, func() { _ = resp.Body.Close() }, nil
+}
+
+type catalogSyncWriteOutcome struct {
+	Path          string
+	Method        string
+	Status        string
+	Authenticated bool
+}
+
+func writeCatalogSyncTarget(ctx context.Context, target string, cat *catalog.Catalog, tokenEnv string) (catalogSyncWriteOutcome, error) {
+	outcome, err := describeCatalogSyncTarget(target)
+	if err != nil {
+		return outcome, err
+	}
+	if outcome.Method == "file" {
+		if err := writeCatalogFile(outcome.Path, cat); err != nil {
+			return outcome, err
+		}
+		return outcome, nil
+	}
+
+	var body bytes.Buffer
+	enc := json.NewEncoder(&body)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(cat); err != nil {
+		return outcome, fmt.Errorf("encode catalog: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, target, &body)
+	if err != nil {
+		return outcome, fmt.Errorf("create sync push request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	authenticated, err := addBearerAuthFromEnv(req, tokenEnv)
+	if err != nil {
+		return outcome, err
+	}
+	outcome.Authenticated = authenticated
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return outcome, fmt.Errorf("push sync target: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	outcome.Status = resp.Status
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		return outcome, fmt.Errorf("push sync target: HTTP %s", resp.Status)
+	}
+	return outcome, nil
+}
+
+func describeCatalogSyncTarget(target string) (catalogSyncWriteOutcome, error) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return catalogSyncWriteOutcome{}, errors.New("library sync requires --target")
+	}
+	if !isURITarget(target) || strings.HasPrefix(strings.ToLower(target), "file:") {
+		path, err := fileSyncTargetPath(target)
+		if err != nil {
+			return catalogSyncWriteOutcome{}, err
+		}
+		return catalogSyncWriteOutcome{Path: path, Method: "file"}, nil
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return catalogSyncWriteOutcome{}, fmt.Errorf("parse sync target: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return catalogSyncWriteOutcome{}, fmt.Errorf("unsupported sync target scheme %q; push supports file://, http://, and https://", u.Scheme)
+	}
+	if u.Fragment != "" {
+		return catalogSyncWriteOutcome{}, errors.New("HTTP sync target must not include a fragment")
+	}
+	return catalogSyncWriteOutcome{Method: http.MethodPut}, nil
+}
+
+func addBearerAuthFromEnv(req *http.Request, tokenEnv string) (bool, error) {
+	tokenEnv = strings.TrimSpace(tokenEnv)
+	if tokenEnv == "" {
+		return false, nil
+	}
+	token := strings.TrimSpace(os.Getenv(tokenEnv))
+	if token == "" {
+		if tokenEnv == "MODFETCH_SYNC_TOKEN" {
+			return false, nil
+		}
+		return false, fmt.Errorf("sync token environment variable %s is not set", tokenEnv)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	return true, nil
 }
 
 func fileSyncTargetPath(target string) (string, error) {

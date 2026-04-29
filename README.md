@@ -496,6 +496,6 @@ Roadmap
 - v0.7.x focus:
   - AUR package publication once maintainer SSH auth is available
   - Metadata enrichment from additional registries beyond ModelScope
-  - Authenticated and writable remote catalog sync targets
+  - Completed: authenticated HTTP(S) catalog sync push/pull
   - User-driven archive format expansion
   - Completed: non-interactive TUI snapshots with `modfetch tui --snapshot --json`

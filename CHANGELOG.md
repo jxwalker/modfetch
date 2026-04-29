@@ -13,6 +13,8 @@ Added
   targets, including dry-run and JSON output support.
 - Added HTTP(S) catalog pull targets for `library sync pull`, allowing a
   published catalog URL to be imported with the same dry-run/conflict handling.
+- Added HTTP(S) catalog push targets for `library sync push`, with optional
+  bearer auth from `--token-env` for both push and pull.
 - Added ModelScope metadata enrichment for `modelscope.cn` model URLs, including
   source detection, API-backed metadata, and best-effort fallback metadata.
 - Added `modfetch tui --snapshot` and `--snapshot --json` for non-interactive

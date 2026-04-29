@@ -42,7 +42,9 @@ go test -count=1 ./internal/tui/... ./cmd/modfetch
 These cover navigation, filter persistence, library filters, multi-select bulk
 actions, selected catalog export, settings rendering, config wizard validation,
 non-interactive TUI snapshots backed by a real SQLite state database, and shell
-completion drift for removed TUI selector flags.
+completion drift for removed TUI selector flags. The command package tests also
+exercise HTTP(S) catalog sync push/pull with real `httptest` servers and bearer
+headers.
 
 ## Manual Smoke
 
