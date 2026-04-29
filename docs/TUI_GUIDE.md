@@ -19,6 +19,21 @@ export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 modfetch tui
 ```
 
+## Non-interactive snapshot
+
+Scripts and monitors can inspect the same persisted state without opening the
+interactive Bubble Tea interface:
+
+```bash
+modfetch tui --config /path/to/config.yml --snapshot
+modfetch tui --config /path/to/config.yml --snapshot --json
+```
+
+The snapshot reports download totals by status, active/pending/completed/failed
+rollups, library totals, favorite counts, library sources and model types, and
+the resolved data/download roots. It does not run the first-launch config
+wizard; missing configs return a CLI error.
+
 ## Layout overview
 
 The TUI has **7 tabs** that you can switch between:

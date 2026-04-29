@@ -154,7 +154,10 @@ These are useful, but not required for the first v0.7.0 release:
 - Metadata enrichment from additional model registries beyond ModelScope.
 - Authenticated and writable remote catalog sync targets.
 - More archive formats if users report concrete needs.
-- Non-interactive TUI scripting hooks.
+- [DONE] Non-interactive TUI scripting hooks:
+  `modfetch tui --snapshot` exits without launching the Bubble Tea interface
+  and `--snapshot --json` emits script-friendly downloads, library, and config
+  state.
 
 ## Completed Release History
 

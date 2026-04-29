@@ -41,7 +41,8 @@ go test -count=1 ./internal/tui/... ./cmd/modfetch
 
 These cover navigation, filter persistence, library filters, multi-select bulk
 actions, selected catalog export, settings rendering, config wizard validation,
-and shell completion drift for removed TUI selector flags.
+non-interactive TUI snapshots backed by a real SQLite state database, and shell
+completion drift for removed TUI selector flags.
 
 ## Manual Smoke
 
@@ -58,4 +59,5 @@ For TUI validation:
 
 ```bash
 ./bin/modfetch tui --config ~/.config/modfetch/config.yml
+./bin/modfetch tui --config ~/.config/modfetch/config.yml --snapshot --json
 ```

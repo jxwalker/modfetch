@@ -498,4 +498,4 @@ Roadmap
   - Metadata enrichment from additional registries beyond ModelScope
   - Authenticated and writable remote catalog sync targets
   - User-driven archive format expansion
-  - Non-interactive TUI scripting hooks
+  - Completed: non-interactive TUI snapshots with `modfetch tui --snapshot --json`

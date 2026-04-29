@@ -12,6 +12,7 @@ Common commands
   - ./bin/modfetch download --config ~/.config/modfetch/config.yml --url 'https://proof.ovh.net/files/1Mb.dat'
   - ./bin/modfetch download --config ~/.config/modfetch/config.yml --url 'hf://gpt2/README.md?rev=main'
   - TUI: ./bin/modfetch tui --config ~/.config/modfetch/config.yml
+  - TUI snapshot: ./bin/modfetch tui --config ~/.config/modfetch/config.yml --snapshot --json
 - Tests
   - All tests: make test (go test ./...)
   - With coverage: go test ./... -cover
@@ -58,7 +59,7 @@ Big-picture architecture
   - internal/classifier detects artifact types (e.g., sd.checkpoint/lora/vae/controlnet, llm.gguf) with optional YAML regex overrides.
   - internal/placer maps files into app directories via placement.mapping; supports symlink, hardlink, or copy per config/general. Placement fails if overwriting different content unless allow_overwrite is true.
 - TUI (internal/tui)
-  - Bubble Tea–based dashboard; v2 adds richer sorting/grouping and theming. Refresh cadence and column mode configurable via ui.* in YAML. See docs/TUI_GUIDE.md.
+  - Bubble Tea–based dashboard plus non-interactive `tui --snapshot`; v2 adds richer sorting/grouping and theming. Refresh cadence and column mode configurable via ui.* in YAML. See docs/TUI_GUIDE.md.
 - Logging and metrics
   - Text or JSON logs with level control; URLs are sanitized to avoid leaking secrets.
   - Optional Prometheus textfile exporter writes counters/gauges to metrics.prometheus_textfile.path.

@@ -5,7 +5,7 @@
 
 PROJECT: modfetch - CLI+TUI for downloading LLM/Stable Diffusion models
 VERSION: v0.7.0
-ANALYSIS DATE: 2026-04-28
+ANALYSIS DATE: 2026-04-29
 
 ================================================================================
 1. CURRENT OVERVIEW
@@ -15,6 +15,8 @@ modfetch now ships one maintained TUI entry point:
 
   Command:
     modfetch tui
+    modfetch tui --snapshot
+    modfetch tui --snapshot --json
 
   Package:
     internal/tui
@@ -25,6 +27,7 @@ modfetch now ships one maintained TUI entry point:
     - Library rendering and filters in internal/tui/library_view.go
     - Library bulk actions in internal/tui/library_actions.go
     - Settings rendering in internal/tui/settings_view.go
+    - Non-interactive snapshot assembly in cmd/modfetch/tui_cmd.go
     - Modal handling in internal/tui/modals.go
     - Shared TUI URL normalization in internal/tui/url_resolution.go
     - UI preference persistence in internal/tui/ui_state.go
@@ -62,6 +65,14 @@ Configuration visibility:
     download settings, and placement rules
   - Token presence and rejection status surfaced in the UI
 
+Non-interactive state reporting:
+  - `modfetch tui --snapshot` prints a text summary and exits
+  - `modfetch tui --snapshot --json` prints script-friendly JSON and exits
+  - Snapshot data comes from the same config file and SQLite state database used
+    by the interactive TUI
+  - Missing config files return CLI errors instead of launching the first-run
+    wizard
+
 ================================================================================
 3. IMPLEMENTATION STATUS
 ================================================================================
@@ -95,6 +106,8 @@ Current TUI test coverage includes:
   - Library selection persistence across filters and tab changes
   - Bulk library actions and selected catalog export
   - Settings rendering
+  - Non-interactive TUI snapshot JSON/text output against a real SQLite state
+    database
   - Inspector behavior
   - UI-state persistence
   - Config wizard validation
@@ -125,7 +138,9 @@ Keep future TUI changes in the current package structure:
 
 The current v0.7.0 TUI is a single, maintained interface with download
 management, library maintenance, settings inspection, bulk operations, and
-state persistence. The older dual-implementation comparison has been superseded
-by the current package layout and test coverage.
+state persistence. Non-interactive snapshot hooks now expose the same persisted
+state for scripts without starting the Bubble Tea program. The older
+dual-implementation comparison has been superseded by the current package
+layout and test coverage.
 
 ================================================================================
