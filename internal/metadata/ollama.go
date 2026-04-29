@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -65,7 +64,7 @@ func (f *OllamaFetcher) FetchMetadata(ctx context.Context, rawURL string) (*stat
 	}
 	meta.Description = truncateString(firstNonEmpty(metaContent(page, "description"), metaContent(page, "og:description")), 5000)
 	meta.ThumbnailURL = metaContent(page, "og:image")
-	meta.DownloadCount = parseCompactCount(firstNonEmpty(textForAttr(page, "x-test-pull-count"), textForAttr(page, "data-pull-count")))
+	meta.DownloadCount = parseCompactCount(pullCountText(page))
 	meta.Tags = appendUniqueStrings(meta.Tags, sizeTags(page)...)
 	return meta, nil
 }
@@ -115,14 +114,25 @@ func parseOllamaLibraryURL(rawURL string) (model, tag string, err error) {
 	}
 	model = strings.TrimSpace(model)
 	tag = strings.TrimSpace(tag)
-	if model == "" {
+	if invalidOllamaModelSpec(model) {
 		return "", "", fmt.Errorf("invalid Ollama library URL format")
 	}
 	return model, tag, nil
 }
 
 func ollamaLibraryURL(model string) string {
-	return (&url.URL{Scheme: "https", Host: "ollama.com", Path: path.Join("/library", model)}).String()
+	return "https://ollama.com/library/" + url.PathEscape(model)
+}
+
+func invalidOllamaModelSpec(model string) bool {
+	model = strings.TrimSpace(model)
+	lower := strings.ToLower(model)
+	return model == "" ||
+		model == "." ||
+		model == ".." ||
+		strings.Contains(model, "/") ||
+		strings.Contains(lower, "%2f") ||
+		strings.Contains(model, "..")
 }
 
 var (
@@ -131,6 +141,7 @@ var (
 	singleAttrRe = regexp.MustCompile(`(?is)([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*'([^']*)'`)
 	titleRe      = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 	spanRe       = regexp.MustCompile(`(?is)<span([^>]*)>(.*?)</span>`)
+	pullCountRe  = regexp.MustCompile(`(?is)([0-9][0-9.,]*\s*[KMB]?)\s*</span>\s*<span[^>]*>\s*Downloads\b`)
 	tagStripRe   = regexp.MustCompile(`(?is)<[^>]*>`)
 )
 
@@ -175,10 +186,21 @@ func textForAttr(page, attr string) string {
 	return ""
 }
 
+func pullCountText(page string) string {
+	if count := firstNonEmpty(textForAttr(page, "data-pull-count"), textForAttr(page, "x-test-pull-count")); count != "" {
+		return count
+	}
+	match := pullCountRe.FindStringSubmatch(page)
+	if len(match) >= 2 {
+		return cleanHTMLText(match[1])
+	}
+	return ""
+}
+
 func sizeTags(page string) []string {
 	tags := []string{}
 	for _, match := range spanRe.FindAllStringSubmatch(page, -1) {
-		if len(match) < 3 || !hasHTMLAttr(match[1], "x-test-size") {
+		if len(match) < 3 || (!hasHTMLAttr(match[1], "data-size") && !hasHTMLAttr(match[1], "x-test-size")) {
 			continue
 		}
 		if tag := cleanHTMLText(match[2]); tag != "" {
@@ -189,8 +211,15 @@ func sizeTags(page string) []string {
 }
 
 func hasHTMLAttr(attrs, attr string) bool {
-	re := regexp.MustCompile(fmt.Sprintf(`(?is)(?:^|\s)%s(?:\s|=|$)`, regexp.QuoteMeta(attr)))
-	return re.MatchString(attrs)
+	attr = strings.ToLower(strings.TrimSpace(attr))
+	for _, field := range strings.Fields(attrs) {
+		name, _, _ := strings.Cut(field, "=")
+		name = strings.Trim(strings.TrimSpace(name), `/"'`)
+		if strings.EqualFold(name, attr) {
+			return true
+		}
+	}
+	return false
 }
 
 func cleanHTMLText(value string) string {

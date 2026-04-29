@@ -46,9 +46,9 @@ func TestOllamaFetcherFetchMetadataSuccess(t *testing.T) {
   <meta property="og:image" content="https://ollama.com/public/og.png" />
 </head>
 <body>
-  <span x-test-pull-count>67.2M</span>
-  <span x-test-size>1b</span>
-  <span x-test-size>3b</span>
+  <span data-pull-count>67.2M</span>
+  <span data-size>1b</span>
+  <span data-size>3b</span>
 </body>
 </html>`))
 	}))
@@ -80,6 +80,16 @@ func TestOllamaFetcherFetchMetadataSuccess(t *testing.T) {
 	}
 }
 
+func TestOllamaFetcherParsesLiveStyleAttributes(t *testing.T) {
+	page := `<span x-test-pull-count>42K</span><span>Downloads</span><span x-test-size>7b</span>`
+	if got := parseCompactCount(pullCountText(page)); got != 42_000 {
+		t.Fatalf("live-style pull count = %d, want 42000", got)
+	}
+	if tags := sizeTags(page); len(tags) != 1 || tags[0] != "7b" {
+		t.Fatalf("live-style size tags = %v, want [7b]", tags)
+	}
+}
+
 func TestOllamaFetcherFallsBackOnHTTPFailure(t *testing.T) {
 	client := routedHTTPClient(t, "ollama.com", http.NotFoundHandler())
 	f := NewOllamaFetcher(client)
@@ -89,6 +99,21 @@ func TestOllamaFetcherFallsBackOnHTTPFailure(t *testing.T) {
 	}
 	if meta.Source != "ollama" || meta.ModelName != "qwen2.5" || meta.HomepageURL != "https://ollama.com/library/qwen2.5" {
 		t.Fatalf("unexpected fallback metadata: %+v", meta)
+	}
+}
+
+func TestParseOllamaLibraryURLRejectsTraversal(t *testing.T) {
+	tests := []string{
+		"https://ollama.com/library/..%2Fdownload",
+		"https://ollama.com/library/%2E",
+		"https://ollama.com/library/%2E%2E",
+		"https://ollama.com/library/model..name",
+		"https://ollama.com/library/model%252Fname",
+	}
+	for _, rawURL := range tests {
+		if _, _, err := parseOllamaLibraryURL(rawURL); err == nil {
+			t.Fatalf("parseOllamaLibraryURL(%q) should reject traversal model", rawURL)
+		}
 	}
 }
 
