@@ -457,10 +457,11 @@ result, err := scanner.ScanWithContext(ctx, dirs, scanner.Options{
 
 **Approach:** One transaction per file upsert.
 
-This keeps scan cancellation simple and prevents one bad file from rolling back
-unrelated metadata discovered earlier in the scan. If profiling later shows
-database writes dominating scan time, batch transactions are the likely
-optimization point, but they are not part of the current roadmap.
+This allows partial progress to be persisted even if the scan is cancelled, and
+ensures that a database error during a single file's upsert does not roll back
+unrelated metadata successfully stored earlier in the scan. If profiling later
+shows transaction overhead dominating scan time, batching multiple upserts would
+be the primary optimization point, though it is not currently on the roadmap.
 
 ### Filename Parsing
 
