@@ -249,6 +249,13 @@ func printCatalogImportResult(result *catalog.ImportResult, jsonOut bool) error 
 
 type stringListFlag []string
 
+const (
+	defaultSyncTokenEnv      = "MODFETCH_SYNC_TOKEN"
+	allowInsecureSyncHTTPEnv = "MODFETCH_ALLOW_INSECURE_HTTP"
+)
+
+var syncHTTPClient = &http.Client{Timeout: 30 * time.Second}
+
 func (f *stringListFlag) String() string {
 	return strings.Join(*f, ",")
 }
@@ -417,14 +424,14 @@ func syncTargetReader(ctx context.Context, target, tokenEnv string) (io.Reader, 
 	if _, err := addBearerAuthFromEnv(req, tokenEnv); err != nil {
 		return nil, func() {}, err
 	}
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := syncHTTPClient.Do(req)
 	if err != nil {
 		return nil, func() {}, fmt.Errorf("fetch sync target: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		statusErr := httpStatusError("fetch sync target", resp)
 		_ = resp.Body.Close()
-		return nil, func() {}, fmt.Errorf("fetch sync target: HTTP %s", resp.Status)
+		return nil, func() {}, statusErr
 	}
 	return resp.Body, func() { _ = resp.Body.Close() }, nil
 }
@@ -437,6 +444,7 @@ type catalogSyncWriteOutcome struct {
 }
 
 func writeCatalogSyncTarget(ctx context.Context, target string, cat *catalog.Catalog, tokenEnv string) (catalogSyncWriteOutcome, error) {
+	target = strings.TrimSpace(target)
 	outcome, err := describeCatalogSyncTarget(target)
 	if err != nil {
 		return outcome, err
@@ -450,7 +458,6 @@ func writeCatalogSyncTarget(ctx context.Context, target string, cat *catalog.Cat
 
 	var body bytes.Buffer
 	enc := json.NewEncoder(&body)
-	enc.SetIndent("", "  ")
 	if err := enc.Encode(cat); err != nil {
 		return outcome, fmt.Errorf("encode catalog: %w", err)
 	}
@@ -465,15 +472,14 @@ func writeCatalogSyncTarget(ctx context.Context, target string, cat *catalog.Cat
 		return outcome, err
 	}
 	outcome.Authenticated = authenticated
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := syncHTTPClient.Do(req)
 	if err != nil {
 		return outcome, fmt.Errorf("push sync target: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	outcome.Status = resp.Status
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return outcome, fmt.Errorf("push sync target: HTTP %s", resp.Status)
+		return outcome, httpStatusError("push sync target", resp)
 	}
 	return outcome, nil
 }
@@ -510,13 +516,27 @@ func addBearerAuthFromEnv(req *http.Request, tokenEnv string) (bool, error) {
 	}
 	token := strings.TrimSpace(os.Getenv(tokenEnv))
 	if token == "" {
-		if tokenEnv == "MODFETCH_SYNC_TOKEN" {
+		if tokenEnv == defaultSyncTokenEnv {
 			return false, nil
 		}
 		return false, fmt.Errorf("sync token environment variable %s is not set", tokenEnv)
 	}
+	if req.URL == nil || req.URL.Scheme != "https" {
+		if strings.TrimSpace(os.Getenv(allowInsecureSyncHTTPEnv)) != "1" {
+			return false, fmt.Errorf("refusing to send bearer auth to a non-HTTPS sync target; set %s=1 to allow local or otherwise trusted HTTP sync", allowInsecureSyncHTTPEnv)
+		}
+	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	return true, nil
+}
+
+func httpStatusError(action string, resp *http.Response) error {
+	detailBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	detail := strings.TrimSpace(string(detailBytes))
+	if detail == "" {
+		return fmt.Errorf("%s: HTTP %s", action, resp.Status)
+	}
+	return fmt.Errorf("%s: HTTP %s: %s", action, resp.Status, detail)
 }
 
 func fileSyncTargetPath(target string) (string, error) {

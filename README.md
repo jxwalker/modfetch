@@ -110,7 +110,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 
 ✅ **Production Ready:** Core download, verify, and TUI features are stable
 
-🚀 **Active Development:** AUR publication, catalog sync targets, and metadata enrichment
+🚀 **Active Development:** AUR publication and metadata enrichment
 
 📖 **Documentation:** Comprehensive guides with visual examples
 

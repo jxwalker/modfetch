@@ -218,6 +218,8 @@ Sync targets build on the same catalog schema and import conflict behavior.
 using `PUT`. Pull supports those local targets plus `http://` and `https://`
 catalog URLs. HTTP(S) push and pull can add `Authorization: Bearer ...` from an
 environment variable without storing secrets in the config file.
+Bearer tokens are only sent to HTTPS targets unless
+`MODFETCH_ALLOW_INSECURE_HTTP=1` is set for trusted local HTTP test endpoints.
 
 Sync options:
 - `--target URI` - sync target URI or path
@@ -722,12 +724,15 @@ fi
 | `MODFETCH_CONFIG` | Default config file path |
 | `HF_TOKEN` | HuggingFace API token |
 | `CIVITAI_TOKEN` | CivitAI API token |
+| `MODFETCH_SYNC_TOKEN` | Default bearer token env var used by `--token-env` for HTTP(S) `library sync` targets |
+| `MODFETCH_ALLOW_INSECURE_HTTP` | Set to `1` only to allow bearer auth over trusted plain-HTTP sync targets |
 
 **Example:**
 ```bash
 export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 export HF_TOKEN="hf_..."
 export CIVITAI_TOKEN="..."
+export MODFETCH_SYNC_TOKEN="..."
 
 modfetch download --url 'hf://private/repo/model.gguf'
 ```

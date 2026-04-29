@@ -205,7 +205,7 @@ func TestHandleLibrarySyncPushDryRunDoesNotWriteTarget(t *testing.T) {
 	}
 }
 
-func TestHandleLibrarySyncPushHTTPTargetWithBearerToken(t *testing.T) {
+func TestHandleLibrarySyncPushHTTPTargetWithDefaultBearerToken(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := writeLibraryConfig(t, filepath.Join(dir, "cfg"))
 	db, err := state.Open(&config.Config{General: config.General{
@@ -227,10 +227,11 @@ func TestHandleLibrarySyncPushHTTPTargetWithBearerToken(t *testing.T) {
 		t.Fatalf("close db: %v", err)
 	}
 
-	t.Setenv("MODFETCH_TEST_SYNC_TOKEN", "secret-token")
-	var received bool
+	t.Setenv("MODFETCH_SYNC_TOKEN", "secret-token")
+	t.Setenv("MODFETCH_ALLOW_INSECURE_HTTP", "1")
+	received := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		received = true
+		received <- struct{}{}
 		if r.Method != http.MethodPut {
 			t.Errorf("unexpected method %s", r.Method)
 		}
@@ -256,11 +257,13 @@ func TestHandleLibrarySyncPushHTTPTargetWithBearerToken(t *testing.T) {
 	defer server.Close()
 
 	out := captureStdout(t, func() {
-		if err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", server.URL, "--token-env", "MODFETCH_TEST_SYNC_TOKEN", "--json"}); err != nil {
+		if err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", server.URL, "--json"}); err != nil {
 			t.Fatalf("library sync push HTTP: %v", err)
 		}
 	})
-	if !received {
+	select {
+	case <-received:
+	default:
 		t.Fatal("expected HTTP sync target to receive a request")
 	}
 	var result librarySyncPushResult
@@ -269,6 +272,21 @@ func TestHandleLibrarySyncPushHTTPTargetWithBearerToken(t *testing.T) {
 	}
 	if result.Method != http.MethodPut || result.Status != "201 Created" || !result.Authenticated || result.Models != 1 {
 		t.Fatalf("unexpected sync push result: %+v", result)
+	}
+}
+
+func TestHandleLibrarySyncPushHTTPRefusesBearerTokenWithoutTLS(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := writeLibraryConfig(t, filepath.Join(dir, "cfg"))
+	t.Setenv("MODFETCH_SYNC_TOKEN", "secret-token")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("insecure bearer auth should fail before contacting HTTP target")
+	}))
+	defer server.Close()
+
+	err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", server.URL})
+	if err == nil || !strings.Contains(err.Error(), "refusing to send bearer auth to a non-HTTPS sync target") {
+		t.Fatalf("expected insecure bearer auth error, got %v", err)
 	}
 }
 
@@ -381,6 +399,7 @@ func TestHandleLibrarySyncPullHTTPTargetWithBearerToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("MODFETCH_TEST_SYNC_TOKEN", "secret-token")
+	t.Setenv("MODFETCH_ALLOW_INSECURE_HTTP", "1")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Errorf("unexpected method %s", r.Method)

@@ -401,10 +401,12 @@ supports `file://`, plain local paths, and writable HTTP(S) endpoints using
 and simple catalog services. Pull supports those same local targets plus
 HTTP(S) catalog URLs. HTTP(S) sync can read a bearer token from
 `--token-env NAME` without storing secrets in the config file; the default env
-name is `MODFETCH_SYNC_TOKEN` when set. All pull targets preserve the same
-conflict checks as import. `sync push --dry-run` reports the target and model
-count without writing or contacting HTTP targets, and `sync pull --dry-run`
-reports import actions without changing the local database.
+name is `MODFETCH_SYNC_TOKEN` when set. Bearer auth is sent only to HTTPS
+targets unless `MODFETCH_ALLOW_INSECURE_HTTP=1` is set for trusted local HTTP
+testing. All pull targets preserve the same conflict checks as import. `sync
+push --dry-run` reports the target and model count without writing or contacting
+HTTP targets, and `sync pull --dry-run` reports import actions without changing
+the local database.
 
 ## Metadata Sources
 
