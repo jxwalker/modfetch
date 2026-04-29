@@ -145,8 +145,11 @@ These are useful, but not required for the first v0.7.0 release:
 - [DONE] Remote catalog sync foundation:
   `library sync push/pull --target file://...` reuses the portable catalog
   schema for shared folders, mounted drives, and local filesystem sync tests.
+- [DONE] Read-only remote catalog pull:
+  `library sync pull --target https://...` imports published catalogs with the
+  same dry-run and conflict handling as local catalog imports.
 - Metadata enrichment from additional model registries.
-- Additional remote catalog sync targets beyond `file://`.
+- Authenticated and writable remote catalog sync targets.
 - More archive formats if users report concrete needs.
 - Non-interactive TUI scripting hooks.
 

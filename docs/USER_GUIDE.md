@@ -146,8 +146,10 @@ modfetch library sync push --config ~/.config/modfetch/config.yml \
   --target file:///srv/modfetch/catalog.json
 modfetch library sync pull --config ~/.config/modfetch/config.yml \
   --target file:///srv/modfetch/catalog.json --dry-run
+modfetch library sync pull --config ~/.config/modfetch/config.yml \
+  --target https://example.com/modfetch-catalog.json --dry-run
 
-The first supported sync target is `file://`. Plain filesystem paths are accepted too, which is useful for mounted shares or a local backup directory.
+Push supports `file://` and plain filesystem paths, which is useful for mounted shares or a local backup directory. Pull supports those local targets plus read-only HTTP(S) catalog URLs.
 
 ### TUI dashboard
 
