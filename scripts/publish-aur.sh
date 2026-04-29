@@ -5,6 +5,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 aur_dir="$root/packaging/aur"
 pkgbase="${AUR_PKGBASE:-modfetch-bin}"
 remote="${AUR_REMOTE:-ssh://aur@aur.archlinux.org/${pkgbase}.git}"
+branch="${AUR_BRANCH:-master}"
 tag="${1:-}"
 
 if [[ -z "$tag" ]]; then
@@ -19,7 +20,7 @@ fi
 
 "$root/scripts/check-aur-package.sh" "$tag"
 
-if ! ssh -o BatchMode=yes -o ConnectTimeout=10 aur@aur.archlinux.org help >/dev/null 2>&1; then
+if [[ "$remote" == ssh://aur@aur.archlinux.org/* ]] && ! ssh -o BatchMode=yes -o ConnectTimeout=10 aur@aur.archlinux.org help >/dev/null 2>&1; then
   cat >&2 <<'EOF'
 AUR SSH authentication failed.
 
@@ -44,7 +45,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-git -c init.defaultBranch=master clone "$remote" "$workdir/$pkgbase"
+git -c init.defaultBranch="$branch" clone --depth 1 "$remote" "$workdir/$pkgbase"
 
 cp "$aur_dir/PKGBUILD" "$aur_dir/.SRCINFO" "$workdir/$pkgbase/"
 cd "$workdir/$pkgbase"
@@ -56,6 +57,6 @@ if git diff --cached --quiet; then
 fi
 
 git commit -m "Update ${pkgbase} to ${tag}"
-git push origin master
+git push origin "HEAD:${branch}"
 
 echo "Published ${pkgbase} ${tag} to AUR"

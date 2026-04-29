@@ -52,7 +52,7 @@ The repository publish helper performs validation, auth checking, AUR clone,
 file copy, commit, and push:
 
 ```bash
-scripts/publish-aur.sh v0.7.0
+scripts/publish-aur.sh vX.Y.Z
 ```
 
 If authentication fails, paste `~/.ssh/aur.pub` into the AUR account profile and
