@@ -35,7 +35,7 @@ _modfetch_completions()
     local cur prev words cword
     _init_completion || return
     local presets="automatic1111 comfyui forge hf-cache ollama"
-    local cmds="config download starter place verify status tui library batch dedupe clean hostcaps version help completion"
+    local cmds="config download discover starter place verify status tui library batch dedupe clean hostcaps version help completion"
     if [[ ${cword} -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${cmds}" -- "$cur") )
         return
@@ -57,6 +57,18 @@ _modfetch_completions()
             esac ;;
         download)
             COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --dry-run --force --no-auth-preflight --extract --extract-dir --quant --list-quants" -- "$cur") ) ;;
+        discover)
+            if [[ ${cword} -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "search download" -- "$cur") )
+                return
+            fi
+            case ${words[2]} in
+                search)
+                    COMPREPLY=( $(compgen -W "--config --log-level --json --provider --limit huggingface civitai all" -- "$cur") ) ;;
+                download)
+                    COMPREPLY=( $(compgen -W "--config --log-level --json --provider --limit --select --dest --place --summary-json --dry-run --quiet --no-resume huggingface civitai" -- "$cur") ) ;;
+                *) ;;
+            esac ;;
         starter)
             if [[ ${cword} -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "list show download" -- "$cur") )
@@ -129,7 +141,7 @@ const zshCompletion = `#compdef modfetch
 # zsh completion for modfetch (basic)
 _modfetch() {
   local -a cmds
-  cmds=(config download starter place verify status tui library batch dedupe clean hostcaps version help completion)
+  cmds=(config download discover starter place verify status tui library batch dedupe clean hostcaps version help completion)
   if (( CURRENT == 2 )); then
     _describe 'command' cmds
     return
@@ -154,6 +166,20 @@ _modfetch() {
       ;;
     download)
       _arguments '*:options:(--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --dry-run --force --no-auth-preflight --extract --extract-dir --quant --list-quants)'
+      ;;
+    discover)
+      if (( CURRENT == 3 )); then
+        _arguments '*:subcommands:(search download)'
+      else
+        case $words[3] in
+          search)
+            _arguments '*:options:(--config --log-level --json --provider --limit huggingface civitai all)'
+            ;;
+          download)
+            _arguments '*:options:(--config --log-level --json --provider --limit --select --dest --place --summary-json --dry-run --quiet --no-resume huggingface civitai)'
+            ;;
+        esac
+      fi
       ;;
     starter)
       if (( CURRENT == 3 )); then
@@ -236,6 +262,7 @@ compdef _modfetch modfetch
 const fishCompletion = `# fish completion for modfetch
 complete -c modfetch -f -n "__fish_use_subcommand" -a "config" -d "config ops"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "download" -d "download assets"
+complete -c modfetch -f -n "__fish_use_subcommand" -a "discover" -d "search real model providers"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "starter" -d "beginner starter downloads"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "dedupe" -d "dedupe duplicate downloads"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "place" -d "place files"
@@ -293,6 +320,25 @@ complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract -d "Ex
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract-dir -d "Extraction directory"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l quant -d "HuggingFace quantization to download"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l list-quants -d "List HuggingFace quantizations"
+complete -c modfetch -n "__fish_seen_subcommand_from discover" -a "search" -d "Search real model providers"
+complete -c modfetch -n "__fish_seen_subcommand_from discover" -a "download" -d "Download a selected discovery result"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from search" -l config -d "Path to config"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from search" -l log-level -d "Log level"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from search" -l json -d "JSON output"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from search" -l provider -a "huggingface civitai all" -d "Provider"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from search" -l limit -d "Result limit"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l config -d "Path to config"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l log-level -d "Log level"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l json -d "JSON output"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l provider -a "huggingface civitai" -d "Provider"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l limit -d "Result limit"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l select -d "Result index"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l dest -d "Destination path"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l place -d "Place after download"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l summary-json -d "Print completion summary as JSON"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l dry-run -d "Plan without downloading"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l quiet -d "Suppress progress and info logs"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l no-resume -d "Start fresh instead of resuming"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "list" -d "List starter downloads"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "show" -d "Show starter details"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "download" -d "Download a starter"

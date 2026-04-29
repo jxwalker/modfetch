@@ -45,8 +45,9 @@ scripts/uat/real_download_matrix.sh
 
 The real download matrix builds the local binary if needed, creates an isolated
 temporary config, then performs live public downloads through direct HTTP,
-`starter://`, and Hugging Face resolver paths. It verifies the resulting
-download records before removing its temporary workspace.
+`starter://`, Hugging Face resolver paths, and a tiny real Hugging Face model
+selected through `discover`. It verifies the resulting download records before
+removing its temporary workspace.
 
 Set `MODFETCH_UAT_CIVITAI_URI` to add a known-small CivitAI download to the
 matrix. This is intentionally opt-in because CivitAI availability, gating, and

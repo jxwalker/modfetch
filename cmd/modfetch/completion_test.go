@@ -7,7 +7,7 @@ import (
 
 func TestCompletionTopLevelCommands(t *testing.T) {
 	for name, script := range completionScripts() {
-		for _, command := range []string{"config", "download", "starter", "place", "verify", "status", "tui", "batch", "dedupe", "clean", "hostcaps", "version", "help", "completion"} {
+		for _, command := range []string{"config", "download", "discover", "starter", "place", "verify", "status", "tui", "batch", "dedupe", "clean", "hostcaps", "version", "help", "completion"} {
 			want := completionCommandToken(name, command)
 			if !strings.Contains(script, want) {
 				t.Fatalf("%s completion missing top-level command %q", name, command)
@@ -20,6 +20,7 @@ func TestCompletionCurrentFlags(t *testing.T) {
 	tests := map[string][]string{
 		"config":   {"--strict", "--out"},
 		"download": {"--no-resume", "--summary-json", "--batch-parallel", "--dry-run", "--force", "--no-auth-preflight", "--quant", "--list-quants"},
+		"discover": {"--provider", "--limit", "--select", "--summary-json", "--dry-run"},
 		"starter":  {"--id", "--summary-json", "--dry-run"},
 		"place":    {"--dry-run", "--preset", "--list-presets"},
 		"batch":    {"--naming-pattern"},
@@ -62,16 +63,19 @@ func TestCompletionNestedSubcommandFlags(t *testing.T) {
 		case "bash":
 			assertContains(t, name, "config", configSection, "case ${words[2]}", "validate)", "wizard)", "--strict", "--out")
 			assertContains(t, name, "batch", batchSection, "case ${words[2]}", "import)", "--naming-pattern")
+			assertContains(t, name, "discover", completionCommandSection(t, name, script, "discover"), "search", "download", "--provider", "--select")
 			assertContains(t, name, "library", completionCommandSection(t, name, script, "library"), "sync", "push", "pull", "--target", "--dry-run", "--token-env")
 			assertContains(t, name, "starter", completionCommandSection(t, name, script, "starter"), "list", "show", "download", "gpt2-config")
 		case "zsh":
 			assertContains(t, name, "config", configSection, "case $words[3]", "validate)", "wizard)", "--strict", "--out")
 			assertContains(t, name, "batch", batchSection, "case $words[3]", "import)", "--naming-pattern")
+			assertContains(t, name, "discover", completionCommandSection(t, name, script, "discover"), "search", "download", "--provider", "--select")
 			assertContains(t, name, "library", completionCommandSection(t, name, script, "library"), "sync", "push", "pull", "--target", "--dry-run", "--token-env")
 			assertContains(t, name, "starter", completionCommandSection(t, name, script, "starter"), "list", "show", "download", "gpt2-config")
 		case "fish":
 			assertContains(t, name, "config", configSection, "and __fish_seen_subcommand_from validate", "and __fish_seen_subcommand_from wizard", "-l strict", "-l out")
 			assertContains(t, name, "batch", batchSection, "and __fish_seen_subcommand_from import", "-l naming-pattern")
+			assertContains(t, name, "discover", completionCommandSection(t, name, script, "discover"), "search", "download", "-l provider", "-l select")
 			assertContains(t, name, "library", completionCommandSection(t, name, script, "library"), "sync", "push", "pull", "-l target", "-l dry-run", "-l token-env")
 			assertContains(t, name, "starter", completionCommandSection(t, name, script, "starter"), "gpt2-config", "-l id", "-l dry-run")
 		}

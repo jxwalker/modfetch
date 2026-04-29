@@ -8,6 +8,7 @@ Complete command-line reference for modfetch. For the visual TUI interface, see 
 - [Global Flags](#global-flags)
 - [Commands](#commands)
   - [download](#download)
+  - [discover](#discover)
   - [starter](#starter)
   - [verify](#verify)
   - [place](#place)
@@ -32,6 +33,8 @@ modfetch provides a rich CLI for downloading, verifying, and managing AI models.
 **Quick command summary:**
 ```bash
 modfetch download --url URL       # Download a file
+modfetch discover search "tiny gpt2"
+modfetch discover download "sshleifer/tiny-gpt2" --select 1
 modfetch verify --all              # Verify all downloads
 modfetch place --path FILE         # Place model into app
 modfetch clean --days 7            # Clean old partials
@@ -119,6 +122,23 @@ modfetch download --url 'civitai://model/123456'
 modfetch download --url 'civitai://model/123456?version=456789'
 modfetch download --url 'civitai://model/123456?file=specific-file.safetensors'
 ```
+
+### discover
+
+Search real model providers, inspect the recommended downloadable file, and
+download a selected result through the normal `download` pipeline.
+
+```bash
+modfetch discover search "tiny gpt2"
+modfetch discover search "llama gguf" --provider huggingface --limit 10
+modfetch discover download "sshleifer/tiny-gpt2" --select 1 --summary-json
+```
+
+Search results include a resolver URI that can be copied into `download`, batch
+files, or the TUI new-download modal. `discover download` searches first, picks
+the `--select` result number, and then delegates to `download`, so normal flags
+such as `--config`, `--dest`, `--place`, `--dry-run`, `--quiet`, and
+`--summary-json` still apply.
 
 ### starter
 
