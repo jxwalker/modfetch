@@ -379,6 +379,7 @@ modfetch library import --input modfetch-catalog.json --dry-run
 modfetch library import --input modfetch-catalog.json
 modfetch library sync push --target file:///srv/modfetch/catalog.json
 modfetch library sync pull --target file:///srv/modfetch/catalog.json --dry-run
+modfetch library sync pull --target https://example.com/modfetch-catalog.json --dry-run
 ```
 
 The JSON catalog includes:
@@ -391,11 +392,13 @@ Import dry-run reports the planned `create`, `update`, `skip`, and `conflict`
 counts without writing. Re-importing the same catalog is idempotent and reports
 unchanged entries as skips.
 
-For repeatable backups or shared-machine handoff, use `library sync`. The first
-sync target is `file://`, so it works with shared folders, mounted storage, and
-local filesystem paths while preserving the same conflict checks as import.
-`sync push --dry-run` reports the target and model count without writing, and
-`sync pull --dry-run` reports import actions without changing the local database.
+For repeatable backups or shared-machine handoff, use `library sync`. Push
+supports `file://` and plain local paths, so it works with shared folders,
+mounted storage, and local filesystem paths. Pull supports those same local
+targets plus read-only HTTP(S) catalog URLs. All pull targets preserve the same
+conflict checks as import. `sync push --dry-run` reports the target and model
+count without writing, and `sync pull --dry-run` reports import actions without
+changing the local database.
 
 ## Metadata Sources
 

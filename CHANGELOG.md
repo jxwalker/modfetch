@@ -11,6 +11,8 @@ Added
   published release checksums.
 - Added `library sync push` and `library sync pull` for `file://` catalog sync
   targets, including dry-run and JSON output support.
+- Added HTTP(S) catalog pull targets for `library sync pull`, allowing a
+  published catalog URL to be imported with the same dry-run/conflict handling.
 
 Docs
 - Documented Arch Linux AUR package maintenance and release checklist coverage.

@@ -457,6 +457,7 @@ modfetch download --url 'https://...' --summary-json
 modfetch library export --output modfetch-catalog.json
 modfetch library sync push --target file:///srv/modfetch/catalog.json
 modfetch library sync pull --target file:///srv/modfetch/catalog.json --dry-run
+modfetch library sync pull --target https://example.com/modfetch-catalog.json --dry-run
 ```
 
 ---

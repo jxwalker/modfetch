@@ -7,11 +7,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/jxwalker/modfetch/internal/catalog"
 	"github.com/jxwalker/modfetch/internal/config"
@@ -114,7 +116,7 @@ func handleLibrarySync(ctx context.Context, args []string) error {
 func handleLibrarySyncPush(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("library sync push", flag.ContinueOnError)
 	common := addCommonConfigLogFlags(fs, "print sync push result as JSON")
-	target := fs.String("target", "", "sync target URI or path; file:// targets are supported")
+	target := fs.String("target", "", "sync target URI or path; file:// targets and plain paths are supported")
 	dryRun := fs.Bool("dry-run", false, "report without writing the target catalog")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -164,7 +166,7 @@ func handleLibrarySyncPush(ctx context.Context, args []string) error {
 func handleLibrarySyncPull(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("library sync pull", flag.ContinueOnError)
 	common := addCommonConfigLogFlags(fs, "print sync pull result as JSON")
-	target := fs.String("target", "", "sync target URI or path; file:// targets are supported")
+	target := fs.String("target", "", "sync target URI or path; file://, http://, https://, and plain paths are supported")
 	dryRun := fs.Bool("dry-run", false, "report changes without writing to the library")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -172,22 +174,18 @@ func handleLibrarySyncPull(ctx context.Context, args []string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	targetPath, err := fileSyncTargetPath(*target)
+	r, closeFn, err := syncTargetReader(ctx, *target)
 	if err != nil {
 		return err
 	}
+	defer closeFn()
 	db, err := openLibraryDB(*common.configPath)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = db.Close() }()
 
-	f, err := os.Open(targetPath)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = f.Close() }()
-	result, err := catalog.Import(db, f, catalog.ImportOptions{DryRun: *dryRun})
+	result, err := catalog.Import(db, r, catalog.ImportOptions{DryRun: *dryRun})
 	if err != nil {
 		return err
 	}
@@ -365,12 +363,55 @@ func outputWriter(path string) (io.Writer, func(), error) {
 	return f, func() { _ = f.Close() }, nil
 }
 
+func syncTargetReader(ctx context.Context, target string) (io.Reader, func(), error) {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return nil, func() {}, errors.New("library sync requires --target")
+	}
+	if !isURITarget(target) || strings.HasPrefix(strings.ToLower(target), "file:") {
+		path, err := fileSyncTargetPath(target)
+		if err != nil {
+			return nil, func() {}, err
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, func() {}, err
+		}
+		return f, func() { _ = f.Close() }, nil
+	}
+	u, err := url.Parse(target)
+	if err != nil {
+		return nil, func() {}, fmt.Errorf("parse sync target: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, func() {}, fmt.Errorf("unsupported sync target scheme %q; pull supports file://, http://, and https://", u.Scheme)
+	}
+	if u.Fragment != "" {
+		return nil, func() {}, errors.New("HTTP sync target must not include a fragment")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, func() {}, fmt.Errorf("create sync request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, func() {}, fmt.Errorf("fetch sync target: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		_ = resp.Body.Close()
+		return nil, func() {}, fmt.Errorf("fetch sync target: HTTP %s", resp.Status)
+	}
+	return resp.Body, func() { _ = resp.Body.Close() }, nil
+}
+
 func fileSyncTargetPath(target string) (string, error) {
 	target = strings.TrimSpace(target)
 	if target == "" {
 		return "", errors.New("library sync requires --target")
 	}
-	if !strings.Contains(target, "://") && !strings.HasPrefix(strings.ToLower(target), "file:") {
+	if !isURITarget(target) && !strings.HasPrefix(strings.ToLower(target), "file:") {
 		return filepath.Clean(target), nil
 	}
 	u, err := url.Parse(target)
@@ -398,6 +439,10 @@ func fileSyncTargetPath(target string) (string, error) {
 		return "", fmt.Errorf("decode file sync target path: %w", err)
 	}
 	return filepath.Clean(filepath.FromSlash(decodedPath)), nil
+}
+
+func isURITarget(target string) bool {
+	return strings.Contains(target, "://")
 }
 
 func writeCatalogFile(path string, cat *catalog.Catalog) error {
