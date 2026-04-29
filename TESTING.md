@@ -46,6 +46,9 @@ completion drift for removed TUI selector flags. The command package tests also
 exercise HTTP(S) catalog sync push/pull with real `httptest` servers and bearer
 headers.
 
+The metadata package exercises registry fetchers against local HTTP/TLS servers,
+including Hugging Face, CivitAI, ModelScope, and Ollama Library behavior.
+
 ## Manual Smoke
 
 After `make build`, verify non-gated behavior with a public URL:

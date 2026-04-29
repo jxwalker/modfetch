@@ -151,7 +151,9 @@ These are useful, but not required for the first v0.7.0 release:
 - [DONE] ModelScope metadata enrichment:
   ModelScope URLs are recognized as `modelscope` sources and enrich library
   records from the ModelScope model API with best-effort offline fallback.
-- Metadata enrichment from additional model registries beyond ModelScope.
+- [DONE] Ollama Library metadata enrichment beyond ModelScope:
+  `ollama.com/library/...` pages are recognized as `ollama` sources and enrich
+  library records with page metadata plus best-effort fallback.
 - [DONE] Authenticated and writable remote catalog sync targets:
   HTTP(S) sync targets can use bearer tokens from `--token-env`, and
   `library sync push --target https://...` publishes catalogs with `PUT`.

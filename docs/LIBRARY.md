@@ -211,6 +211,7 @@ Press `F`, choose `Source`, and press `Enter` to cycle through known sources:
 - `huggingface` - Models from HuggingFace Hub
 - `civitai` - Models from CivitAI
 - `modelscope` - Models from ModelScope
+- `ollama` - Models from Ollama Library pages
 - `local` - Locally scanned models
 - `direct` - Direct URL downloads
 
@@ -463,9 +464,22 @@ For models downloaded from ModelScope:
 - Model type inferred from tasks, tags, or filename
 - Quantization and file format inferred from resolved filenames
 
+### Ollama Library
+
+For models tracked from Ollama Library pages:
+
+**Metadata page:** `https://ollama.com/library/{model}`
+
+**Fetched metadata:**
+- Model name, description, and library page link
+- Download count when reported by the page
+- Available parameter-size tags when shown on the page
+- Version tag from URLs such as `https://ollama.com/library/llama3.2:1b`
+- Source: `ollama`
+
 ### Direct Downloads
 
-For direct URL downloads (non-HuggingFace, non-CivitAI, non-ModelScope):
+For direct URL downloads (non-HuggingFace, non-CivitAI, non-ModelScope, non-Ollama):
 
 **Basic metadata only:**
 - URL as source
@@ -557,7 +571,11 @@ For large libraries (1000+ models):
    - Check API status at https://modelscope.cn
    - Verify the URL uses `/models/{owner}/{name}`
 
-4. **For local scans:**
+4. **For Ollama Library pages:**
+   - Verify the URL uses `https://ollama.com/library/{model}`
+   - Tagged pages such as `https://ollama.com/library/llama3.2:1b` store the tag as the version
+
+5. **For local scans:**
    - Metadata is limited to filename parsing
    - Rename files to include quantization (e.g., `model.Q4_K_M.gguf`)
    - Include parameter count in filename (e.g., `llama-7b.gguf`)
@@ -592,13 +610,11 @@ Add personal notes and ratings:
 2. Notes and ratings are stored per-model
 3. Searchable via the main search function
 
-### Bulk Operations (Future Enhancement)
+### Bulk Operations
 
-Planned features:
-- Bulk favorite/unfavorite
-- Bulk tagging
-- Export library to CSV/JSON
-- Import from external catalogs
+Available bulk actions include retry, staged-data delete, verify, place,
+favorite/unfavorite, and selected catalog export. Destructive actions show a
+confirmation summary before they run.
 
 ### Integration with Download Manager
 

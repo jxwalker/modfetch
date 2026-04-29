@@ -1,6 +1,6 @@
 # modfetch
 
-> **Fast, resilient downloads for AI models** • Download, verify, and organize LLM and Stable Diffusion models from HuggingFace, CivitAI, and ModelScope
+> **Fast, resilient downloads for AI models** • Download, verify, and organize LLM and Stable Diffusion models from HuggingFace, CivitAI, ModelScope, and Ollama Library pages
 
 ```
 ╔═══════════════════════════════════════════════════════════╗
@@ -42,12 +42,12 @@
 
 ### 📚 Model Library
 - **Browse and search** all your downloaded models
-- **Rich metadata** from HuggingFace, CivitAI, and ModelScope APIs
+- **Rich metadata** from HuggingFace, CivitAI, ModelScope APIs, and Ollama Library pages
 - **Favorites system** to mark important models
 - **Directory scanner** to discover existing models (10-100x faster with indexes)
 - **Detailed view** with specs, descriptions, tags, and links
 - **Filter by type and source** (LLM, LoRA, VAE, Checkpoint, etc.)
-- **ModelScope source support** with API-backed enrichment; see the [Library Guide](docs/LIBRARY.md#modelscope)
+- **ModelScope and Ollama source support** with registry-backed enrichment; see the [Library Guide](docs/LIBRARY.md#metadata-sources)
 
 ### 🎯 Organization
 - **Automatic placement** into app directories
@@ -477,7 +477,7 @@ Project layout
 - internal/resolver: hf:// and civitai:// resolvers
 - internal/placer: placement engine
 - internal/scanner: directory scanner for model discovery
-- internal/metadata: metadata fetchers for HuggingFace, CivitAI, and ModelScope
+- internal/metadata: metadata fetchers for HuggingFace, CivitAI, ModelScope, and Ollama
 - internal/tui: TUI models (Library, Scanner, Settings, Downloads)
 - internal/state: SQLite state DB with indexed metadata storage
 - internal/metrics: Prometheus textfile metrics
@@ -495,7 +495,7 @@ Roadmap
 - See docs/ROADMAP.md for the active, prioritized roadmap
 - v0.7.x focus:
   - AUR package publication once maintainer SSH auth is available
-  - Metadata enrichment from additional registries beyond ModelScope
+  - Completed: Ollama Library metadata enrichment beyond ModelScope
   - Completed: authenticated HTTP(S) catalog sync push/pull
   - User-driven archive format expansion
   - Completed: non-interactive TUI snapshots with `modfetch tui --snapshot --json`
