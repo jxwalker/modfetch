@@ -61,15 +61,15 @@ func TestCompletionNestedSubcommandFlags(t *testing.T) {
 		case "bash":
 			assertContains(t, name, "config", configSection, "case ${words[2]}", "validate)", "wizard)", "--strict", "--out")
 			assertContains(t, name, "batch", batchSection, "case ${words[2]}", "import)", "--naming-pattern")
-			assertContains(t, name, "library", completionCommandSection(t, name, script, "library"), "sync", "push", "pull", "--target")
+			assertContains(t, name, "library", completionCommandSection(t, name, script, "library"), "sync", "push", "pull", "--target", "--dry-run")
 		case "zsh":
 			assertContains(t, name, "config", configSection, "case $words[3]", "validate)", "wizard)", "--strict", "--out")
 			assertContains(t, name, "batch", batchSection, "case $words[3]", "import)", "--naming-pattern")
-			assertContains(t, name, "library", completionCommandSection(t, name, script, "library"), "sync", "push", "pull", "--target")
+			assertContains(t, name, "library", completionCommandSection(t, name, script, "library"), "sync", "push", "pull", "--target", "--dry-run")
 		case "fish":
 			assertContains(t, name, "config", configSection, "and __fish_seen_subcommand_from validate", "and __fish_seen_subcommand_from wizard", "-l strict", "-l out")
 			assertContains(t, name, "batch", batchSection, "and __fish_seen_subcommand_from import", "-l naming-pattern")
-			assertContains(t, name, "library", completionCommandSection(t, name, script, "library"), "sync", "push", "pull", "-l target")
+			assertContains(t, name, "library", completionCommandSection(t, name, script, "library"), "sync", "push", "pull", "-l target", "-l dry-run")
 		}
 	}
 }

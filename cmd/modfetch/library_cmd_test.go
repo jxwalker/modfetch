@@ -140,10 +140,13 @@ func TestHandleLibrarySyncPushPullFileTarget(t *testing.T) {
 		t.Fatalf("close source db: %v", err)
 	}
 
-	targetPath := filepath.Join(dir, "remote", "catalog.json")
+	targetPath := filepath.Join(dir, "remote", "catalog with space.json")
 	targetURI := fileURI(targetPath)
 	if err := handleLibrary(context.Background(), []string{"sync", "push", "--config", sourceCfg, "--target", targetURI}); err != nil {
 		t.Fatalf("library sync push: %v", err)
+	}
+	if err := handleLibrary(context.Background(), []string{"sync", "push", "--config", sourceCfg, "--target", targetURI}); err != nil {
+		t.Fatalf("library sync push replacing existing target: %v", err)
 	}
 	if _, err := os.Stat(targetPath); err != nil {
 		t.Fatalf("expected sync target catalog: %v", err)
@@ -207,6 +210,17 @@ func TestHandleLibrarySyncRejectsUnsupportedTarget(t *testing.T) {
 	err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", "https://example.com/catalog.json"})
 	if err == nil || !strings.Contains(err.Error(), "unsupported sync target scheme") {
 		t.Fatalf("expected unsupported target scheme error, got %v", err)
+	}
+}
+
+func TestFileSyncTargetPathTreatsDriveLetterAsPlainPath(t *testing.T) {
+	target := `C:\backup\catalog.json`
+	got, err := fileSyncTargetPath(target)
+	if err != nil {
+		t.Fatalf("fileSyncTargetPath: %v", err)
+	}
+	if want := filepath.Clean(target); got != want {
+		t.Fatalf("fileSyncTargetPath() = %q, want %q", got, want)
 	}
 }
 

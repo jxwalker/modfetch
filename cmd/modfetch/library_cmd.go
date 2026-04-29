@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/jxwalker/modfetch/internal/catalog"
@@ -369,12 +370,12 @@ func fileSyncTargetPath(target string) (string, error) {
 	if target == "" {
 		return "", errors.New("library sync requires --target")
 	}
+	if !strings.Contains(target, "://") && !strings.HasPrefix(strings.ToLower(target), "file:") {
+		return filepath.Clean(target), nil
+	}
 	u, err := url.Parse(target)
 	if err != nil {
 		return "", fmt.Errorf("parse sync target: %w", err)
-	}
-	if u.Scheme == "" {
-		return filepath.Clean(target), nil
 	}
 	if u.Scheme != "file" {
 		return "", fmt.Errorf("unsupported sync target scheme %q; only file:// is supported", u.Scheme)
@@ -385,10 +386,18 @@ func fileSyncTargetPath(target string) (string, error) {
 	if u.Host != "" && u.Host != "localhost" {
 		return "", fmt.Errorf("unsupported file sync target host %q", u.Host)
 	}
-	if u.Path == "" {
+	targetPath := u.EscapedPath()
+	if targetPath == "" && u.Opaque != "" {
+		targetPath = u.Opaque
+	}
+	if targetPath == "" {
 		return "", errors.New("file sync target path is empty")
 	}
-	return filepath.Clean(filepath.FromSlash(u.Path)), nil
+	decodedPath, err := url.PathUnescape(targetPath)
+	if err != nil {
+		return "", fmt.Errorf("decode file sync target path: %w", err)
+	}
+	return filepath.Clean(filepath.FromSlash(decodedPath)), nil
 }
 
 func writeCatalogFile(path string, cat *catalog.Catalog) error {
@@ -406,6 +415,10 @@ func writeCatalogFile(path string, cat *catalog.Catalog) error {
 	tmpPath := tmp.Name()
 	defer func() { _ = os.Remove(tmpPath) }()
 
+	if err := tmp.Chmod(catalogTargetMode(path)); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("set catalog permissions: %w", err)
+	}
 	enc := json.NewEncoder(tmp)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(cat); err != nil {
@@ -415,8 +428,33 @@ func writeCatalogFile(path string, cat *catalog.Catalog) error {
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close catalog: %w", err)
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := replaceCatalogFile(tmpPath, path); err != nil {
+		return err
+	}
+	return nil
+}
+
+func catalogTargetMode(path string) os.FileMode {
+	info, err := os.Stat(path)
+	if err == nil {
+		return info.Mode().Perm()
+	}
+	return 0o644
+}
+
+func replaceCatalogFile(tmpPath, path string) error {
+	if err := os.Rename(tmpPath, path); err == nil {
+		return nil
+	} else if runtime.GOOS != "windows" {
 		return fmt.Errorf("replace catalog target: %w", err)
+	} else if _, statErr := os.Stat(path); statErr != nil {
+		return fmt.Errorf("replace catalog target: %w", err)
+	}
+	if err := os.Remove(path); err != nil {
+		return fmt.Errorf("remove existing catalog target: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("replace catalog target after removing existing file: %w", err)
 	}
 	return nil
 }
