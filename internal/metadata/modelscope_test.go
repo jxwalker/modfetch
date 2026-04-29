@@ -27,6 +27,11 @@ func TestModelScopeFetcherCanHandle(t *testing.T) {
 			url:  "https://huggingface.co/qwen/Qwen2.5-7B-Instruct",
 			want: false,
 		},
+		{
+			name: "ModelScope non-model URL",
+			url:  "https://modelscope.cn/docs",
+			want: false,
+		},
 	}
 
 	f := NewModelScopeFetcher(&http.Client{})
@@ -83,6 +88,9 @@ func TestModelScopeFetcherFetchMetadataSuccess(t *testing.T) {
 	if meta.ModelName != "Qwen2.5-7B-Instruct" || meta.Author != "qwen" {
 		t.Fatalf("unexpected identity metadata: %+v", meta)
 	}
+	if meta.RepoURL != "https://modelscope.cn/models/qwen/Qwen2.5-7B-Instruct" || meta.AuthorURL != "https://modelscope.cn/profile/qwen" {
+		t.Fatalf("unexpected links: %+v", meta)
+	}
 	if meta.ModelType != "LLM" || meta.Quantization != "Q4_K_M" || meta.FileFormat != ".gguf" {
 		t.Fatalf("unexpected model specs: %+v", meta)
 	}
@@ -115,5 +123,14 @@ func TestParseModelScopeURL(t *testing.T) {
 	}
 	if modelID != "qwen/Qwen2.5-7B-Instruct" || owner != "qwen" || repo != "Qwen2.5-7B-Instruct" || revision != "master" || filename != "path/to/model.gguf" {
 		t.Fatalf("unexpected parse result: %q %q %q %q %q", modelID, owner, repo, revision, filename)
+	}
+}
+
+func TestModelScopeURLBuildersEscapeSegments(t *testing.T) {
+	if got := modelScopeAPIURL("owner name", "repo/name", "release/1"); got != "https://modelscope.cn/api/v1/models/owner%20name/repo%2Fname?Revision=release%2F1" {
+		t.Fatalf("modelScopeAPIURL() = %q", got)
+	}
+	if got := modelScopeModelURL("owner name", "repo/name"); got != "https://modelscope.cn/models/owner%20name/repo%2Fname" {
+		t.Fatalf("modelScopeModelURL() = %q", got)
 	}
 }

@@ -32,7 +32,11 @@ func (f *ModelScopeFetcher) CanHandle(rawURL string) bool {
 		return false
 	}
 	host := strings.ToLower(u.Hostname())
-	return host == "modelscope.cn" || strings.HasSuffix(host, ".modelscope.cn")
+	if host != "modelscope.cn" && !strings.HasSuffix(host, ".modelscope.cn") {
+		return false
+	}
+	_, _, _, _, _, err = parseModelScopeURL(rawURL)
+	return err == nil
 }
 
 func (f *ModelScopeFetcher) FetchMetadata(ctx context.Context, rawURL string) (*state.ModelMetadata, error) {
@@ -41,13 +45,10 @@ func (f *ModelScopeFetcher) FetchMetadata(ctx context.Context, rawURL string) (*
 		return nil, err
 	}
 
-	apiURL := fmt.Sprintf("https://modelscope.cn/api/v1/models/%s", modelID)
-	if revision != "" {
-		apiURL += "?Revision=" + url.QueryEscape(revision)
-	}
+	apiURL := modelScopeAPIURL(owner, repo, revision)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
+		return f.basicMetadata(rawURL, modelID, owner, repo, revision, filename), nil
 	}
 	resp, err := f.client.Do(req)
 	if err != nil {
@@ -77,11 +78,11 @@ func (f *ModelScopeFetcher) FetchMetadata(ctx context.Context, rawURL string) (*
 		Source:        "modelscope",
 		Description:   truncateString(mapString(data, "Description"), 5000),
 		Author:        firstNonEmpty(mapString(data, "Owner"), mapString(data, "Author"), owner),
-		AuthorURL:     fmt.Sprintf("https://modelscope.cn/profile/%s", owner),
+		AuthorURL:     modelScopeProfileURL(owner),
 		License:       mapString(data, "License"),
 		Tags:          mapStringSlice(data, "Tags"),
-		RepoURL:       fmt.Sprintf("https://modelscope.cn/models/%s", modelID),
-		HomepageURL:   fmt.Sprintf("https://modelscope.cn/models/%s", modelID),
+		RepoURL:       modelScopeModelURL(owner, repo),
+		HomepageURL:   modelScopeModelURL(owner, repo),
 		ThumbnailURL:  firstNonEmpty(mapString(data, "ModelCover"), mapString(data, "Cover")),
 		DownloadCount: mapInt(data, "Downloads"),
 		CreatedAt:     time.Now(),
@@ -109,9 +110,9 @@ func (f *ModelScopeFetcher) basicMetadata(rawURL, modelID, owner, repo, revision
 		Version:      revision,
 		Source:       "modelscope",
 		Author:       owner,
-		AuthorURL:    fmt.Sprintf("https://modelscope.cn/profile/%s", owner),
-		RepoURL:      fmt.Sprintf("https://modelscope.cn/models/%s", modelID),
-		HomepageURL:  fmt.Sprintf("https://modelscope.cn/models/%s", modelID),
+		AuthorURL:    modelScopeProfileURL(owner),
+		RepoURL:      modelScopeModelURL(owner, repo),
+		HomepageURL:  modelScopeModelURL(owner, repo),
 		ModelType:    inferModelType(filename, nil),
 		Quantization: ExtractQuantization(filename),
 		FileFormat:   strings.ToLower(filepath.Ext(filename)),
@@ -158,6 +159,39 @@ func parseModelScopeURL(rawURL string) (modelID, owner, repo, revision, filename
 		return owner + "/" + repo, owner, repo, revision, filename, nil
 	}
 	return "", "", "", "", "", fmt.Errorf("invalid ModelScope URL format")
+}
+
+func modelScopeAPIURL(owner, repo, revision string) string {
+	u := url.URL{
+		Scheme:  "https",
+		Host:    "modelscope.cn",
+		Path:    "/api/v1/models/" + owner + "/" + repo,
+		RawPath: "/api/v1/models/" + url.PathEscape(owner) + "/" + url.PathEscape(repo),
+	}
+	if revision != "" {
+		q := u.Query()
+		q.Set("Revision", revision)
+		u.RawQuery = q.Encode()
+	}
+	return u.String()
+}
+
+func modelScopeModelURL(owner, repo string) string {
+	return (&url.URL{
+		Scheme:  "https",
+		Host:    "modelscope.cn",
+		Path:    "/models/" + owner + "/" + repo,
+		RawPath: "/models/" + url.PathEscape(owner) + "/" + url.PathEscape(repo),
+	}).String()
+}
+
+func modelScopeProfileURL(owner string) string {
+	return (&url.URL{
+		Scheme:  "https",
+		Host:    "modelscope.cn",
+		Path:    "/profile/" + owner,
+		RawPath: "/profile/" + url.PathEscape(owner),
+	}).String()
 }
 
 func mapString(data map[string]any, key string) string {
