@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -50,13 +51,9 @@ func writeStarterTestConfig(t *testing.T, cfgPath, root string) {
 	t.Helper()
 	body := "version: 1\n" +
 		"general:\n" +
-		"  data_root: " + strconvQuote(filepath.Join(root, "data")) + "\n" +
-		"  download_root: " + strconvQuote(filepath.Join(root, "downloads")) + "\n"
+		"  data_root: " + strconv.Quote(filepath.Join(root, "data")) + "\n" +
+		"  download_root: " + strconv.Quote(filepath.Join(root, "downloads")) + "\n"
 	if err := os.WriteFile(cfgPath, []byte(body), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-}
-
-func strconvQuote(s string) string {
-	return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
 }
