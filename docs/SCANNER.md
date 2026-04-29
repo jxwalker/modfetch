@@ -462,26 +462,6 @@ unrelated metadata discovered earlier in the scan. If profiling later shows
 database writes dominating scan time, batch transactions are the likely
 optimization point, but they are not part of the current roadmap.
 
-Example shape for that future optimization:
-```go
-func (s *Scanner) scanDirectoryBatch(dir string, result *ScanResult) error {
-    tx := s.db.Begin()
-    defer tx.Rollback()
-
-    // Collect metadata for multiple files
-    var metaBatch []*state.ModelMetadata
-
-    // ... walk and collect ...
-
-    // Batch insert
-    for _, meta := range metaBatch {
-        tx.UpsertMetadata(meta)
-    }
-
-    return tx.Commit()
-}
-```
-
 ### Filename Parsing
 
 **Pattern extraction uses:**
