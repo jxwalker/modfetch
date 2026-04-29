@@ -60,6 +60,8 @@ func run(ctx context.Context, args []string) error {
 		return handleStatus(ctx, args[1:])
 	case "download":
 		return handleDownload(ctx, args[1:])
+	case "starter":
+		return handleStarter(ctx, args[1:])
 	case "place":
 		return handlePlace(ctx, args[1:])
 	case "verify":
@@ -100,7 +102,8 @@ Commands:
   config validate   Validate a YAML config file
   config print      Print the loaded config as JSON
   config wizard     Interactive TUI to generate a YAML config
-  download          Download a file via direct URL or resolver URI (hf://, civitai://)
+  download          Download a file via direct URL or resolver URI (starter://, hf://, civitai://)
+  starter           List or download beginner-safe starter artifacts
   status            Show download status (table or JSON)
   place             Place a file into configured app directories
   verify            Verify SHA256 of a file or all completed downloads
@@ -448,7 +451,7 @@ func handleDownload(ctx context.Context, args []string) error {
 						resolvedURL := job.URI
 						headers := map[string]string{}
 						destCandidate := strings.TrimSpace(job.Dest)
-						if strings.HasPrefix(resolvedURL, "hf://") || strings.HasPrefix(resolvedURL, "civitai://") {
+						if isResolverURI(resolvedURL) {
 							res, err := resolver.Resolve(gctx, resolvedURL, c)
 							if err != nil {
 								return fmt.Errorf("job %d resolve: %w", it.idx, err)
@@ -698,7 +701,7 @@ func handleDownload(ctx context.Context, args []string) error {
 		return nil
 	}
 
-	if strings.HasPrefix(resolvedURL, "hf://") || strings.HasPrefix(resolvedURL, "civitai://") {
+	if isResolverURI(resolvedURL) {
 		res, err := resolver.Resolve(ctx, resolvedURL, c)
 		if err != nil {
 			return err
@@ -733,7 +736,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	if *dryRun {
 		candDest := strings.TrimSpace(*dest)
 		resolverURI := resolvedURL
-		if !strings.HasPrefix(resolverURI, "hf://") && !strings.HasPrefix(resolverURI, "civitai://") {
+		if !isResolverURI(resolverURI) {
 			resolverURI = *url
 		}
 		if candDest == "" && strings.HasPrefix(resolverURI, "civitai://") {
@@ -801,7 +804,7 @@ func handleDownload(ctx context.Context, args []string) error {
 		candDest := strings.TrimSpace(*dest)
 		// Determine the resolver URI (could have been normalized above)
 		resolverURI := resolvedURL
-		if !strings.HasPrefix(resolverURI, "hf://") && !strings.HasPrefix(resolverURI, "civitai://") {
+		if !isResolverURI(resolverURI) {
 			resolverURI = *url
 		}
 		if candDest == "" && strings.HasPrefix(resolverURI, "civitai://") {
@@ -824,7 +827,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	destArg := strings.TrimSpace(*dest)
 	// Determine the resolver URI to use for civitai SuggestedFilename
 	resolverURI2 := resolvedURL
-	if !strings.HasPrefix(resolverURI2, "hf://") && !strings.HasPrefix(resolverURI2, "civitai://") {
+	if !isResolverURI(resolverURI2) {
 		resolverURI2 = *url
 	}
 	if destArg == "" && strings.HasPrefix(resolverURI2, "civitai://") {
@@ -1172,7 +1175,7 @@ func handleClean(ctx context.Context, args []string) error {
 
 func resolveBatchDownloadCandidate(ctx context.Context, c *config.Config, uri string) (string, map[string]string, error) {
 	headers := map[string]string{}
-	if strings.HasPrefix(uri, "hf://") || strings.HasPrefix(uri, "civitai://") {
+	if isResolverURI(uri) {
 		res, err := resolver.Resolve(ctx, uri, c)
 		if err != nil {
 			return "", nil, err
@@ -1201,6 +1204,11 @@ func resolveBatchDownloadCandidate(ctx context.Context, c *config.Config, uri st
 		}
 	}
 	return uri, headers, nil
+}
+
+func isResolverURI(uri string) bool {
+	uri = strings.TrimSpace(uri)
+	return strings.HasPrefix(uri, "starter://") || strings.HasPrefix(uri, "hf://") || strings.HasPrefix(uri, "civitai://")
 }
 
 func configOp(args []string, fn func(*config.Config, *logging.Logger) error) error {

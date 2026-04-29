@@ -78,12 +78,12 @@ func Register(r Resolver) func() {
 
 func resolverSnapshot() []Resolver {
 	registryMu.RLock()
-	out := make([]Resolver, 0, len(resolverEntries)+2)
+	out := make([]Resolver, 0, len(resolverEntries)+3)
 	for _, entry := range resolverEntries {
 		out = append(out, entry.resolver)
 	}
 	registryMu.RUnlock()
-	out = append(out, &HuggingFace{}, &CivitAI{})
+	out = append(out, &Starter{}, &HuggingFace{}, &CivitAI{})
 	return out
 }
 

@@ -265,8 +265,12 @@ export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 ### 3. Your First Download
 
 ```bash
-# Test with a small file
-modfetch download --url 'https://proof.ovh.net/files/1Mb.dat'
+# Pick from beginner-safe starter downloads
+modfetch starter list
+modfetch starter download --id gpt2-config --summary-json
+
+# The same starter works anywhere a URL is accepted
+modfetch download --url 'starter://gpt2-tokenizer'
 
 # Or launch the TUI dashboard
 modfetch tui
@@ -276,7 +280,7 @@ modfetch tui
 ```
 ✓ Download complete
 ✓ SHA256 verified
-✓ Saved to ~/Downloads/modfetch/1Mb.dat
+✓ Saved under ~/Downloads/modfetch/
 ```
 
 ### Optional: API Tokens (for private/gated content)
@@ -313,6 +317,10 @@ modfetch tui
 
 # Download a file
 modfetch download --url 'URL'
+
+# Choose a beginner-safe starter download
+modfetch starter list
+modfetch starter download --id gpt2-config
 
 # Verify downloads
 modfetch verify --all
