@@ -70,7 +70,7 @@ _modfetch_completions()
         status)
             COMPREPLY=( $(compgen -W "--config --log-level --json --only-errors --summary --duplicates" -- "$cur") ) ;;
         tui)
-            COMPREPLY=( $(compgen -W "--config --log-level --json" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --snapshot" -- "$cur") ) ;;
         library)
             if [[ ${cword} -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "export import scan sync" -- "$cur") )
@@ -156,7 +156,7 @@ _modfetch() {
       _arguments '*:options:(--config --log-level --json --only-errors --summary --duplicates)'
       ;;
     tui)
-      _arguments '*:options:(--config --log-level --json)'
+      _arguments '*:options:(--config --log-level --json --snapshot)'
       ;;
     library)
       if (( CURRENT == 3 )); then
@@ -217,7 +217,8 @@ complete -c modfetch -f -n "__fish_use_subcommand" -a "status" -d "show status"
 complete -c modfetch -n "__fish_seen_subcommand_from status" -l only-errors -d "Only error rows"
 complete -c modfetch -n "__fish_seen_subcommand_from status" -l summary -d "Print totals and errors"
 complete -c modfetch -n "__fish_seen_subcommand_from status" -l duplicates -d "Show duplicate completed downloads"
-complete -c modfetch -f -n "__fish_use_subcommand" -a "tui" -d "dashboard"
+complete -c modfetch -f -n "__fish_use_subcommand" -a "tui" -d "dashboard and snapshots"
+complete -c modfetch -n "__fish_seen_subcommand_from tui" -l snapshot -d "Print state snapshot and exit"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "library" -d "library catalog"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "batch" -d "batch operations"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "version" -d "print version"

@@ -167,6 +167,13 @@ The **Terminal User Interface (TUI)** gives you a real-time dashboard for managi
 modfetch tui
 ```
 
+To inspect the same saved state from a script or monitor without opening the
+interactive UI:
+
+```bash
+modfetch tui --snapshot --json
+```
+
 ### Your First Look
 
 ```

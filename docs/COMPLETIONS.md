@@ -29,6 +29,7 @@ Notable flags and commands covered
 - --quiet, --json, --log-level
 - --summary-json, --no-resume, --batch-parallel, --naming-pattern, --no-auth-preflight, --dry-run
 - --strict, --force, --quant, --list-quants
+- tui --snapshot for non-interactive state snapshots
 
 Notes
 - The provided completions are lightweight and cover subcommands and common flags. They do not shell out to the binary for dynamic completions.

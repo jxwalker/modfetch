@@ -104,7 +104,7 @@ Commands:
   status            Show download status (table or JSON)
   place             Place a file into configured app directories
   verify            Verify SHA256 of a file or all completed downloads
-  tui               Open the interactive terminal dashboard
+  tui               Open the interactive terminal dashboard or print a state snapshot
   library export    Export model library catalog as JSON
   library import    Import model library catalog JSON
   library scan      Scan configured model directories into the library

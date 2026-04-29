@@ -183,6 +183,15 @@ The TUI provides **7 tabs** for managing downloads and your model library:
 - Auto-resolves CivitAI model page URLs
 - Auto-recovery of running downloads on startup
 
+For automation, use the non-interactive snapshot path:
+
+```bash
+modfetch tui --config ~/.config/modfetch/config.yml --snapshot --json
+```
+
+This reports download status totals, library totals, favorite counts, source and
+type counts, and configured roots without opening the TUI.
+
 See the full TUI guide: docs/TUI_GUIDE.md
 
 ## Tips

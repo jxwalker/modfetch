@@ -15,6 +15,8 @@ Added
   published catalog URL to be imported with the same dry-run/conflict handling.
 - Added ModelScope metadata enrichment for `modelscope.cn` model URLs, including
   source detection, API-backed metadata, and best-effort fallback metadata.
+- Added `modfetch tui --snapshot` and `--snapshot --json` for non-interactive
+  downloads, library, and config state reporting.
 
 Docs
 - Documented Arch Linux AUR package maintenance and release checklist coverage.

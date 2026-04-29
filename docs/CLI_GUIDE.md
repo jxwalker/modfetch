@@ -469,11 +469,12 @@ See [CONFIG.md](CONFIG.md) for full configuration reference.
 
 ### tui
 
-Launch the interactive Terminal User Interface.
+Launch the interactive Terminal User Interface, or print a script-friendly
+snapshot of the same downloads, library, and config state.
 
 **Syntax:**
 ```bash
-modfetch tui [--config PATH]
+modfetch tui [--config PATH] [--snapshot] [--json]
 ```
 
 **Examples:**
@@ -484,7 +485,16 @@ modfetch tui
 
 # Use specific config
 modfetch tui --config ~/modfetch/config.yml
+
+# Print a human-readable state snapshot without opening the TUI
+modfetch tui --config ~/modfetch/config.yml --snapshot
+
+# Print a JSON state snapshot for scripts and monitors
+modfetch tui --config ~/modfetch/config.yml --snapshot --json
 ```
+
+`--snapshot` is non-interactive. If the config file is missing, it returns a
+normal CLI error instead of launching the first-run config wizard.
 
 See [TUI Guide](TUI_GUIDE.md) and [TUI Wireframes](TUI_WIREFRAMES.md) for full documentation.
 

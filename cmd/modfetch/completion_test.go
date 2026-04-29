@@ -23,7 +23,7 @@ func TestCompletionCurrentFlags(t *testing.T) {
 		"place":    {"--dry-run", "--preset", "--list-presets"},
 		"batch":    {"--naming-pattern"},
 		"hostcaps": {"--config", "--list", "--clear", "--clear-all", "--json"},
-		"tui":      {"--json"},
+		"tui":      {"--json", "--snapshot"},
 		"clean":    {"--days", "--dry-run", "--dest", "--include-next-to-dest", "--sidecars"},
 		"library":  {"--target"},
 	}
