@@ -11,7 +11,7 @@ func TestStarterResolver(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve starter: %v", err)
 	}
-	if !strings.Contains(res.URL, "huggingface.co/gpt2/resolve/main/config.json") {
+	if !strings.Contains(res.URL, "huggingface.co/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/config.json") {
 		t.Fatalf("unexpected starter URL: %s", res.URL)
 	}
 }

@@ -40,10 +40,19 @@ func TestStarterDownloadDryRunUsesDownloadPipeline(t *testing.T) {
 			t.Fatalf("starter download dry-run: %v", err)
 		}
 	})
-	for _, want := range []string{"starter://gpt2-config", "huggingface.co/gpt2/resolve/main/config.json", "config.json"} {
+	for _, want := range []string{"starter://gpt2-config", "huggingface.co/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/config.json", "config.json"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("dry-run output missing %q in:\n%s", want, out)
 		}
+	}
+}
+
+func TestStarterListAndShowRejectExtraArgs(t *testing.T) {
+	if err := handleStarter(context.Background(), []string{"list", "extra"}); err == nil {
+		t.Fatal("expected starter list to reject extra args")
+	}
+	if err := handleStarter(context.Background(), []string{"show", "gpt2-config", "extra"}); err == nil {
+		t.Fatal("expected starter show to reject extra args")
 	}
 }
 

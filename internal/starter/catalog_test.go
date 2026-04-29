@@ -11,7 +11,7 @@ func TestStarterCatalogLookup(t *testing.T) {
 	if !ok {
 		t.Fatal("expected gpt2-config starter")
 	}
-	if entry.URI != "hf://gpt2/config.json?rev=main" {
+	if entry.URI != "hf://gpt2/config.json?rev=607a30d783dfa663caf39e06633721c8d4cfcd7e" {
 		t.Fatalf("unexpected URI: %s", entry.URI)
 	}
 	if _, err := MustURI("missing"); err == nil {

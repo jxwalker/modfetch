@@ -43,7 +43,7 @@ run_case() {
 
 run_case "direct public HTTP" "https://proof.ovh.net/files/1Mb.dat"
 run_case "starter alias via resolver" "starter://gpt2-tokenizer"
-run_case "public Hugging Face resolver" "hf://gpt2/config.json?rev=main"
+run_case "public Hugging Face resolver" "hf://gpt2/config.json?rev=607a30d783dfa663caf39e06633721c8d4cfcd7e"
 
 if [[ -n "${MODFETCH_UAT_CIVITAI_URI:-}" ]]; then
   run_case "configured CivitAI URI" "$MODFETCH_UAT_CIVITAI_URI"

@@ -23,6 +23,9 @@ func handleStarter(ctx context.Context, args []string) error {
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
+		if fs.NArg() != 0 {
+			return errors.New("usage: modfetch starter list [--json]")
+		}
 		return printStarterList(*jsonOut)
 	case "show":
 		fs := flag.NewFlagSet("starter show", flag.ContinueOnError)
@@ -30,7 +33,7 @@ func handleStarter(ctx context.Context, args []string) error {
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		if fs.NArg() < 1 {
+		if fs.NArg() != 1 {
 			return errors.New("usage: modfetch starter show [--json] ID")
 		}
 		return printStarterEntry(fs.Arg(0), *jsonOut)
