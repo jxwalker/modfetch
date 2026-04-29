@@ -148,7 +148,10 @@ These are useful, but not required for the first v0.7.0 release:
 - [DONE] Read-only remote catalog pull:
   `library sync pull --target https://...` imports published catalogs with the
   same dry-run and conflict handling as local catalog imports.
-- Metadata enrichment from additional model registries.
+- [DONE] ModelScope metadata enrichment:
+  ModelScope URLs are recognized as `modelscope` sources and enrich library
+  records from the ModelScope model API with best-effort offline fallback.
+- Metadata enrichment from additional model registries beyond ModelScope.
 - Authenticated and writable remote catalog sync targets.
 - More archive formats if users report concrete needs.
 - Non-interactive TUI scripting hooks.

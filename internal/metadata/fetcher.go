@@ -45,6 +45,7 @@ func NewRegistry() *Registry {
 	// Register default fetchers
 	r.Register(NewHuggingFaceFetcher(client))
 	r.Register(NewCivitAIFetcher(client))
+	r.Register(NewModelScopeFetcher(client))
 
 	return r
 }

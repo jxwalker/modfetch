@@ -494,7 +494,7 @@ Roadmap
 - See docs/ROADMAP.md for the active, prioritized roadmap
 - v0.7.x focus:
   - AUR package publication once maintainer SSH auth is available
-  - Metadata enrichment from additional registries
+  - Metadata enrichment from additional registries beyond ModelScope
   - Authenticated and writable remote catalog sync targets
   - User-driven archive format expansion
   - Non-interactive TUI scripting hooks
