@@ -444,6 +444,21 @@ func TestHandleLibrarySyncPullHTTPStatusError(t *testing.T) {
 	}
 }
 
+func TestHandleLibrarySyncPullInvalidConfigDoesNotContactHTTPTarget(t *testing.T) {
+	missingCfg := filepath.Join(t.TempDir(), "missing.yml")
+	t.Setenv("MODFETCH_TEST_SYNC_TOKEN", "secret-token")
+	t.Setenv("MODFETCH_ALLOW_INSECURE_HTTP", "1")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("invalid config should fail before contacting HTTP target")
+	}))
+	defer server.Close()
+
+	err := handleLibrary(context.Background(), []string{"sync", "pull", "--config", missingCfg, "--target", server.URL, "--token-env", "MODFETCH_TEST_SYNC_TOKEN"})
+	if err == nil || !strings.Contains(err.Error(), "config file not found") {
+		t.Fatalf("expected config error before HTTP request, got %v", err)
+	}
+}
+
 func TestCheckSyncRedirectRejectsUnsafeRedirects(t *testing.T) {
 	putReq, err := http.NewRequest(http.MethodPut, "https://sync.example/catalog.json", nil)
 	if err != nil {

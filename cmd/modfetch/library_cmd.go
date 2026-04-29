@@ -184,16 +184,16 @@ func handleLibrarySyncPull(ctx context.Context, args []string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	r, closeFn, err := syncTargetReader(ctx, *target, *tokenEnv)
-	if err != nil {
-		return err
-	}
-	defer closeFn()
 	db, err := openLibraryDB(*common.configPath)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = db.Close() }()
+	r, closeFn, err := syncTargetReader(ctx, *target, *tokenEnv)
+	if err != nil {
+		return err
+	}
+	defer closeFn()
 
 	result, err := catalog.Import(db, r, catalog.ImportOptions{DryRun: *dryRun})
 	if err != nil {
