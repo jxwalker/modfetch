@@ -1,9 +1,7 @@
 # AUR Packaging
 
-This directory stages the `modfetch-bin` AUR package. It packages the published
-Linux release binaries instead of rebuilding from source. The package will not
-be published to AUR until a maintainer account with an AUR-registered SSH key
-pushes these files.
+This directory maintains the published `modfetch-bin` AUR package. It packages
+the published Linux release binaries instead of rebuilding from source.
 
 Validate metadata and live release checksums from the repository root:
 
@@ -21,8 +19,8 @@ modfetch version
 namcap PKGBUILD
 ```
 
-Publishing requires an AUR account with a registered SSH public key. A dedicated
-key is preferred so it can be revoked independently:
+Updating the package requires an AUR account with a registered SSH public key. A
+dedicated key is preferred so it can be revoked independently:
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/aur -C "aur-modfetch"
@@ -44,8 +42,18 @@ Verify auth before publishing:
 ssh -o BatchMode=yes -o ConnectTimeout=5 aur@aur.archlinux.org help
 ```
 
-To publish, push `PKGBUILD` and `.SRCINFO` to:
+The AUR Git remote is:
 
 ```bash
 ssh://aur@aur.archlinux.org/modfetch-bin.git
 ```
+
+The repository publish helper performs validation, auth checking, AUR clone,
+file copy, commit, and push:
+
+```bash
+scripts/publish-aur.sh v0.7.0
+```
+
+If authentication fails, paste `~/.ssh/aur.pub` into the AUR account profile and
+retry the command.

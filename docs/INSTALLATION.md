@@ -63,17 +63,14 @@ sudo cp bin/modfetch /usr/local/bin/
   brew tap jxwalker/tap
   brew install jxwalker/tap/modfetch
   ```
-- **Arch Linux / AUR**: package metadata is maintained in `packaging/aur/` for
-  the future `modfetch-bin` AUR package. Publication is pending an AUR account
-  with a registered maintainer SSH key. After the package is published, install
-  it with:
+- **Arch Linux / AUR**: install the published `modfetch-bin` AUR package:
   ```bash
   git clone https://aur.archlinux.org/modfetch-bin.git
   cd modfetch-bin
   makepkg -si
   ```
-  Until then, use Homebrew/Linuxbrew, the one-line installer, or the manual
-  release binary.
+  Maintainers can update the AUR package with `scripts/publish-aur.sh vX.Y.Z`
+  after release assets are published.
 - **Ubuntu/Debian**: One-liner installer handles all dependencies
 - **CentOS/RHEL**: Ensure `curl` and `tar` are installed first
 - **Other distributions**: Use the one-line installer or manual release binary.

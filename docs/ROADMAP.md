@@ -138,10 +138,9 @@ Acceptance checks:
 
 These are useful, but not required for the first v0.7.0 release:
 
-- [IN PROGRESS] AUR packaging after Homebrew is stable:
-  package metadata and validation are staged in `packaging/aur/`; AUR
-  publication is pending a maintainer AUR account with an AUR-registered SSH
-  public key.
+- [DONE] AUR packaging after Homebrew is stable:
+  `modfetch-bin` is published to AUR, package metadata and validation live under
+  `packaging/aur/`, and updates are automated by `scripts/publish-aur.sh`.
 - [DONE] Remote catalog sync foundation:
   `library sync push/pull --target file://...` reuses the portable catalog
   schema for shared folders, mounted drives, and local filesystem sync tests.

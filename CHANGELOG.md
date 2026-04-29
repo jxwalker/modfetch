@@ -5,11 +5,13 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 Added
+- Added `scripts/publish-aur.sh` to validate and publish AUR metadata for
+  AUR releases.
 - Added Ollama Library metadata enrichment for `ollama.com/library/...` URLs,
   including page-backed descriptions, download counts, size tags, and fallback
   metadata when the page cannot be fetched.
-- Added AUR `modfetch-bin` packaging metadata for the published Linux release
-  binaries.
+- Added and published AUR `modfetch-bin` packaging metadata for the published
+  Linux release binaries.
 - Added portable AUR package validation that checks `PKGBUILD`, `.SRCINFO`, and
   published release checksums.
 - Added `library sync push` and `library sync pull` for `file://` catalog sync
@@ -26,7 +28,7 @@ Added
 Docs
 - Documented Arch Linux AUR package maintenance and release checklist coverage.
 - Aligned README, installation, release, roadmap, and TUI docs with the shipped
-  v0.7.0 state and the current AUR SSH publication blocker.
+  v0.7.0 state and published AUR package.
 - Removed obsolete top-level sprint and test status reports that described old
   sandbox limits instead of the current validation workflow.
 
