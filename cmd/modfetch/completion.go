@@ -260,7 +260,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from clean" -l include-next-to-d
 complete -c modfetch -n "__fish_seen_subcommand_from clean" -l sidecars -d "Remove orphan .sha256"
 
 # Common flags
-for cmd in download starter place verify status tui library dedupe clean
+for cmd in download place verify status tui library dedupe clean
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l config -d "Path to config"
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l log-level -d "Log level"
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l json -d "JSON output"
@@ -299,6 +299,9 @@ complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "download" -d "
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from list" -l json -d "JSON output"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from show" -l json -d "JSON output"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from show" -a "gpt2-config gpt2-tokenizer public-1mb" -d "Starter ID"
+complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l config -d "Path to config"
+complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l log-level -d "Log level"
+complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l json -d "JSON output"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l id -a "gpt2-config gpt2-tokenizer public-1mb" -d "Starter ID"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l dest -d "Destination path"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l place -d "Place after download"

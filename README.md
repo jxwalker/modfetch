@@ -267,7 +267,7 @@ export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 ```bash
 # Pick from beginner-safe starter downloads
 modfetch starter list
-modfetch starter download --id gpt2-config --summary-json
+modfetch starter download --id gpt2-config
 
 # The same starter works anywhere a URL is accepted
 modfetch download --url 'starter://gpt2-tokenizer'

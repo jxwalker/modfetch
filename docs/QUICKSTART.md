@@ -220,7 +220,7 @@ starter list from another shell:
 
 ```bash
 modfetch starter list
-modfetch starter download --id gpt2-config --summary-json
+modfetch starter download --id gpt2-config
 ```
 
 Starter IDs also work in the TUI and regular download command as
@@ -229,7 +229,7 @@ Starter IDs also work in the TUI and regular download command as
 **Step-by-step:**
 
 1. **Press `n`** (New download)
-   ```
+   ```text
    ┌────────────────────────────────────────┐
    │ New Download                           │
    ├────────────────────────────────────────┤
@@ -240,7 +240,7 @@ Starter IDs also work in the TUI and regular download command as
    ```
 
 2. **Paste your URL or starter ID**
-   ```
+   ```text
    ┌────────────────────────────────────────┐
    │ New Download                           │
    ├────────────────────────────────────────┤
@@ -251,7 +251,7 @@ Starter IDs also work in the TUI and regular download command as
    ```
 
 3. **Confirm destination** (or edit it)
-   ```
+   ```text
    ┌────────────────────────────────────────┐
    │ New Download                           │
    ├────────────────────────────────────────┤
@@ -265,7 +265,7 @@ Starter IDs also work in the TUI and regular download command as
 4. **Press Enter** - Download starts!
 
 5. **Watch it in Tab 2** (Active)
-   ```
+   ```text
    Press '2' to see:
 
    ║ Status    │ Progress    │ Speed     │ ETA    │ Size  │ File       ║
