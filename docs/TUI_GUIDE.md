@@ -155,10 +155,10 @@ Default naming
 - For Civitai direct download endpoints (`https://civitai.com/api/download/...`), the TUI tries a HEAD request to use the server-provided filename (`Content-Disposition`) when available; otherwise it falls back to the clean basename.
 
 - Press n to open the new-download modal
-- Paste a starter alias (`starter://gpt2-config`), resolver URI
-  (`hf://org/repo/path?rev=...` or `civitai://model/ID[?file=...]`), or public
-  HTTP/HTTPS URL.
-- Destination guessing is sanitized and remains under your configured download_root
+  - Paste a starter alias (`starter://gpt2-config`), resolver URI
+    (`hf://org/repo/path?rev=...` or `civitai://model/ID[?file=...]`), or public
+    HTTP/HTTPS URL.
+  - Destination guessing is sanitized and remains under your configured download_root
 
 ## Open/Reveal behavior
 

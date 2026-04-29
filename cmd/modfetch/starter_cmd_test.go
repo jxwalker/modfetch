@@ -56,6 +56,15 @@ func TestStarterListAndShowRejectExtraArgs(t *testing.T) {
 	}
 }
 
+func TestStarterListAndShowAcceptCommonFlags(t *testing.T) {
+	if err := handleStarter(context.Background(), []string{"list", "--config", "/tmp/unused.yml", "--log-level", "debug"}); err != nil {
+		t.Fatalf("starter list with common flags: %v", err)
+	}
+	if err := handleStarter(context.Background(), []string{"show", "--config", "/tmp/unused.yml", "--log-level", "debug", "gpt2-config"}); err != nil {
+		t.Fatalf("starter show with common flags: %v", err)
+	}
+}
+
 func writeStarterTestConfig(t *testing.T, cfgPath, root string) {
 	t.Helper()
 	body := "version: 1\n" +

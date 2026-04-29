@@ -64,7 +64,7 @@ _modfetch_completions()
             fi
             case ${words[2]} in
                 list|show)
-                    COMPREPLY=( $(compgen -W "--json gpt2-config gpt2-tokenizer public-1mb" -- "$cur") ) ;;
+                    COMPREPLY=( $(compgen -W "--config --log-level --json gpt2-config gpt2-tokenizer public-1mb" -- "$cur") ) ;;
                 download)
                     COMPREPLY=( $(compgen -W "--config --log-level --json --id --dest --place --summary-json --dry-run --quiet --no-resume gpt2-config gpt2-tokenizer public-1mb" -- "$cur") ) ;;
                 *) ;;
@@ -161,7 +161,7 @@ _modfetch() {
       else
         case $words[3] in
           list|show)
-            _arguments '*:options:(--json gpt2-config gpt2-tokenizer public-1mb)'
+            _arguments '*:options:(--config --log-level --json gpt2-config gpt2-tokenizer public-1mb)'
             ;;
           download)
             _arguments '*:options:(--config --log-level --json --id --dest --place --summary-json --dry-run --quiet --no-resume gpt2-config gpt2-tokenizer public-1mb)'
@@ -296,7 +296,11 @@ complete -c modfetch -n "__fish_seen_subcommand_from download" -l list-quants -d
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "list" -d "List starter downloads"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "show" -d "Show starter details"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "download" -d "Download a starter"
+complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from list" -l config -d "Path to config"
+complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from list" -l log-level -d "Log level"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from list" -l json -d "JSON output"
+complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from show" -l config -d "Path to config"
+complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from show" -l log-level -d "Log level"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from show" -l json -d "JSON output"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from show" -a "gpt2-config gpt2-tokenizer public-1mb" -d "Starter ID"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l config -d "Path to config"

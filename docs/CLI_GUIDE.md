@@ -8,6 +8,7 @@ Complete command-line reference for modfetch. For the visual TUI interface, see 
 - [Global Flags](#global-flags)
 - [Commands](#commands)
   - [download](#download)
+  - [starter](#starter)
   - [verify](#verify)
   - [place](#place)
   - [clean](#clean)

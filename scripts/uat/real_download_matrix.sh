@@ -4,7 +4,12 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 bin="${MODFETCH_BIN:-$root/bin/modfetch}"
 
-if [[ ! -x "$bin" ]]; then
+if [[ -n "${MODFETCH_BIN:-}" ]]; then
+  if [[ ! -x "$bin" ]]; then
+    printf 'Configured MODFETCH_BIN is not executable: %s\n' "$bin" >&2
+    exit 1
+  fi
+elif [[ ! -x "$bin" ]]; then
   (cd "$root" && make build)
 fi
 

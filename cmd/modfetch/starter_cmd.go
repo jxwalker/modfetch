@@ -19,24 +19,24 @@ func handleStarter(ctx context.Context, args []string) error {
 	switch args[0] {
 	case "list", "ls":
 		fs := flag.NewFlagSet("starter list", flag.ContinueOnError)
-		jsonOut := fs.Bool("json", false, "print starter catalog as JSON")
+		common := addCommonConfigLogFlags(fs, "print starter catalog as JSON")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if fs.NArg() != 0 {
-			return errors.New("usage: modfetch starter list [--json]")
+			return errors.New("usage: modfetch starter list [--config PATH] [--log-level LEVEL] [--json]")
 		}
-		return printStarterList(*jsonOut)
+		return printStarterList(*common.jsonOut)
 	case "show":
 		fs := flag.NewFlagSet("starter show", flag.ContinueOnError)
-		jsonOut := fs.Bool("json", false, "print starter entry as JSON")
+		common := addCommonConfigLogFlags(fs, "print starter entry as JSON")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
 		if fs.NArg() != 1 {
-			return errors.New("usage: modfetch starter show [--json] ID")
+			return errors.New("usage: modfetch starter show [--config PATH] [--log-level LEVEL] [--json] ID")
 		}
-		return printStarterEntry(fs.Arg(0), *jsonOut)
+		return printStarterEntry(fs.Arg(0), *common.jsonOut)
 	case "download":
 		return starterDownload(ctx, args[1:])
 	case "help", "-h", "--help":
@@ -50,8 +50,8 @@ func handleStarter(ctx context.Context, args []string) error {
 
 func printStarterUsage() {
 	fmt.Println(strings.TrimSpace(`Usage:
-  modfetch starter list [--json]
-  modfetch starter show [--json] ID
+  modfetch starter list [--config PATH] [--json]
+  modfetch starter show [--config PATH] [--json] ID
   modfetch starter download --id ID [--config PATH] [--dest PATH] [--dry-run] [--summary-json]
 
 Examples:
