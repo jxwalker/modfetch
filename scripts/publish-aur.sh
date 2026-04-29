@@ -9,7 +9,13 @@ branch="${AUR_BRANCH:-master}"
 tag="${1:-}"
 
 if [[ -z "$tag" ]]; then
-  pkgver="$(grep -E '^[[:space:]]*pkgver=' "$aur_dir/PKGBUILD" | head -n 1 | cut -d= -f2-)"
+  pkgver_line="$(grep -E '^[[:space:]]*pkgver=' "$aur_dir/PKGBUILD" | head -n 1 || true)"
+  pkgver="${pkgver_line#*=}"
+  pkgver="$(printf '%s' "$pkgver" | sed -E "s/^[[:space:]]+//; s/[[:space:]]+$//; s/^['\\\"]//; s/['\\\"]$//")"
+  if [[ -z "$pkgver" ]]; then
+    echo "failed to read pkgver from $aur_dir/PKGBUILD" >&2
+    exit 1
+  fi
   tag="v${pkgver}"
 fi
 
@@ -45,7 +51,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-git -c init.defaultBranch="$branch" clone --depth 1 "$remote" "$workdir/$pkgbase"
+git -c init.defaultBranch="$branch" clone --depth 1 --branch "$branch" "$remote" "$workdir/$pkgbase"
 
 cp "$aur_dir/PKGBUILD" "$aur_dir/.SRCINFO" "$workdir/$pkgbase/"
 cd "$workdir/$pkgbase"

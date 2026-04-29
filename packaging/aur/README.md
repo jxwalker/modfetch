@@ -48,7 +48,7 @@ The AUR Git remote is:
 ssh://aur@aur.archlinux.org/modfetch-bin.git
 ```
 
-The repository publish helper performs validation, auth checking, AUR clone,
+The repository publishing helper performs validation, auth checking, AUR clone,
 file copy, commit, and push:
 
 ```bash
