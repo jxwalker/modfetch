@@ -210,6 +210,7 @@ Press `F`, choose `Source`, and press `Enter` to cycle through known sources:
 **Supported sources:**
 - `huggingface` - Models from HuggingFace Hub
 - `civitai` - Models from CivitAI
+- `modelscope` - Models from ModelScope
 - `local` - Locally scanned models
 - `direct` - Direct URL downloads
 
@@ -442,9 +443,22 @@ For models downloaded from CivitAI:
 - Set `CIVITAI_TOKEN` environment variable for NSFW/restricted content
 - Token checked in Settings tab
 
+### ModelScope
+
+For models downloaded from ModelScope:
+
+**API Endpoint:** `https://modelscope.cn/api/v1/models/{owner}/{name}`
+
+**Fetched metadata:**
+- Model name, ID, description, license, and tags
+- Author and model page links
+- Download count when reported by the API
+- Model type inferred from tasks, tags, or filename
+- Quantization and file format inferred from resolved filenames
+
 ### Direct Downloads
 
-For direct URL downloads (non-HuggingFace, non-CivitAI):
+For direct URL downloads (non-HuggingFace, non-CivitAI, non-ModelScope):
 
 **Basic metadata only:**
 - URL as source
@@ -532,7 +546,11 @@ For large libraries (1000+ models):
    - Check API status
    - Ensure model ID is valid
 
-3. **For local scans:**
+3. **For ModelScope models:**
+   - Check API status at https://modelscope.cn
+   - Verify the URL uses `/models/{owner}/{name}`
+
+4. **For local scans:**
    - Metadata is limited to filename parsing
    - Rename files to include quantization (e.g., `model.Q4_K_M.gguf`)
    - Include parameter count in filename (e.g., `llama-7b.gguf`)

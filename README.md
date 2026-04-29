@@ -1,6 +1,6 @@
 # modfetch
 
-> **Fast, resilient downloads for AI models** • Download, verify, and organize LLM and Stable Diffusion models from HuggingFace and CivitAI
+> **Fast, resilient downloads for AI models** • Download, verify, and organize LLM and Stable Diffusion models from HuggingFace, CivitAI, and ModelScope
 
 ```
 ╔═══════════════════════════════════════════════════════════╗
@@ -42,11 +42,12 @@
 
 ### 📚 Model Library
 - **Browse and search** all your downloaded models
-- **Rich metadata** from HuggingFace and CivitAI APIs
+- **Rich metadata** from HuggingFace, CivitAI, and ModelScope APIs
 - **Favorites system** to mark important models
 - **Directory scanner** to discover existing models (10-100x faster with indexes)
 - **Detailed view** with specs, descriptions, tags, and links
 - **Filter by type and source** (LLM, LoRA, VAE, Checkpoint, etc.)
+- **ModelScope source support** with API-backed enrichment; see the [Library Guide](docs/LIBRARY.md#modelscope)
 
 ### 🎯 Organization
 - **Automatic placement** into app directories
@@ -476,7 +477,7 @@ Project layout
 - internal/resolver: hf:// and civitai:// resolvers
 - internal/placer: placement engine
 - internal/scanner: directory scanner for model discovery
-- internal/metadata: metadata fetchers for HuggingFace and CivitAI
+- internal/metadata: metadata fetchers for HuggingFace, CivitAI, and ModelScope
 - internal/tui: TUI models (Library, Scanner, Settings, Downloads)
 - internal/state: SQLite state DB with indexed metadata storage
 - internal/metrics: Prometheus textfile metrics
@@ -494,7 +495,7 @@ Roadmap
 - See docs/ROADMAP.md for the active, prioritized roadmap
 - v0.7.x focus:
   - AUR package publication once maintainer SSH auth is available
-  - Metadata enrichment from additional registries
+  - Metadata enrichment from additional registries beyond ModelScope
   - Authenticated and writable remote catalog sync targets
   - User-driven archive format expansion
   - Non-interactive TUI scripting hooks

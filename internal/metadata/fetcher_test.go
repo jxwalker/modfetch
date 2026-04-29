@@ -219,6 +219,11 @@ func TestRegistry_FetchMetadata(t *testing.T) {
 			wantSource: "civitai",
 		},
 		{
+			name:       "ModelScope URL",
+			url:        "https://modelscope.cn/models/qwen/Qwen2.5-7B-Instruct/resolve/master/model.gguf",
+			wantSource: "modelscope",
+		},
+		{
 			name:       "Direct URL",
 			url:        "https://example.com/model.gguf",
 			wantSource: "direct",
