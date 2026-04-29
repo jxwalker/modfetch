@@ -455,11 +455,15 @@ result, err := scanner.ScanWithContext(ctx, dirs, scanner.Options{
 
 ### Database Transactions
 
-**Approach:** One transaction per file upsert
+**Approach:** One transaction per file upsert.
 
-**Alternative:** Batch transactions for better performance:
+This keeps scan cancellation simple and prevents one bad file from rolling back
+unrelated metadata discovered earlier in the scan. If profiling later shows
+database writes dominating scan time, batch transactions are the likely
+optimization point, but they are not part of the current roadmap.
+
+Example shape for that future optimization:
 ```go
-// Planned: Batch inserts
 func (s *Scanner) scanDirectoryBatch(dir string, result *ScanResult) error {
     tx := s.db.Begin()
     defer tx.Rollback()
