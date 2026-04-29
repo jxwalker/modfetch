@@ -46,6 +46,7 @@ func NewRegistry() *Registry {
 	r.Register(NewHuggingFaceFetcher(client))
 	r.Register(NewCivitAIFetcher(client))
 	r.Register(NewModelScopeFetcher(client))
+	r.Register(NewOllamaFetcher(client))
 
 	return r
 }

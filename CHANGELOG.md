@@ -5,6 +5,9 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 Added
+- Added Ollama Library metadata enrichment for `ollama.com/library/...` URLs,
+  including page-backed descriptions, download counts, size tags, and fallback
+  metadata when the page cannot be fetched.
 - Added AUR `modfetch-bin` packaging metadata for the published Linux release
   binaries.
 - Added portable AUR package validation that checks `PKGBUILD`, `.SRCINFO`, and
