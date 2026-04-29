@@ -223,6 +223,13 @@ modfetch starter list
 modfetch starter download --id gpt2-config
 ```
 
+To choose from real provider search results instead:
+
+```bash
+modfetch discover search "sshleifer/tiny-gpt2"
+modfetch discover download "sshleifer/tiny-gpt2" --select 1
+```
+
 Starter IDs also work in the TUI and regular download command as
 `starter://ID`, for example `starter://gpt2-tokenizer`.
 

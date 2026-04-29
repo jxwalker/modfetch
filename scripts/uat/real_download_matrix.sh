@@ -47,6 +47,12 @@ run_case "direct public HTTP" "https://proof.ovh.net/files/1Mb.dat"
 run_case "starter alias via resolver" "starter://gpt2-tokenizer"
 run_case "public Hugging Face resolver" "hf://gpt2/config.json?rev=607a30d783dfa663caf39e06633721c8d4cfcd7e"
 
+printf '\n==> real Hugging Face discovery search\n' >&2
+"$bin" discover search --provider huggingface --limit 2 "sshleifer/tiny-gpt2" >/dev/null
+
+printf '\n==> real Hugging Face discovery download\n' >&2
+"$bin" discover download --config "$cfg" --provider huggingface --limit 2 --select 1 --summary-json --quiet "sshleifer/tiny-gpt2"
+
 if [[ -n "${MODFETCH_UAT_CIVITAI_URI:-}" ]]; then
   run_case "configured CivitAI URI" "$MODFETCH_UAT_CIVITAI_URI"
 else

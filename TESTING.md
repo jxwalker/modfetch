@@ -60,6 +60,7 @@ export MODFETCH_CONFIG="${MODFETCH_CONFIG:-$HOME/.config/modfetch/config.yml}"
 ./bin/modfetch version
 ./bin/modfetch download --config "$MODFETCH_CONFIG" --url 'https://proof.ovh.net/files/1Mb.dat' --summary-json
 ./bin/modfetch starter download --config "$MODFETCH_CONFIG" --id gpt2-config --summary-json
+./bin/modfetch discover search --provider huggingface --limit 2 'sshleifer/tiny-gpt2'
 ./bin/modfetch verify --config "$MODFETCH_CONFIG" --all
 ```
 
@@ -70,9 +71,10 @@ changes:
 scripts/uat/real_download_matrix.sh
 ```
 
-The matrix downloads a public direct HTTP file, a starter alias, and a public
-Hugging Face artifact. Set `MODFETCH_UAT_CIVITAI_URI` to add a known-small
-CivitAI URI for environments where that content and token policy are known.
+The matrix downloads a public direct HTTP file, a starter alias, a public
+Hugging Face artifact, and a tiny real Hugging Face model selected through
+`discover`. Set `MODFETCH_UAT_CIVITAI_URI` to add a known-small CivitAI URI for
+environments where that content and token policy are known.
 
 For TUI validation:
 

@@ -269,6 +269,10 @@ export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 modfetch starter list
 modfetch starter download --id gpt2-config
 
+# Search real providers and download a selected model
+modfetch discover search "sshleifer/tiny-gpt2"
+modfetch discover download "sshleifer/tiny-gpt2" --select 1
+
 # The same starter works anywhere a URL is accepted
 modfetch download --url 'starter://gpt2-tokenizer'
 
@@ -321,6 +325,10 @@ modfetch download --url 'URL'
 # Choose a beginner-safe starter download
 modfetch starter list
 modfetch starter download --id gpt2-config
+
+# Search real model providers
+modfetch discover search "tiny gpt2"
+modfetch discover download "sshleifer/tiny-gpt2" --select 1
 
 # Verify downloads
 modfetch verify --all
