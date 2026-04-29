@@ -256,8 +256,9 @@ func TestHandleLibrarySyncPushHTTPTargetWithDefaultBearerToken(t *testing.T) {
 	}))
 	defer server.Close()
 
+	targetWithWhitespace := "  " + server.URL + "  "
 	out := captureStdout(t, func() {
-		if err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", server.URL, "--json"}); err != nil {
+		if err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", targetWithWhitespace, "--json"}); err != nil {
 			t.Fatalf("library sync push HTTP: %v", err)
 		}
 	})
@@ -272,6 +273,9 @@ func TestHandleLibrarySyncPushHTTPTargetWithDefaultBearerToken(t *testing.T) {
 	}
 	if result.Method != http.MethodPut || result.Status != "201 Created" || !result.Authenticated || result.Models != 1 {
 		t.Fatalf("unexpected sync push result: %+v", result)
+	}
+	if result.Target != server.URL {
+		t.Fatalf("sync push result target = %q, want %q", result.Target, server.URL)
 	}
 }
 
@@ -300,6 +304,20 @@ func TestHandleLibrarySyncPushHTTPDryRunDoesNotContactTarget(t *testing.T) {
 
 	if err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", server.URL, "--dry-run"}); err != nil {
 		t.Fatalf("library sync push HTTP dry-run: %v", err)
+	}
+}
+
+func TestHandleLibrarySyncPushHTTPStatusErrorIncludesBody(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := writeLibraryConfig(t, filepath.Join(dir, "cfg"))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "catalog rejected", http.StatusTeapot)
+	}))
+	defer server.Close()
+
+	err := handleLibrary(context.Background(), []string{"sync", "push", "--config", cfgPath, "--target", server.URL})
+	if err == nil || !strings.Contains(err.Error(), "HTTP 418") || !strings.Contains(err.Error(), "catalog rejected") {
+		t.Fatalf("expected HTTP status and body in sync push error, got %v", err)
 	}
 }
 
@@ -499,6 +517,14 @@ func TestCheckSyncRedirectRejectsUnsafeRedirects(t *testing.T) {
 	}
 	if err := checkSyncRedirect(sameHostReq, []*http.Request{authReq}); err != nil {
 		t.Fatalf("same-host authenticated redirect should be allowed: %v", err)
+	}
+
+	defaultPortReq, err := http.NewRequest(http.MethodGet, "https://sync.example:443/next.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := checkSyncRedirect(defaultPortReq, []*http.Request{authReq}); err != nil {
+		t.Fatalf("same-origin authenticated redirect with explicit default port should be allowed: %v", err)
 	}
 }
 

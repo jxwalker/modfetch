@@ -119,13 +119,14 @@ func handleLibrarySyncPush(ctx context.Context, args []string) error {
 	common := addCommonConfigLogFlags(fs, "print sync push result as JSON")
 	target := fs.String("target", "", "sync target URI or path; file://, http://, https://, and plain paths are supported")
 	dryRun := fs.Bool("dry-run", false, "report without writing the target catalog")
-	tokenEnv := fs.String("token-env", "MODFETCH_SYNC_TOKEN", "environment variable containing a bearer token for HTTP(S) sync targets")
+	tokenEnv := fs.String("token-env", defaultSyncTokenEnv, "environment variable containing a bearer token for HTTP(S) sync targets")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	syncTarget := strings.TrimSpace(*target)
 	db, err := openLibraryDB(*common.configPath)
 	if err != nil {
 		return err
@@ -138,12 +139,12 @@ func handleLibrarySyncPush(ctx context.Context, args []string) error {
 	}
 	result := librarySyncPushResult{
 		Action: "push",
-		Target: *target,
+		Target: syncTarget,
 		Models: len(cat.Models),
 		DryRun: *dryRun,
 	}
 	if !*dryRun {
-		outcome, err := writeCatalogSyncTarget(ctx, *target, cat, *tokenEnv)
+		outcome, err := writeCatalogSyncTarget(ctx, syncTarget, cat, *tokenEnv)
 		if err != nil {
 			return err
 		}
@@ -152,7 +153,7 @@ func handleLibrarySyncPush(ctx context.Context, args []string) error {
 		result.Status = outcome.Status
 		result.Authenticated = outcome.Authenticated
 	} else {
-		outcome, err := describeCatalogSyncTarget(*target)
+		outcome, err := describeCatalogSyncTarget(syncTarget)
 		if err != nil {
 			return err
 		}
@@ -177,19 +178,20 @@ func handleLibrarySyncPull(ctx context.Context, args []string) error {
 	common := addCommonConfigLogFlags(fs, "print sync pull result as JSON")
 	target := fs.String("target", "", "sync target URI or path; file://, http://, https://, and plain paths are supported")
 	dryRun := fs.Bool("dry-run", false, "report changes without writing to the library")
-	tokenEnv := fs.String("token-env", "MODFETCH_SYNC_TOKEN", "environment variable containing a bearer token for HTTP(S) sync targets")
+	tokenEnv := fs.String("token-env", defaultSyncTokenEnv, "environment variable containing a bearer token for HTTP(S) sync targets")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	syncTarget := strings.TrimSpace(*target)
 	db, err := openLibraryDB(*common.configPath)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = db.Close() }()
-	r, closeFn, err := syncTargetReader(ctx, *target, *tokenEnv)
+	r, closeFn, err := syncTargetReader(ctx, syncTarget, *tokenEnv)
 	if err != nil {
 		return err
 	}
@@ -273,10 +275,40 @@ func checkSyncRedirect(req *http.Request, via []*http.Request) error {
 	if first.URL == nil || req.URL == nil {
 		return errors.New("refusing to redirect authenticated sync request without a URL")
 	}
-	if !strings.EqualFold(first.URL.Scheme, req.URL.Scheme) || !strings.EqualFold(first.URL.Host, req.URL.Host) {
+	if !sameNormalizedOrigin(first.URL, req.URL) {
 		return errors.New("refusing to redirect authenticated sync request across scheme or host")
 	}
 	return nil
+}
+
+func sameNormalizedOrigin(a, b *url.URL) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	if !strings.EqualFold(a.Scheme, b.Scheme) {
+		return false
+	}
+	if !strings.EqualFold(a.Hostname(), b.Hostname()) {
+		return false
+	}
+	return effectiveURLPort(a) == effectiveURLPort(b)
+}
+
+func effectiveURLPort(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	if port := u.Port(); port != "" {
+		return port
+	}
+	switch {
+	case strings.EqualFold(u.Scheme, "http"):
+		return "80"
+	case strings.EqualFold(u.Scheme, "https"):
+		return "443"
+	default:
+		return ""
+	}
 }
 
 func (f *stringListFlag) String() string {
