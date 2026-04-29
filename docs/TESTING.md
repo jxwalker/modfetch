@@ -40,7 +40,18 @@ regeneration check when `makepkg` is unavailable.
 
 ```bash
 scripts/smoke.sh ./assets/sample-config/config.example.yml
+scripts/uat/real_download_matrix.sh
 ```
+
+The real download matrix builds the local binary if needed, creates an isolated
+temporary config, then performs live public downloads through direct HTTP,
+`starter://`, and Hugging Face resolver paths. It verifies the resulting
+download records before removing its temporary workspace.
+
+Set `MODFETCH_UAT_CIVITAI_URI` to add a known-small CivitAI download to the
+matrix. This is intentionally opt-in because CivitAI availability, gating, and
+acceptable test assets change more often than the public HTTP and Hugging Face
+smoke targets.
 
 ## 5. Auth-Gated Tests
 
@@ -84,4 +95,3 @@ tmux new -s modfetch_tui 'modfetch tui --config /etc/modfetch/config.yml'
 CI runs docs drift validation, AUR metadata validation, Go tests, cross-platform
 builds, and release artifact publication on tags. Add new CI coverage when a
 feature introduces a new external service, package channel, or release artifact.
-

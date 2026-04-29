@@ -215,10 +215,21 @@ modfetch tui --snapshot --json
 
 ### Start a New Download from TUI
 
+If you do not already know what model URL to use, start with the curated
+starter list from another shell:
+
+```bash
+modfetch starter list
+modfetch starter download --id gpt2-config
+```
+
+Starter IDs also work in the TUI and regular download command as
+`starter://ID`, for example `starter://gpt2-tokenizer`.
+
 **Step-by-step:**
 
 1. **Press `n`** (New download)
-   ```
+   ```text
    ┌────────────────────────────────────────┐
    │ New Download                           │
    ├────────────────────────────────────────┤
@@ -228,24 +239,24 @@ modfetch tui --snapshot --json
    └────────────────────────────────────────┘
    ```
 
-2. **Paste your URL**
-   ```
+2. **Paste your URL or starter ID**
+   ```text
    ┌────────────────────────────────────────┐
    │ New Download                           │
    ├────────────────────────────────────────┤
-   │ URL: hf://gpt2/README.md?rev=main      │
+   │ URL: starter://gpt2-tokenizer          │
    │                                        │
    │ Enter/Tab: Continue  Esc: Cancel       │
    └────────────────────────────────────────┘
    ```
 
 3. **Confirm destination** (or edit it)
-   ```
+   ```text
    ┌────────────────────────────────────────┐
    │ New Download                           │
    ├────────────────────────────────────────┤
-   │ URL: hf://gpt2/README.md?rev=main      │
-   │ Dest: ~/Downloads/modfetch/README.md   │
+   │ URL: starter://gpt2-tokenizer          │
+   │ Dest: ~/Downloads/modfetch/tokenizer.json │
    │                                        │
    │ Enter: Start  Esc: Cancel              │
    └────────────────────────────────────────┘
@@ -254,7 +265,7 @@ modfetch tui --snapshot --json
 4. **Press Enter** - Download starts!
 
 5. **Watch it in Tab 2** (Active)
-   ```
+   ```text
    Press '2' to see:
 
    ║ Status    │ Progress    │ Speed     │ ETA    │ Size  │ File       ║

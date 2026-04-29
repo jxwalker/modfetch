@@ -8,6 +8,7 @@ Complete command-line reference for modfetch. For the visual TUI interface, see 
 - [Global Flags](#global-flags)
 - [Commands](#commands)
   - [download](#download)
+  - [starter](#starter)
   - [verify](#verify)
   - [place](#place)
   - [clean](#clean)
@@ -80,7 +81,7 @@ modfetch download --url URL [OPTIONS]
 ```
 
 **Required:**
-- `--url URL` - URL to download (supports `https://`, `hf://`, `civitai://`)
+- `--url URL` - URL to download (supports `https://`, `starter://`, `hf://`, `civitai://`)
 
 **Optional:**
 - `--dest PATH` - Destination file path (default: auto-generated from URL)
@@ -103,6 +104,9 @@ modfetch download --url URL [OPTIONS]
 **URL Formats:**
 
 ```bash
+# Beginner-safe starter alias
+modfetch download --url 'starter://gpt2-config'
+
 # Direct HTTPS
 modfetch download --url 'https://example.com/model.safetensors'
 
@@ -115,6 +119,20 @@ modfetch download --url 'civitai://model/123456'
 modfetch download --url 'civitai://model/123456?version=456789'
 modfetch download --url 'civitai://model/123456?file=specific-file.safetensors'
 ```
+
+### starter
+
+List and download curated, beginner-safe artifacts that exercise the normal
+download pipeline without tokens or multi-gigabyte files.
+
+```bash
+modfetch starter list
+modfetch starter show gpt2-tokenizer
+modfetch starter download --id gpt2-config --summary-json
+```
+
+Starter IDs are also resolver aliases, so `starter://gpt2-config` can be used
+in `download`, batch files, and the TUI new-download modal.
 
 **Examples:**
 

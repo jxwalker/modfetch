@@ -160,7 +160,7 @@ func handleBatchImport(ctx context.Context, args []string) error {
 		headers := map[string]string{}
 		probeURL := resolvedURI
 		// If resolver URI, resolve to direct URL and headers
-		if strings.HasPrefix(resolvedURI, "hf://") || strings.HasPrefix(resolvedURI, "civitai://") {
+		if isResolverURI(resolvedURI) {
 			// Warn if token is configured but not present in env
 			if strings.HasPrefix(resolvedURI, "civitai://") && c.Sources.CivitAI.Enabled {
 				if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
