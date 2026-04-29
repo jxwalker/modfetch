@@ -455,28 +455,13 @@ result, err := scanner.ScanWithContext(ctx, dirs, scanner.Options{
 
 ### Database Transactions
 
-**Approach:** One transaction per file upsert
+**Approach:** One transaction per file upsert.
 
-**Alternative:** Batch transactions for better performance:
-```go
-// Planned: Batch inserts
-func (s *Scanner) scanDirectoryBatch(dir string, result *ScanResult) error {
-    tx := s.db.Begin()
-    defer tx.Rollback()
-
-    // Collect metadata for multiple files
-    var metaBatch []*state.ModelMetadata
-
-    // ... walk and collect ...
-
-    // Batch insert
-    for _, meta := range metaBatch {
-        tx.UpsertMetadata(meta)
-    }
-
-    return tx.Commit()
-}
-```
+This allows partial progress to be persisted even if the scan is cancelled, and
+ensures that a database error during a single file's upsert does not roll back
+unrelated metadata successfully stored earlier in the scan. If profiling later
+shows transaction overhead dominating scan time, batching multiple upserts would
+be the primary optimization point, though it is not currently on the roadmap.
 
 ### Filename Parsing
 
