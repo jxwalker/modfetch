@@ -3,8 +3,8 @@ package metadata
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -98,8 +98,11 @@ func (f *CivitAIFetcher) FetchMetadata(ctx context.Context, url string) (*state.
 		return nil, fmt.Errorf("CivitAI API returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := readBoundedBody(resp.Body, maxMetadataBodyBytes)
 	if err != nil {
+		if errors.Is(err, ErrResponseTooLarge) {
+			return nil, fmt.Errorf("CivitAI response exceeds %d bytes", maxMetadataBodyBytes)
+		}
 		return nil, fmt.Errorf("reading response: %w", err)
 	}
 

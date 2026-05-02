@@ -3,6 +3,7 @@ package metadata
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,34 @@ import (
 
 	"github.com/jxwalker/modfetch/internal/state"
 )
+
+// maxMetadataBodyBytes caps how much of any provider response we will buffer
+// before JSON decoding. Prevents memory blow-ups from a hostile or
+// misbehaving server while still leaving plenty of headroom for normal
+// metadata payloads.
+const maxMetadataBodyBytes = 4 * 1024 * 1024
+
+// ErrResponseTooLarge is returned by readBoundedBody when the response body
+// exceeds the configured limit. Callers can branch on this to surface a
+// distinct error or fall back to basic metadata, rather than mistaking
+// truncated JSON for a parse failure.
+var ErrResponseTooLarge = errors.New("response body exceeded maximum size")
+
+// readBoundedBody reads up to max bytes from r and returns ErrResponseTooLarge
+// when the body would have exceeded the limit (detected by reading max+1
+// bytes). This makes oversized responses distinguishable from genuine I/O or
+// JSON-parsing failures, instead of letting them masquerade as "unexpected
+// end of JSON input".
+func readBoundedBody(r io.Reader, max int64) ([]byte, error) {
+	buf, err := io.ReadAll(io.LimitReader(r, max+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(buf)) > max {
+		return buf[:max], ErrResponseTooLarge
+	}
+	return buf, nil
+}
 
 // Fetcher is the interface for fetching model metadata from various sources
 type Fetcher interface {
@@ -150,8 +179,13 @@ func (f *HuggingFaceFetcher) FetchMetadata(ctx context.Context, url string) (*st
 		return f.basicMetadata(url, modelID, filename, version), nil
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := readBoundedBody(resp.Body, maxMetadataBodyBytes)
 	if err != nil {
+		// readBoundedBody returns ErrResponseTooLarge for oversized payloads
+		// and the underlying I/O error otherwise. Both degrade to basic
+		// metadata so the user still gets a usable record, but the error
+		// itself is distinct and remains inspectable via errors.Is at the
+		// callsite if we ever want to log or branch on it.
 		return f.basicMetadata(url, modelID, filename, version), nil
 	}
 
