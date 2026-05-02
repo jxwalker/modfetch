@@ -325,26 +325,46 @@ func TestSearch_UnknownProvider(t *testing.T) {
 func TestSearch_ModelScope(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		resp := modelScopeSearchResponse{
-			Code:    200,
-			Success: true,
-			Data: struct {
-				Models []modelScopeSearchModel `json:"Models"`
-			}{
-				Models: []modelScopeSearchModel{
-					{
-						ID:        "qwen/Qwen-7B",
-						Name:      "Qwen-7B",
-						ChName:    "通义千问-7B",
-						Owner:     "qwen",
-						Downloads: 12345,
-						Likes:     678,
-						Tags:      []string{"llm", "chat"},
+		switch {
+		case r.URL.Path == "/api/v1/models":
+			resp := modelScopeSearchResponse{
+				Code:    200,
+				Success: true,
+				Data: struct {
+					Models []modelScopeSearchModel `json:"Models"`
+				}{
+					Models: []modelScopeSearchModel{
+						{
+							ID:        "qwen/Qwen-7B",
+							Name:      "Qwen-7B",
+							ChName:    "通义千问-7B",
+							Owner:     "qwen",
+							Downloads: 12345,
+							Likes:     678,
+							Tags:      []string{"llm", "chat"},
+						},
 					},
 				},
-			},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+		case strings.HasSuffix(r.URL.Path, "/repo/files"):
+			resp := modelScopeFilesResponse{
+				Code:    200,
+				Success: true,
+				Data: struct {
+					Files []modelScopeFile `json:"Files"`
+				}{
+					Files: []modelScopeFile{
+						{Type: "blob", Path: "README.md", Size: 100},
+						{Type: "blob", Path: "qwen-7b.Q4_K_M.gguf", Size: 4 * 1024 * 1024 * 1024},
+						{Type: "tree", Path: "checkpoints"},
+					},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+		default:
+			http.NotFound(w, r)
 		}
-		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer srv.Close()
 
@@ -366,11 +386,116 @@ func TestSearch_ModelScope(t *testing.T) {
 	if r.ModelID != "qwen/Qwen-7B" {
 		t.Errorf("model_id = %q, want qwen/Qwen-7B", r.ModelID)
 	}
-	if !strings.Contains(r.URI, "qwen") || !strings.Contains(r.URI, "Qwen-7B") {
-		t.Errorf("URI = %q, expected owner and model name in URI", r.URI)
+	wantURI := srv.URL + "/models/qwen/Qwen-7B/resolve/master/qwen-7b.Q4_K_M.gguf"
+	if r.URI != wantURI {
+		t.Errorf("URI = %q, want %q", r.URI, wantURI)
+	}
+	if r.FilePath != "qwen-7b.Q4_K_M.gguf" || r.FileName != "qwen-7b.Q4_K_M.gguf" || r.FileType != "gguf" {
+		t.Errorf("unexpected file fields: path=%q name=%q type=%q", r.FilePath, r.FileName, r.FileType)
+	}
+	if r.Size != 4*1024*1024*1024 {
+		t.Errorf("size = %d, want 4GiB", r.Size)
 	}
 	if r.Downloads != 12345 {
 		t.Errorf("downloads = %d, want 12345", r.Downloads)
+	}
+}
+
+func TestSearch_ModelScope_FallsBackToPageURLOnFileListFailure(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v1/models":
+			_ = json.NewEncoder(w).Encode(modelScopeSearchResponse{
+				Code:    200,
+				Success: true,
+				Data: struct {
+					Models []modelScopeSearchModel `json:"Models"`
+				}{
+					Models: []modelScopeSearchModel{
+						{ID: "alice/MyModel", Name: "MyModel", Owner: "alice"},
+					},
+				},
+			})
+		case strings.HasSuffix(r.URL.Path, "/repo/files"):
+			http.Error(w, "not found", http.StatusNotFound)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	orig := modelScopeBaseURL
+	modelScopeBaseURL = srv.URL
+	defer func() { modelScopeBaseURL = orig }()
+
+	results, err := Search(context.Background(), Options{Provider: ProviderModelScope, Query: "alice", Limit: 5})
+	if err != nil {
+		t.Fatalf("Search ModelScope: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results len = %d", len(results))
+	}
+	wantURI := srv.URL + "/models/alice/MyModel"
+	if results[0].URI != wantURI {
+		t.Errorf("URI = %q, want %q (page-URL fallback)", results[0].URI, wantURI)
+	}
+}
+
+func TestSearch_ModelScope_EscapesOwnerAndName(t *testing.T) {
+	var capturedFilesPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v1/models":
+			_ = json.NewEncoder(w).Encode(modelScopeSearchResponse{
+				Code:    200,
+				Success: true,
+				Data: struct {
+					Models []modelScopeSearchModel `json:"Models"`
+				}{
+					// Owner/name with characters that need URL escaping.
+					Models: []modelScopeSearchModel{
+						{ID: "team space/My Model", Name: "My Model", Owner: "team space"},
+					},
+				},
+			})
+		case strings.HasSuffix(r.URL.Path, "/repo/files"):
+			capturedFilesPath = r.URL.EscapedPath()
+			_ = json.NewEncoder(w).Encode(modelScopeFilesResponse{
+				Code:    200,
+				Success: true,
+				Data: struct {
+					Files []modelScopeFile `json:"Files"`
+				}{
+					Files: []modelScopeFile{
+						{Type: "blob", Path: "weights/model.safetensors", Size: 1024},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	orig := modelScopeBaseURL
+	modelScopeBaseURL = srv.URL
+	defer func() { modelScopeBaseURL = orig }()
+
+	results, err := Search(context.Background(), Options{Provider: ProviderModelScope, Query: "team", Limit: 5})
+	if err != nil {
+		t.Fatalf("Search ModelScope: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results len = %d", len(results))
+	}
+	if want := "/api/v1/models/team%20space/My%20Model/repo/files"; capturedFilesPath != want {
+		t.Errorf("file-list path = %q, want %q (owner/name should be URL-escaped)", capturedFilesPath, want)
+	}
+	wantURI := srv.URL + "/models/team%20space/My%20Model/resolve/master/weights/model.safetensors"
+	if results[0].URI != wantURI {
+		t.Errorf("URI = %q, want %q", results[0].URI, wantURI)
 	}
 }
 
@@ -392,6 +517,57 @@ func TestSearch_ModelScope_APIError(t *testing.T) {
 	_, err := Search(context.Background(), Options{Provider: ProviderModelScope, Query: "test", Limit: 5})
 	if err == nil {
 		t.Fatal("expected error for ModelScope API failure")
+	}
+	if !strings.Contains(err.Error(), "internal server error") || !strings.Contains(err.Error(), "code=500") {
+		t.Errorf("error = %q, want both code and message in error", err.Error())
+	}
+}
+
+func TestSearch_ModelScope_BlankMessageGetsDefault(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(modelScopeSearchResponse{
+			Code:    503,
+			Success: false,
+			Message: "",
+		})
+	}))
+	defer srv.Close()
+
+	orig := modelScopeBaseURL
+	modelScopeBaseURL = srv.URL
+	defer func() { modelScopeBaseURL = orig }()
+
+	_, err := Search(context.Background(), Options{Provider: ProviderModelScope, Query: "test", Limit: 5})
+	if err == nil {
+		t.Fatal("expected error for ModelScope API failure")
+	}
+	if !strings.Contains(err.Error(), "unknown error") || !strings.Contains(err.Error(), "code=503") {
+		t.Errorf("error = %q, want default message and code in error", err.Error())
+	}
+}
+
+func TestCheckModelScopeEnvelope(t *testing.T) {
+	cases := []struct {
+		name    string
+		success bool
+		code    int
+		message string
+		wantErr bool
+	}{
+		{"success_code_200", true, 200, "", false},
+		{"success_code_zero", true, 0, "", false},
+		{"failure_with_message", false, 500, "boom", true},
+		{"failure_blank_message", false, 503, "", true},
+		{"success_but_nonzero_code_other", true, 500, "weird", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkModelScopeEnvelope(tc.success, tc.code, tc.message)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("checkModelScopeEnvelope(%v, %d, %q) err = %v, wantErr %v", tc.success, tc.code, tc.message, err, tc.wantErr)
+			}
+		})
 	}
 }
 
@@ -432,17 +608,34 @@ func TestSearch_All_CombinesProviders(t *testing.T) {
 
 	msSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(modelScopeSearchResponse{
-			Code:    200,
-			Success: true,
-			Data: struct {
-				Models []modelScopeSearchModel `json:"Models"`
-			}{
-				Models: []modelScopeSearchModel{
-					{ID: "alice/ms-model", Name: "ms-model", Owner: "alice", Downloads: 500},
+		switch {
+		case r.URL.Path == "/api/v1/models":
+			_ = json.NewEncoder(w).Encode(modelScopeSearchResponse{
+				Code:    200,
+				Success: true,
+				Data: struct {
+					Models []modelScopeSearchModel `json:"Models"`
+				}{
+					Models: []modelScopeSearchModel{
+						{ID: "alice/ms-model", Name: "ms-model", Owner: "alice", Downloads: 500},
+					},
 				},
-			},
-		})
+			})
+		case strings.HasSuffix(r.URL.Path, "/repo/files"):
+			_ = json.NewEncoder(w).Encode(modelScopeFilesResponse{
+				Code:    200,
+				Success: true,
+				Data: struct {
+					Files []modelScopeFile `json:"Files"`
+				}{
+					Files: []modelScopeFile{
+						{Type: "blob", Path: "model.safetensors", Size: 1024},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
 	}))
 	defer msSrv.Close()
 

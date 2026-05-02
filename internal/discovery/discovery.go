@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
@@ -12,6 +13,16 @@ import (
 	"strings"
 	"time"
 )
+
+// maxDiscoveryBodyBytes caps the size of any response body we will buffer
+// before JSON decoding. A misbehaving server can stream arbitrarily large
+// payloads, so we enforce a hard ceiling regardless of the API's `limit`
+// parameter to keep memory predictable.
+const maxDiscoveryBodyBytes = 8 * 1024 * 1024
+
+// errDiscoveryResponseTooLarge is returned when a provider response exceeds
+// maxDiscoveryBodyBytes. Callers wrap it with provider-specific context.
+var errDiscoveryResponseTooLarge = errors.New("response body exceeded maximum size")
 
 const (
 	ProviderHuggingFace = "huggingface"
@@ -377,6 +388,27 @@ type modelScopeSearchModel struct {
 	Type      string   `json:"ModelType"`
 }
 
+// modelScopeFilesResponse is the envelope returned by the ModelScope file
+// listing endpoint (`/api/v1/models/{owner}/{name}/repo/files`).
+type modelScopeFilesResponse struct {
+	Code    int    `json:"Code"`
+	Success bool   `json:"Success"`
+	Message string `json:"Message"`
+	Data    struct {
+		Files []modelScopeFile `json:"Files"`
+	} `json:"Data"`
+}
+
+type modelScopeFile struct {
+	Type     string `json:"Type"`
+	Path     string `json:"Path"`
+	Name     string `json:"Name"`
+	Size     int64  `json:"Size"`
+	Revision string `json:"Revision"`
+}
+
+const modelScopeDefaultRevision = "master"
+
 func searchModelScope(ctx context.Context, client *http.Client, query string, limit int) ([]Result, error) {
 	u, err := url.Parse(modelScopeBaseURL + "/api/v1/models")
 	if err != nil {
@@ -395,8 +427,8 @@ func searchModelScope(ctx context.Context, client *http.Client, query string, li
 	if err := doJSON(client, req, &payload); err != nil {
 		return nil, fmt.Errorf("modelscope search: %w", err)
 	}
-	if !payload.Success {
-		return nil, fmt.Errorf("modelscope search: %s", payload.Message)
+	if err := checkModelScopeEnvelope(payload.Success, payload.Code, payload.Message); err != nil {
+		return nil, fmt.Errorf("modelscope search: %w", err)
 	}
 	out := make([]Result, 0, len(payload.Data.Models))
 	for _, model := range payload.Data.Models {
@@ -410,18 +442,141 @@ func searchModelScope(ctx context.Context, client *http.Client, query string, li
 		if ch := strings.TrimSpace(model.ChName); ch != "" {
 			displayName = ch
 		}
-		uri := modelScopeBaseURL + "/models/" + owner + "/" + name
-		out = append(out, Result{
+
+		// Best-effort: resolve a concrete downloadable file so callers that pass
+		// Result.URI to `download --url` get a real artifact, not the model page.
+		// If the file listing fails (private repo, transient error, etc.) fall
+		// back to the model page URL, matching prior behaviour.
+		fileURI, filePath, fileSize := bestModelScopeFile(ctx, client, owner, name, modelScopeDefaultRevision)
+		if fileURI == "" {
+			fileURI = modelScopeModelPageURL(owner, name)
+		}
+
+		result := Result{
 			Provider:  ProviderModelScope,
 			ModelID:   modelID,
 			Name:      displayName,
 			Tags:      model.Tags,
 			Downloads: model.Downloads,
 			Likes:     model.Likes,
-			URI:       uri,
-		})
+			URI:       fileURI,
+		}
+		if filePath != "" {
+			result.FilePath = filePath
+			result.FileName = path.Base(filePath)
+			result.FileType = strings.TrimPrefix(strings.ToLower(path.Ext(filePath)), ".")
+			result.Size = fileSize
+		}
+		out = append(out, result)
 	}
 	return out, nil
+}
+
+// checkModelScopeEnvelope validates the common Success/Code envelope returned
+// by ModelScope APIs, formatting a useful error when Message is blank.
+func checkModelScopeEnvelope(success bool, code int, message string) error {
+	if success && (code == 0 || code == http.StatusOK) {
+		return nil
+	}
+	msg := strings.TrimSpace(message)
+	if msg == "" {
+		msg = "unknown error"
+	}
+	if code != 0 {
+		return fmt.Errorf("code=%d %s", code, msg)
+	}
+	return fmt.Errorf("%s", msg)
+}
+
+// modelScopeModelPageURL builds a fully URL-escaped model page URL for the
+// given owner/name. It is used as a last-resort fallback when we cannot
+// resolve a concrete downloadable file.
+func modelScopeModelPageURL(owner, name string) string {
+	return strings.TrimRight(modelScopeBaseURL, "/") + "/models/" + url.PathEscape(owner) + "/" + url.PathEscape(name)
+}
+
+// bestModelScopeFile fetches the repository file list and selects a single
+// downloadable file using the same scoring heuristic as HuggingFace. It
+// returns a fully-formed `/models/<owner>/<name>/resolve/<rev>/<path>` URL on
+// success. If the listing fails or no suitable file is found, it returns
+// empty strings so the caller can fall back to the model page URL.
+func bestModelScopeFile(ctx context.Context, client *http.Client, owner, name, revision string) (uri, filePath string, size int64) {
+	if revision == "" {
+		revision = modelScopeDefaultRevision
+	}
+	u, err := url.Parse(strings.TrimRight(modelScopeBaseURL, "/") + "/api/v1/models/" + url.PathEscape(owner) + "/" + url.PathEscape(name) + "/repo/files")
+	if err != nil {
+		return "", "", 0
+	}
+	q := u.Query()
+	q.Set("Revision", revision)
+	q.Set("Recursive", "true")
+	q.Set("PageSize", "200")
+	u.RawQuery = q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return "", "", 0
+	}
+	var payload modelScopeFilesResponse
+	if err := doJSON(client, req, &payload); err != nil {
+		return "", "", 0
+	}
+	if err := checkModelScopeEnvelope(payload.Success, payload.Code, payload.Message); err != nil {
+		return "", "", 0
+	}
+
+	bestScore := -1
+	var best modelScopeFile
+	for _, file := range payload.Data.Files {
+		if !isModelScopeBlob(file.Type) {
+			continue
+		}
+		p := strings.TrimSpace(file.Path)
+		if p == "" {
+			p = strings.TrimSpace(file.Name)
+		}
+		if p == "" {
+			continue
+		}
+		score := hfFileScore(p)
+		if score < 0 {
+			continue
+		}
+		if score > bestScore || (score == bestScore && preferSmallerNonZero(file.Size, best.Size)) {
+			best = file
+			best.Path = p
+			bestScore = score
+		}
+	}
+	if best.Path == "" {
+		return "", "", 0
+	}
+	uri = strings.TrimRight(modelScopeBaseURL, "/") + "/models/" +
+		url.PathEscape(owner) + "/" + url.PathEscape(name) +
+		"/resolve/" + url.PathEscape(revision) + "/" + escapePathSegments(best.Path)
+	return uri, best.Path, best.Size
+}
+
+// isModelScopeBlob accepts the variants ModelScope's API has used to label a
+// file (vs a directory): "blob", "file", or empty (some responses omit Type).
+func isModelScopeBlob(t string) bool {
+	switch strings.ToLower(strings.TrimSpace(t)) {
+	case "tree", "directory", "dir":
+		return false
+	default:
+		return true
+	}
+}
+
+// escapePathSegments escapes each '/'-separated segment of a path while
+// preserving the slashes themselves, so the result is safe to embed as a
+// URL path without breaking the directory structure.
+func escapePathSegments(p string) string {
+	parts := strings.Split(p, "/")
+	for i, part := range parts {
+		parts[i] = url.PathEscape(part)
+	}
+	return strings.Join(parts, "/")
 }
 
 func doJSON(client *http.Client, req *http.Request, dst any) error {
@@ -433,7 +588,16 @@ func doJSON(client *http.Client, req *http.Request, dst any) error {
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("%s", resp.Status)
 	}
-	return json.NewDecoder(resp.Body).Decode(dst)
+	// Read at most maxDiscoveryBodyBytes+1 so we can detect oversized responses
+	// explicitly rather than silently truncating them and confusing JSON decoding.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDiscoveryBodyBytes+1))
+	if err != nil {
+		return err
+	}
+	if int64(len(body)) > maxDiscoveryBodyBytes {
+		return errDiscoveryResponseTooLarge
+	}
+	return json.Unmarshal(body, dst)
 }
 
 func preferSmallerNonZero(a, b int64) bool {
