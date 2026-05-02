@@ -99,6 +99,26 @@ func handleDownload(ctx context.Context, args []string) error {
 			reserved[p] = struct{}{}
 			return true
 		}
+		// tryReserve returns (path, true, nil) when path is free and reserved,
+		// (path, false, nil) when the path is already taken (file exists or
+		// another worker reserved it), or ("", false, err) for any unexpected
+		// filesystem error (e.g. permission denied on the download directory)
+		// so the caller can surface a clear error instead of looping forever.
+		tryReserve := func(p string) (string, bool, error) {
+			_, err := os.Stat(p)
+			switch {
+			case err == nil:
+				return p, false, nil
+			case os.IsNotExist(err):
+				if _, ok := reserved[p]; ok {
+					return p, false, nil
+				}
+				reserved[p] = struct{}{}
+				return p, true, nil
+			default:
+				return "", false, fmt.Errorf("stat %s: %w", p, err)
+			}
+		}
 		reserveUnique := func(dir, base, versionHint string) (string, error) {
 			destMu.Lock()
 			defer destMu.Unlock()
@@ -106,32 +126,32 @@ func handleDownload(ctx context.Context, args []string) error {
 			ext := filepath.Ext(base)
 			name := strings.TrimSuffix(base, ext)
 			// try plain
-			p := filepath.Join(dir, base)
-			if _, err := os.Stat(p); os.IsNotExist(err) {
-				if _, ok := reserved[p]; !ok {
-					reserved[p] = struct{}{}
-					return p, nil
-				}
+			if p, ok, err := tryReserve(filepath.Join(dir, base)); err != nil {
+				return "", err
+			} else if ok {
+				return p, nil
 			}
 			// try version
 			if strings.TrimSpace(versionHint) != "" {
-				cand := filepath.Join(dir, fmt.Sprintf("%s (v%s)%s", name, versionHint, ext))
-				if _, err := os.Stat(cand); os.IsNotExist(err) {
-					if _, ok := reserved[cand]; !ok {
-						reserved[cand] = struct{}{}
-						return cand, nil
-					}
+				if p, ok, err := tryReserve(filepath.Join(dir, fmt.Sprintf("%s (v%s)%s", name, versionHint, ext))); err != nil {
+					return "", err
+				} else if ok {
+					return p, nil
 				}
 			}
-			for i := 2; ; i++ {
-				cand := filepath.Join(dir, fmt.Sprintf("%s (%d)%s", name, i, ext))
-				if _, err := os.Stat(cand); os.IsNotExist(err) {
-					if _, ok := reserved[cand]; !ok {
-						reserved[cand] = struct{}{}
-						return cand, nil
-					}
+			// Cap suffix attempts so a misbehaving filesystem can't hang the
+			// goroutine forever even if every candidate appears taken.
+			const maxSuffixAttempts = 1 << 16
+			for i := 2; i < maxSuffixAttempts; i++ {
+				p, ok, err := tryReserve(filepath.Join(dir, fmt.Sprintf("%s (%d)%s", name, i, ext)))
+				if err != nil {
+					return "", err
+				}
+				if ok {
+					return p, nil
 				}
 			}
+			return "", fmt.Errorf("could not reserve unique destination for %q in %s after %d attempts", base, dir, maxSuffixAttempts)
 		}
 		parallel := c.Concurrency.PerHostRequests
 		if *batchParallel > 0 {
@@ -440,25 +460,33 @@ func handleDownload(ctx context.Context, args []string) error {
 		resolvedURL = res.URL
 		headers = res.Headers
 	} else {
-		// Attach auth headers for direct URLs when possible
+		// Attach auth headers for direct URLs when possible. Mirrors the
+		// batch/TUI behaviour: if Sources.<Provider>.TokenEnv is empty, fall
+		// back to the conventional CIVITAI_TOKEN / HF_TOKEN names so users
+		// who set those env vars without configuring token_env still get
+		// authenticated downloads instead of preflight 401/403s.
 		if u, err := neturl.Parse(resolvedURL); err == nil {
 			h := strings.ToLower(u.Hostname())
 			if hostIs(h, "civitai.com") && c.Sources.CivitAI.Enabled {
-				if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
-					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-						headers["Authorization"] = "Bearer " + tok
-					} else {
-						log.Warnf("CivitAI token env %s is not set; gated content will return 401. Export %s.", env, env)
-					}
+				env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv)
+				if env == "" {
+					env = "CIVITAI_TOKEN"
+				}
+				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+					headers["Authorization"] = "Bearer " + tok
+				} else {
+					log.Warnf("CivitAI token env %s is not set; gated content will return 401. Export %s.", env, env)
 				}
 			}
 			if hostIs(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
-				if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
-					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-						headers["Authorization"] = "Bearer " + tok
-					} else {
-						log.Warnf("Hugging Face token env %s is not set; gated repos will return 401. Export %s and accept the repo license.", env, env)
-					}
+				env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv)
+				if env == "" {
+					env = "HF_TOKEN"
+				}
+				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+					headers["Authorization"] = "Bearer " + tok
+				} else {
+					log.Warnf("Hugging Face token env %s is not set; gated repos will return 401. Export %s and accept the repo license.", env, env)
 				}
 			}
 		}
