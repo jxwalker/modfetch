@@ -16,12 +16,14 @@ import (
 const (
 	ProviderHuggingFace = "huggingface"
 	ProviderCivitAI     = "civitai"
+	ProviderModelScope  = "modelscope"
 	ProviderAll         = "all"
 )
 
 var (
 	huggingFaceBaseURL = "https://huggingface.co"
 	civitaiBaseURL     = "https://civitai.com"
+	modelScopeBaseURL  = "https://modelscope.cn"
 )
 
 type Options struct {
@@ -104,7 +106,7 @@ func Search(ctx context.Context, opts Options) ([]Result, error) {
 	if opts.Limit > 25 {
 		opts.Limit = 25
 	}
-	if opts.Provider != ProviderHuggingFace && opts.Provider != ProviderCivitAI && opts.Provider != ProviderAll {
+	if opts.Provider != ProviderHuggingFace && opts.Provider != ProviderCivitAI && opts.Provider != ProviderModelScope && opts.Provider != ProviderAll {
 		return nil, fmt.Errorf("unknown discovery provider %q", opts.Provider)
 	}
 
@@ -126,6 +128,13 @@ func Search(ctx context.Context, opts Options) ([]Result, error) {
 			errs = append(errs, err)
 		}
 		results = append(results, civ...)
+	}
+	if opts.Provider == ProviderModelScope || opts.Provider == ProviderAll {
+		ms, err := searchModelScope(ctx, client, opts.Query, opts.Limit)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		results = append(results, ms...)
 	}
 	if len(results) == 0 && len(errs) > 0 {
 		return nil, errors.Join(errs...)
@@ -154,6 +163,8 @@ func normalizeProvider(provider string) string {
 		return ProviderHuggingFace
 	case "civ", "civitai", "civit-ai":
 		return ProviderCivitAI
+	case "ms", "modelscope", "model-scope":
+		return ProviderModelScope
 	case "all":
 		return ProviderAll
 	default:
@@ -343,6 +354,74 @@ func bestCivitAIFile(versions []civitaiVersion) (civitaiVersion, civitaiFile) {
 		}
 	}
 	return version, best
+}
+
+// modelScopeSearchResponse is the envelope returned by the ModelScope model list API.
+type modelScopeSearchResponse struct {
+	Code    int    `json:"Code"`
+	Success bool   `json:"Success"`
+	Message string `json:"Message"`
+	Data    struct {
+		Models []modelScopeSearchModel `json:"Models"`
+	} `json:"Data"`
+}
+
+type modelScopeSearchModel struct {
+	ID        string   `json:"Id"`
+	Name      string   `json:"Name"`
+	ChName    string   `json:"ChineseName"`
+	Owner     string   `json:"Owner"`
+	Downloads int64    `json:"Downloads"`
+	Likes     int64    `json:"Likes"`
+	Tags      []string `json:"Tags"`
+	Type      string   `json:"ModelType"`
+}
+
+func searchModelScope(ctx context.Context, client *http.Client, query string, limit int) ([]Result, error) {
+	u, err := url.Parse(modelScopeBaseURL + "/api/v1/models")
+	if err != nil {
+		return nil, err
+	}
+	q := u.Query()
+	q.Set("Name", query)
+	q.Set("page_size", fmt.Sprintf("%d", limit))
+	q.Set("Status", "1")
+	u.RawQuery = q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	var payload modelScopeSearchResponse
+	if err := doJSON(client, req, &payload); err != nil {
+		return nil, fmt.Errorf("modelscope search: %w", err)
+	}
+	if !payload.Success {
+		return nil, fmt.Errorf("modelscope search: %s", payload.Message)
+	}
+	out := make([]Result, 0, len(payload.Data.Models))
+	for _, model := range payload.Data.Models {
+		owner := strings.TrimSpace(model.Owner)
+		name := strings.TrimSpace(model.Name)
+		if owner == "" || name == "" {
+			continue
+		}
+		modelID := owner + "/" + name
+		displayName := name
+		if ch := strings.TrimSpace(model.ChName); ch != "" {
+			displayName = ch
+		}
+		uri := modelScopeBaseURL + "/models/" + owner + "/" + name
+		out = append(out, Result{
+			Provider:  ProviderModelScope,
+			ModelID:   modelID,
+			Name:      displayName,
+			Tags:      model.Tags,
+			Downloads: model.Downloads,
+			Likes:     model.Likes,
+			URI:       uri,
+		})
+	}
+	return out, nil
 }
 
 func doJSON(client *http.Client, req *http.Request, dst any) error {

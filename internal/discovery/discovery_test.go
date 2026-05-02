@@ -2,8 +2,11 @@ package discovery
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -76,3 +79,450 @@ func TestSearchCivitAIReturnsResolverURI(t *testing.T) {
 		t.Fatalf("unexpected result: %+v", got)
 	}
 }
+
+// ---- hfFileScore ----------------------------------------------------------
+
+func TestHfFileScore_Extensions(t *testing.T) {
+	cases := []struct {
+		path      string
+		wantScore int
+		excluded  bool
+	}{
+		{"model.gguf", 100, false},
+		{"model.safetensors", 90, false},
+		{"model.bin", 80, false},
+		{"model.pt", 70, false},
+		{"model.pth", 70, false},
+		{"model.ckpt", 70, false},
+		{"model.onnx", 50, false},
+		{"README.md", 0, true},
+		{"config.json", 0, true},
+	}
+	for _, tc := range cases {
+		got := hfFileScore(tc.path)
+		if tc.excluded {
+			if got >= 0 {
+				t.Errorf("hfFileScore(%q) = %d, want < 0 (excluded)", tc.path, got)
+			}
+		} else {
+			if got != tc.wantScore {
+				t.Errorf("hfFileScore(%q) = %d, want %d", tc.path, got, tc.wantScore)
+			}
+		}
+	}
+}
+
+func TestHfFileScore_QuantBonus(t *testing.T) {
+	if got := hfFileScore("model-q4_k_m.gguf"); got != 112 {
+		t.Errorf("q4_k_m.gguf score = %d, want 112", got)
+	}
+	if got := hfFileScore("model-q5_k_m.gguf"); got != 110 {
+		t.Errorf("q5_k_m.gguf score = %d, want 110", got)
+	}
+	if got := hfFileScore("model-q4.gguf"); got != 108 {
+		t.Errorf("q4.gguf score = %d, want 108", got)
+	}
+	if got := hfFileScore("model-fp16.gguf"); got != 105 {
+		t.Errorf("fp16.gguf score = %d, want 105", got)
+	}
+}
+
+func TestHfFileScore_OptimizerExcluded(t *testing.T) {
+	// optimizer_state.bin has base score 80 but penalty -100 → negative → skipped
+	if got := hfFileScore("optimizer_state.bin"); got >= 0 {
+		t.Errorf("optimizer_state.bin score = %d, want < 0", got)
+	}
+}
+
+// ---- preferSmallerNonZero -------------------------------------------------
+
+func TestPreferSmallerNonZero(t *testing.T) {
+	cases := []struct {
+		a, b int64
+		want bool
+	}{
+		{0, 100, false},
+		{100, 0, true},
+		{50, 100, true},
+		{100, 50, false},
+		{50, 50, false},
+		{-1, 50, false},
+	}
+	for _, tc := range cases {
+		got := preferSmallerNonZero(tc.a, tc.b)
+		if got != tc.want {
+			t.Errorf("preferSmallerNonZero(%d, %d) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
+// ---- zeroIntString --------------------------------------------------------
+
+func TestZeroIntString(t *testing.T) {
+	if got := zeroIntString(0); got != "" {
+		t.Errorf("zeroIntString(0) = %q, want empty", got)
+	}
+	if got := zeroIntString(42); got != "42" {
+		t.Errorf("zeroIntString(42) = %q, want \"42\"", got)
+	}
+}
+
+// ---- normalizeProvider ----------------------------------------------------
+
+func TestNormalizeProvider(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"", ProviderHuggingFace},
+		{"hf", ProviderHuggingFace},
+		{"HuggingFace", ProviderHuggingFace},
+		{"hugging-face", ProviderHuggingFace},
+		{"civ", ProviderCivitAI},
+		{"CivitAI", ProviderCivitAI},
+		{"civit-ai", ProviderCivitAI},
+		{"ms", ProviderModelScope},
+		{"modelscope", ProviderModelScope},
+		{"model-scope", ProviderModelScope},
+		{"ModelScope", ProviderModelScope},
+		{"all", ProviderAll},
+		{"ALL", ProviderAll},
+		{"unknown", "unknown"},
+	}
+	for _, tc := range cases {
+		got := normalizeProvider(tc.in)
+		if got != tc.want {
+			t.Errorf("normalizeProvider(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// ---- bestCivitAIFile ------------------------------------------------------
+
+func TestBestCivitAIFile_ModelTypePreferred(t *testing.T) {
+	versions := []civitaiVersion{
+		{
+			ID:   1,
+			Name: "v1",
+			Files: []civitaiFile{
+				{Name: "other.txt", Type: "Other"},
+				{Name: "weights.safetensors", Type: "Model"},
+			},
+		},
+	}
+	ver, file := bestCivitAIFile(versions)
+	if ver.ID != 1 {
+		t.Errorf("version ID = %d, want 1", ver.ID)
+	}
+	if file.Name != "weights.safetensors" {
+		t.Errorf("file = %q, want weights.safetensors", file.Name)
+	}
+}
+
+func TestBestCivitAIFile_FallbackToFirst(t *testing.T) {
+	versions := []civitaiVersion{
+		{
+			ID:   5,
+			Name: "v5",
+			Files: []civitaiFile{
+				{Name: "config.yaml", Type: "Config"},
+				{Name: "readme.md", Type: "Doc"},
+			},
+		},
+	}
+	_, file := bestCivitAIFile(versions)
+	if file.Name != "config.yaml" {
+		t.Errorf("file = %q, want config.yaml (first file)", file.Name)
+	}
+}
+
+func TestBestCivitAIFile_HighestVersionSelected(t *testing.T) {
+	versions := []civitaiVersion{
+		{ID: 2, Files: []civitaiFile{{Name: "v2.bin", Type: "Model"}}},
+		{ID: 7, Files: []civitaiFile{{Name: "v7.bin", Type: "Model"}}},
+		{ID: 4, Files: []civitaiFile{{Name: "v4.bin", Type: "Model"}}},
+	}
+	_, file := bestCivitAIFile(versions)
+	if file.Name != "v7.bin" {
+		t.Errorf("file = %q, want v7.bin (highest version ID)", file.Name)
+	}
+}
+
+func TestBestCivitAIFile_EmptyVersions(t *testing.T) {
+	ver, file := bestCivitAIFile(nil)
+	if ver.ID != 0 || file.Name != "" {
+		t.Errorf("expected zero values for empty versions, got ver=%+v file=%+v", ver, file)
+	}
+}
+
+// ---- bestHFFile -----------------------------------------------------------
+
+func TestBestHFFile_PicksHighestScore(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		files := []hfRepoFile{
+			{Type: "file", Path: "README.md", Size: 100},
+			{Type: "file", Path: "model.safetensors", Size: 500 * 1024 * 1024},
+			{Type: "file", Path: "model-q4_k_m.gguf", Size: 4 * 1024 * 1024 * 1024},
+			{Type: "directory", Path: "checkpoints", Size: 0},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(files)
+	}))
+	defer srv.Close()
+
+	orig := huggingFaceBaseURL
+	huggingFaceBaseURL = srv.URL
+	defer func() { huggingFaceBaseURL = orig }()
+
+	got, err := bestHFFile(context.Background(), srv.Client(), "owner/repo")
+	if err != nil {
+		t.Fatalf("bestHFFile: %v", err)
+	}
+	if got.Path != "model-q4_k_m.gguf" {
+		t.Errorf("bestHFFile = %q, want model-q4_k_m.gguf", got.Path)
+	}
+}
+
+func TestBestHFFile_NoModelFiles(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		files := []hfRepoFile{
+			{Type: "file", Path: "README.md", Size: 100},
+			{Type: "file", Path: "config.json", Size: 200},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(files)
+	}))
+	defer srv.Close()
+
+	orig := huggingFaceBaseURL
+	huggingFaceBaseURL = srv.URL
+	defer func() { huggingFaceBaseURL = orig }()
+
+	_, err := bestHFFile(context.Background(), srv.Client(), "owner/repo")
+	if err == nil {
+		t.Fatal("expected error for repo with no downloadable model files")
+	}
+}
+
+// ---- Search error cases ---------------------------------------------------
+
+func TestSearch_EmptyQuery(t *testing.T) {
+	_, err := Search(context.Background(), Options{Provider: ProviderHuggingFace, Query: "  "})
+	if err == nil || !strings.Contains(err.Error(), "query is required") {
+		t.Fatalf("expected query-required error, got %v", err)
+	}
+}
+
+func TestSearch_UnknownProvider(t *testing.T) {
+	_, err := Search(context.Background(), Options{Provider: "bogusprovider", Query: "gpt"})
+	if err == nil || !strings.Contains(err.Error(), "unknown discovery provider") {
+		t.Fatalf("expected unknown-provider error, got %v", err)
+	}
+}
+
+// ---- Search ModelScope ----------------------------------------------------
+
+func TestSearch_ModelScope(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		resp := modelScopeSearchResponse{
+			Code:    200,
+			Success: true,
+			Data: struct {
+				Models []modelScopeSearchModel `json:"Models"`
+			}{
+				Models: []modelScopeSearchModel{
+					{
+						ID:        "qwen/Qwen-7B",
+						Name:      "Qwen-7B",
+						ChName:    "通义千问-7B",
+						Owner:     "qwen",
+						Downloads: 12345,
+						Likes:     678,
+						Tags:      []string{"llm", "chat"},
+					},
+				},
+			},
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	orig := modelScopeBaseURL
+	modelScopeBaseURL = srv.URL
+	defer func() { modelScopeBaseURL = orig }()
+
+	results, err := Search(context.Background(), Options{Provider: ProviderModelScope, Query: "qwen", Limit: 5})
+	if err != nil {
+		t.Fatalf("Search ModelScope: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("expected at least 1 result")
+	}
+	r := results[0]
+	if r.Provider != ProviderModelScope {
+		t.Errorf("provider = %q, want %q", r.Provider, ProviderModelScope)
+	}
+	if r.ModelID != "qwen/Qwen-7B" {
+		t.Errorf("model_id = %q, want qwen/Qwen-7B", r.ModelID)
+	}
+	if !strings.Contains(r.URI, "qwen") || !strings.Contains(r.URI, "Qwen-7B") {
+		t.Errorf("URI = %q, expected owner and model name in URI", r.URI)
+	}
+	if r.Downloads != 12345 {
+		t.Errorf("downloads = %d, want 12345", r.Downloads)
+	}
+}
+
+func TestSearch_ModelScope_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(modelScopeSearchResponse{
+			Code:    500,
+			Success: false,
+			Message: "internal server error",
+		})
+	}))
+	defer srv.Close()
+
+	orig := modelScopeBaseURL
+	modelScopeBaseURL = srv.URL
+	defer func() { modelScopeBaseURL = orig }()
+
+	_, err := Search(context.Background(), Options{Provider: ProviderModelScope, Query: "test", Limit: 5})
+	if err == nil {
+		t.Fatal("expected error for ModelScope API failure")
+	}
+}
+
+// ---- Search all -----------------------------------------------------------
+
+func TestSearch_All_CombinesProviders(t *testing.T) {
+	hfSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/tree/") {
+			_ = json.NewEncoder(w).Encode([]hfRepoFile{
+				{Type: "file", Path: "model.safetensors", Size: 512 * 1024 * 1024},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]hfModel{
+			{ID: "org/hf-model", ModelID: "org/hf-model", Downloads: 8000},
+		})
+	}))
+	defer hfSrv.Close()
+
+	civSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(civitaiSearchResponse{
+			Items: []civitaiModel{
+				{
+					ID:   200,
+					Name: "CivModel",
+					Type: "Checkpoint",
+					Stats: struct {
+						DownloadCount int64 `json:"downloadCount"`
+						ThumbsUpCount int64 `json:"thumbsUpCount"`
+					}{DownloadCount: 3000},
+				},
+			},
+		})
+	}))
+	defer civSrv.Close()
+
+	msSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(modelScopeSearchResponse{
+			Code:    200,
+			Success: true,
+			Data: struct {
+				Models []modelScopeSearchModel `json:"Models"`
+			}{
+				Models: []modelScopeSearchModel{
+					{ID: "alice/ms-model", Name: "ms-model", Owner: "alice", Downloads: 500},
+				},
+			},
+		})
+	}))
+	defer msSrv.Close()
+
+	origHF, origCiv, origMS := huggingFaceBaseURL, civitaiBaseURL, modelScopeBaseURL
+	huggingFaceBaseURL = hfSrv.URL
+	civitaiBaseURL = civSrv.URL
+	modelScopeBaseURL = msSrv.URL
+	defer func() {
+		huggingFaceBaseURL = origHF
+		civitaiBaseURL = origCiv
+		modelScopeBaseURL = origMS
+	}()
+
+	results, err := Search(context.Background(), Options{Provider: ProviderAll, Query: "test", Limit: 25})
+	if err != nil {
+		t.Fatalf("Search all: %v", err)
+	}
+	providers := map[string]bool{}
+	for _, r := range results {
+		providers[r.Provider] = true
+	}
+	for _, want := range []string{ProviderHuggingFace, ProviderCivitAI, ProviderModelScope} {
+		if !providers[want] {
+			t.Errorf("provider %q not found in combined results", want)
+		}
+	}
+}
+
+func TestSearch_LimitCapped(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		models := make([]hfModel, 30)
+		for i := range models {
+			models[i] = hfModel{
+				ID:      fmt.Sprintf("owner/model-%d", i),
+				ModelID: fmt.Sprintf("owner/model-%d", i),
+			}
+		}
+		_ = json.NewEncoder(w).Encode(models)
+	}))
+	defer srv.Close()
+
+	orig := huggingFaceBaseURL
+	huggingFaceBaseURL = srv.URL
+	defer func() { huggingFaceBaseURL = orig }()
+
+	results, err := Search(context.Background(), Options{Provider: ProviderHuggingFace, Query: "model", Limit: 30})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(results) > 25 {
+		t.Errorf("len(results) = %d, want <= 25 (hard cap)", len(results))
+	}
+}
+
+func TestSearch_IndexAssigned(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/tree/") {
+			_ = json.NewEncoder(w).Encode([]hfRepoFile{
+				{Type: "file", Path: "model.gguf", Size: 100},
+			})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]hfModel{
+			{ID: "owner/a", ModelID: "owner/a", Downloads: 200},
+			{ID: "owner/b", ModelID: "owner/b", Downloads: 100},
+		})
+	}))
+	defer srv.Close()
+
+	orig := huggingFaceBaseURL
+	huggingFaceBaseURL = srv.URL
+	defer func() { huggingFaceBaseURL = orig }()
+
+	results, _ := Search(context.Background(), Options{Provider: ProviderHuggingFace, Query: "model", Limit: 5})
+	for i, r := range results {
+		if r.Index != i+1 {
+			t.Errorf("results[%d].Index = %d, want %d", i, r.Index, i+1)
+		}
+	}
+}
+

@@ -98,7 +98,7 @@ func (f *CivitAIFetcher) FetchMetadata(ctx context.Context, url string) (*state.
 		return nil, fmt.Errorf("CivitAI API returned status %d", resp.StatusCode)
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
 	if err != nil {
 		return nil, fmt.Errorf("reading response: %w", err)
 	}

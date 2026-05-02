@@ -150,7 +150,7 @@ func (f *HuggingFaceFetcher) FetchMetadata(ctx context.Context, url string) (*st
 		return f.basicMetadata(url, modelID, filename, version), nil
 	}
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4*1024*1024))
 	if err != nil {
 		return f.basicMetadata(url, modelID, filename, version), nil
 	}
