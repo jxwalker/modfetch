@@ -252,7 +252,7 @@ func handleDownload(ctx context.Context, args []string) error {
 							return fmt.Errorf("job %d: no valid download candidates", it.idx)
 						}
 						logMu.Lock()
-						log.Infof("job %d: starting %s -> %s", it.idx+1, logging.SanitizeURL(candidates[0].url), destCandidate)
+						log.Infof("job %d: starting %s -> %s", it.idx, logging.SanitizeURL(candidates[0].url), destCandidate)
 						logMu.Unlock()
 						var final, sum string
 						var err error
