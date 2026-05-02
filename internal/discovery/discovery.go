@@ -443,13 +443,15 @@ func searchModelScope(ctx context.Context, client *http.Client, query string, li
 			displayName = ch
 		}
 
-		// Best-effort: resolve a concrete downloadable file so callers that pass
-		// Result.URI to `download --url` get a real artifact, not the model page.
-		// If the file listing fails (private repo, transient error, etc.) fall
-		// back to the model page URL, matching prior behaviour.
+		// Resolve a concrete downloadable file so callers that pass Result.URI
+		// to `download --url` get a real artifact. If the file listing fails or
+		// returns nothing usable (private repo, transient error, repo without
+		// downloadable weights, etc.) skip the result entirely: the model page
+		// URL is HTML and would silently produce a downloaded HTML page rather
+		// than a model file.
 		fileURI, filePath, fileSize := bestModelScopeFile(ctx, client, owner, name, modelScopeDefaultRevision)
-		if fileURI == "" {
-			fileURI = modelScopeModelPageURL(owner, name)
+		if fileURI == "" || filePath == "" {
+			continue
 		}
 
 		result := Result{
@@ -460,12 +462,10 @@ func searchModelScope(ctx context.Context, client *http.Client, query string, li
 			Downloads: model.Downloads,
 			Likes:     model.Likes,
 			URI:       fileURI,
-		}
-		if filePath != "" {
-			result.FilePath = filePath
-			result.FileName = path.Base(filePath)
-			result.FileType = strings.TrimPrefix(strings.ToLower(path.Ext(filePath)), ".")
-			result.Size = fileSize
+			FilePath:  filePath,
+			FileName:  path.Base(filePath),
+			FileType:  strings.TrimPrefix(strings.ToLower(path.Ext(filePath)), "."),
+			Size:      fileSize,
 		}
 		out = append(out, result)
 	}
@@ -486,13 +486,6 @@ func checkModelScopeEnvelope(success bool, code int, message string) error {
 		return fmt.Errorf("code=%d %s", code, msg)
 	}
 	return fmt.Errorf("%s", msg)
-}
-
-// modelScopeModelPageURL builds a fully URL-escaped model page URL for the
-// given owner/name. It is used as a last-resort fallback when we cannot
-// resolve a concrete downloadable file.
-func modelScopeModelPageURL(owner, name string) string {
-	return strings.TrimRight(modelScopeBaseURL, "/") + "/models/" + url.PathEscape(owner) + "/" + url.PathEscape(name)
 }
 
 // bestModelScopeFile fetches the repository file list and selects a single

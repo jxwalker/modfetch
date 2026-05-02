@@ -401,7 +401,10 @@ func TestSearch_ModelScope(t *testing.T) {
 	}
 }
 
-func TestSearch_ModelScope_FallsBackToPageURLOnFileListFailure(t *testing.T) {
+func TestSearch_ModelScope_DropsResultsWithoutDownloadableFile(t *testing.T) {
+	// When the file listing fails, the model page URL would be HTML, so the
+	// result is dropped entirely rather than handed to `download --url`,
+	// which would otherwise save HTML masquerading as a model artifact.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -433,12 +436,58 @@ func TestSearch_ModelScope_FallsBackToPageURLOnFileListFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Search ModelScope: %v", err)
 	}
-	if len(results) != 1 {
-		t.Fatalf("results len = %d", len(results))
+	if len(results) != 0 {
+		t.Fatalf("results len = %d, want 0 (result must be dropped when no downloadable file is resolvable)", len(results))
 	}
-	wantURI := srv.URL + "/models/alice/MyModel"
-	if results[0].URI != wantURI {
-		t.Errorf("URI = %q, want %q (page-URL fallback)", results[0].URI, wantURI)
+}
+
+func TestSearch_ModelScope_DropsResultsWithoutModelFiles(t *testing.T) {
+	// Repos that only contain README/config files (no .gguf/.safetensors/etc.)
+	// have no downloadable artifact, so they must be omitted from results.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v1/models":
+			_ = json.NewEncoder(w).Encode(modelScopeSearchResponse{
+				Code:    200,
+				Success: true,
+				Data: struct {
+					Models []modelScopeSearchModel `json:"Models"`
+				}{
+					Models: []modelScopeSearchModel{
+						{ID: "bob/EmptyRepo", Name: "EmptyRepo", Owner: "bob"},
+					},
+				},
+			})
+		case strings.HasSuffix(r.URL.Path, "/repo/files"):
+			_ = json.NewEncoder(w).Encode(modelScopeFilesResponse{
+				Code:    200,
+				Success: true,
+				Data: struct {
+					Files []modelScopeFile `json:"Files"`
+				}{
+					Files: []modelScopeFile{
+						{Type: "blob", Path: "README.md", Size: 100},
+						{Type: "blob", Path: "config.json", Size: 200},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	orig := modelScopeBaseURL
+	modelScopeBaseURL = srv.URL
+	defer func() { modelScopeBaseURL = orig }()
+
+	results, err := Search(context.Background(), Options{Provider: ProviderModelScope, Query: "bob", Limit: 5})
+	if err != nil {
+		t.Fatalf("Search ModelScope: %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("results len = %d, want 0 (no downloadable model files in repo)", len(results))
 	}
 }
 
