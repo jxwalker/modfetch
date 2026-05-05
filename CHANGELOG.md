@@ -4,7 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v0.7.1 — 2026-05-05
+
 Added
+- Added beginner-safe `modfetch starter` downloads and `starter://` resolver
+  aliases for CLI, batch, and TUI download workflows.
+- Added `modfetch discover search` and `modfetch discover download` so users can
+  search real providers, pick concrete files, and download through the normal
+  download pipeline.
+- Added Hugging Face, CivitAI, and ModelScope discovery providers with ranked
+  artifact selection for real model files.
+- Added real-network UAT coverage for direct HTTP, starter aliases, Hugging
+  Face resolver paths, and discovery-selected `sshleifer/tiny-gpt2` downloads.
 - Added `scripts/publish-aur.sh` to validate and publish AUR metadata for
   AUR releases.
 - Added Ollama Library metadata enrichment for `ollama.com/library/...` URLs,
@@ -25,10 +36,22 @@ Added
 - Added `modfetch tui --snapshot` and `--snapshot --json` for non-interactive
   downloads, library, and config state reporting.
 
+Changed
+- Bounded discovery and metadata response reads so oversized provider responses
+  fail predictably instead of consuming unbounded memory.
+- Clarified direct URL auth behavior so bearer tokens are only attached when
+  `token_env` is explicitly configured for the download source.
+
+Fixes
+- Guarded JSON download summaries against zero-duration transfers when
+  calculating average throughput.
+- Hardened discovery metadata handling for provider results with missing or
+  oversized metadata.
+
 Docs
 - Documented Arch Linux AUR package maintenance and release checklist coverage.
 - Aligned README, installation, release, roadmap, and TUI docs with the shipped
-  v0.7.0 state and published AUR package.
+  v0.7.1 state and published AUR package.
 - Removed obsolete top-level sprint and test status reports that described old
   sandbox limits instead of the current validation workflow.
 

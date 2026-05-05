@@ -79,7 +79,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║  modfetch v0.7.0                    Tab: [2] Active                       ║
+║  modfetch v0.7.1                    Tab: [2] Active                       ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
 ║  🔄 Active: 2   ✓ Completed: 45   ⏳ Pending: 3   ✗ Failed: 1            ║
 ║  Throughput: 32.5 MB/s   •   Auth: HF ✓  CivitAI ✓                        ║
@@ -116,12 +116,12 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 
 ---
 
-## What's new in v0.7.0
-- **Package distribution**: Homebrew/Linuxbrew installation is documented and validated against published GitHub Release artifacts.
-- **Portable library catalogs**: `modfetch library export` and `modfetch library import` support JSON backups, dry-runs, conflict reporting, and machine migration.
-- **TUI bulk maintenance**: Library filters, multi-select bulk actions, selected-entry export, and destructive-action confirmations are available in the TUI.
-- **Placement presets**: Common local AI tools can be configured through named placement presets, wizard selection, and `place --preset --dry-run` previews.
-- **Scanner repair UX**: Bounded parallel scans, progress reporting, stale-record repair, and benchmark coverage improve large library maintenance.
+## What's new in v0.7.1
+- **Starter downloads**: `modfetch starter` offers beginner-safe small downloads, and `starter://` aliases work in CLI, batch, and TUI flows.
+- **Real provider discovery**: `modfetch discover search` and `modfetch discover download` search live providers and hand selected files to the normal download pipeline.
+- **ModelScope discovery**: ModelScope results now participate in discovery alongside HuggingFace and CivitAI where public provider access allows it.
+- **Package maintenance**: AUR release metadata and publish checks are part of the maintained release flow, alongside Homebrew and GitHub Release assets.
+- **Release hardening**: Real-network UAT now covers direct HTTP, starter aliases, Hugging Face resolver paths, and discovery-selected `sshleifer/tiny-gpt2` downloads.
 - **Library View**: Browse all your downloaded models with rich metadata, search, and filters
   - View model details: type, quantization, size, source, tags, descriptions
   - Search by name, filter by type (LLM, LoRA, VAE, etc.) and source (HuggingFace, CivitAI, local)
@@ -142,6 +142,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 - **Documentation**: Complete user guides for Library (docs/LIBRARY.md) and Scanner (docs/SCANNER.md)
 
 Previous releases:
+- v0.7.0: Homebrew docs, portable catalogs, TUI bulk maintenance, placement presets, scanner repair, and docs drift validation
 - v0.6.3: Hugging Face shorthand aliases, including public single-repo forms such as `hf://gpt2/README.md?rev=main`
 - v0.6.2: Storage, archive, schema, CLI, shell completion, and release workflow updates
 - v0.6.1: Testing reliability, real API integration coverage, and TUI test expansion
