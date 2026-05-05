@@ -1,7 +1,7 @@
 # Roadmap
 
-This is the active project roadmap after the v0.7.0 release. Historical backlog
-items that shipped in v0.6.x and v0.7.0 are summarized at the end for traceability.
+This is the active project roadmap after the v0.7.1 release. Historical backlog
+items that shipped in v0.6.x and v0.7.x are summarized at the end for traceability.
 
 Status key:
 - [PLANNED] not started
@@ -11,7 +11,7 @@ Status key:
 
 ## Current Baseline
 
-Current release: v0.7.0, tagged 2026-04-28.
+Current release: v0.7.1, tagged 2026-05-05.
 
 Shipped baseline:
 - Reliable direct, Hugging Face, and CivitAI downloads with resume, retries,
@@ -23,6 +23,8 @@ Shipped baseline:
   documented configuration, placement, resolver, CLI, and installer workflows.
 - Release automation that builds Linux/macOS artifacts, publishes checksums, and
   uses `CHANGELOG.md` sections for GitHub Release notes.
+- Beginner-friendly starter aliases and real-provider discovery commands for
+  users who do not already know the exact model URL to download.
 
 ## v0.7.0 Goal [DONE]
 
@@ -164,6 +166,10 @@ These are useful, but not required for the first v0.7.0 release:
 
 ## Completed Release History
 
+- v0.7.1: delivered beginner-safe starter downloads, real-provider discovery
+  search/download, ModelScope discovery support, AUR release automation,
+  catalog sync HTTP targets, metadata enrichment for ModelScope and Ollama
+  pages, non-interactive TUI snapshots, and release hardening.
 - v0.7.0: delivered Homebrew distribution docs, portable library catalog
   export/import, TUI bulk library operations, placement presets, scanner
   performance and stale repair UX, real integration test hardening, and
