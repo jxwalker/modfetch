@@ -431,6 +431,7 @@ func searchModelScope(ctx context.Context, client *http.Client, query string, li
 		return nil, fmt.Errorf("modelscope search: %w", err)
 	}
 	out := make([]Result, 0, len(payload.Data.Models))
+	var fileErrs []error
 	for _, model := range payload.Data.Models {
 		owner := strings.TrimSpace(model.Owner)
 		name := strings.TrimSpace(model.Name)
@@ -448,8 +449,18 @@ func searchModelScope(ctx context.Context, client *http.Client, query string, li
 		// returns nothing usable (private repo, transient error, repo without
 		// downloadable weights, etc.) skip the result entirely: the model page
 		// URL is HTML and would silently produce a downloaded HTML page rather
-		// than a model file.
-		fileURI, filePath, fileSize := bestModelScopeFile(ctx, client, owner, name, modelScopeDefaultRevision)
+		// than a model file. Oversized responses short-circuit the whole
+		// search; other per-model fetch errors are collected so that if every
+		// model fails, the user sees a real provider error instead of an
+		// empty-looking success.
+		fileURI, filePath, fileSize, fileErr := bestModelScopeFile(ctx, client, owner, name, modelScopeDefaultRevision)
+		if errors.Is(fileErr, errDiscoveryResponseTooLarge) {
+			return nil, fmt.Errorf("modelscope file listing for %s: %w", modelID, fileErr)
+		}
+		if fileErr != nil {
+			fileErrs = append(fileErrs, fmt.Errorf("modelscope file listing for %s: %w", modelID, fileErr))
+			continue
+		}
 		if fileURI == "" || filePath == "" {
 			continue
 		}
@@ -468,6 +479,9 @@ func searchModelScope(ctx context.Context, client *http.Client, query string, li
 			Size:      fileSize,
 		}
 		out = append(out, result)
+	}
+	if len(out) == 0 && len(fileErrs) > 0 {
+		return nil, errors.Join(fileErrs...)
 	}
 	return out, nil
 }
@@ -491,31 +505,33 @@ func checkModelScopeEnvelope(success bool, code int, message string) error {
 // bestModelScopeFile fetches the repository file list and selects a single
 // downloadable file using the same scoring heuristic as HuggingFace. It
 // returns a fully-formed `/models/<owner>/<name>/resolve/<rev>/<path>` URL on
-// success. If the listing fails or no suitable file is found, it returns
-// empty strings so the caller can fall back to the model page URL.
-func bestModelScopeFile(ctx context.Context, client *http.Client, owner, name, revision string) (uri, filePath string, size int64) {
+// success. The error is non-nil only for fetch-level failures (network,
+// oversized response, malformed envelope); a successful fetch with no usable
+// file returns empty strings and a nil error so the caller can decide whether
+// to skip the model.
+func bestModelScopeFile(ctx context.Context, client *http.Client, owner, name, revision string) (uri, filePath string, size int64, err error) {
 	if revision == "" {
 		revision = modelScopeDefaultRevision
 	}
-	u, err := url.Parse(strings.TrimRight(modelScopeBaseURL, "/") + "/api/v1/models/" + url.PathEscape(owner) + "/" + url.PathEscape(name) + "/repo/files")
-	if err != nil {
-		return "", "", 0
+	u, parseErr := url.Parse(strings.TrimRight(modelScopeBaseURL, "/") + "/api/v1/models/" + url.PathEscape(owner) + "/" + url.PathEscape(name) + "/repo/files")
+	if parseErr != nil {
+		return "", "", 0, parseErr
 	}
 	q := u.Query()
 	q.Set("Revision", revision)
 	q.Set("Recursive", "true")
 	q.Set("PageSize", "200")
 	u.RawQuery = q.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return "", "", 0
+	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if reqErr != nil {
+		return "", "", 0, reqErr
 	}
 	var payload modelScopeFilesResponse
-	if err := doJSON(client, req, &payload); err != nil {
-		return "", "", 0
+	if jerr := doJSON(client, req, &payload); jerr != nil {
+		return "", "", 0, jerr
 	}
-	if err := checkModelScopeEnvelope(payload.Success, payload.Code, payload.Message); err != nil {
-		return "", "", 0
+	if envErr := checkModelScopeEnvelope(payload.Success, payload.Code, payload.Message); envErr != nil {
+		return "", "", 0, envErr
 	}
 
 	bestScore := -1
@@ -542,12 +558,12 @@ func bestModelScopeFile(ctx context.Context, client *http.Client, owner, name, r
 		}
 	}
 	if best.Path == "" {
-		return "", "", 0
+		return "", "", 0, nil
 	}
 	uri = strings.TrimRight(modelScopeBaseURL, "/") + "/models/" +
 		url.PathEscape(owner) + "/" + url.PathEscape(name) +
 		"/resolve/" + url.PathEscape(revision) + "/" + escapePathSegments(best.Path)
-	return uri, best.Path, best.Size
+	return uri, best.Path, best.Size, nil
 }
 
 // isModelScopeBlob accepts the variants ModelScope's API has used to label a

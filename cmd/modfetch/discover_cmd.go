@@ -34,8 +34,8 @@ func handleDiscover(ctx context.Context, args []string) error {
 
 func printDiscoverUsage() {
 	fmt.Println(strings.TrimSpace(`Usage:
-  modfetch discover search QUERY [--provider huggingface|civitai|all] [--limit N] [--json]
-  modfetch discover download QUERY [--provider huggingface|civitai] [--select N] [download flags]
+  modfetch discover search QUERY [--provider huggingface|civitai|modelscope|all] [--limit N] [--json]
+  modfetch discover download QUERY [--provider huggingface|civitai|modelscope|all] [--select N] [download flags]
 
 Examples:
   modfetch discover search "tiny gpt2"
@@ -46,7 +46,7 @@ Examples:
 func discoverSearch(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("discover search", flag.ContinueOnError)
 	common := addCommonConfigLogFlags(fs, "print discovery results as JSON")
-	provider := fs.String("provider", discovery.ProviderHuggingFace, "provider: huggingface|civitai|all")
+	provider := fs.String("provider", discovery.ProviderHuggingFace, "provider: huggingface|civitai|modelscope|all")
 	limit := fs.Int("limit", 5, "maximum results to show")
 	flagArgs, queryArgs := splitDiscoverArgs(args, map[string]bool{
 		"json": true,
@@ -65,7 +65,7 @@ func discoverSearch(ctx context.Context, args []string) error {
 func discoverDownload(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("discover download", flag.ContinueOnError)
 	common := addCommonConfigLogFlags(fs, "")
-	provider := fs.String("provider", discovery.ProviderHuggingFace, "provider: huggingface|civitai")
+	provider := fs.String("provider", discovery.ProviderHuggingFace, "provider: huggingface|civitai|modelscope|all")
 	limit := fs.Int("limit", 5, "maximum search results to inspect")
 	selectIndex := fs.Int("select", 1, "1-based result index to download")
 	dest := fs.String("dest", "", "destination path")

@@ -460,33 +460,31 @@ func handleDownload(ctx context.Context, args []string) error {
 		resolvedURL = res.URL
 		headers = res.Headers
 	} else {
-		// Attach auth headers for direct URLs when possible. Mirrors the
-		// batch/TUI behaviour: if Sources.<Provider>.TokenEnv is empty, fall
-		// back to the conventional CIVITAI_TOKEN / HF_TOKEN names so users
-		// who set those env vars without configuring token_env still get
-		// authenticated downloads instead of preflight 401/403s.
+		// Attach auth headers for direct URLs when possible, but only when
+		// sources.<provider>.token_env is explicitly configured. An empty
+		// token_env means "do not attach auth", matching the semantics in
+		// internal/resolver/{civitai,huggingface}.go and cmd/modfetch/batch_cmd.go;
+		// we deliberately do not fall back to ambient CIVITAI_TOKEN / HF_TOKEN
+		// here so users who left token_env unset never get unexpected
+		// credentials sent to direct URLs.
 		if u, err := neturl.Parse(resolvedURL); err == nil {
 			h := strings.ToLower(u.Hostname())
 			if hostIs(h, "civitai.com") && c.Sources.CivitAI.Enabled {
-				env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv)
-				if env == "" {
-					env = "CIVITAI_TOKEN"
-				}
-				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-					headers["Authorization"] = "Bearer " + tok
-				} else {
-					log.Warnf("CivitAI token env %s is not set; gated content will return 401. Export %s.", env, env)
+				if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
+					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+						headers["Authorization"] = "Bearer " + tok
+					} else {
+						log.Warnf("CivitAI token env %s is not set; gated content will return 401. Export %s.", env, env)
+					}
 				}
 			}
 			if hostIs(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
-				env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv)
-				if env == "" {
-					env = "HF_TOKEN"
-				}
-				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-					headers["Authorization"] = "Bearer " + tok
-				} else {
-					log.Warnf("Hugging Face token env %s is not set; gated repos will return 401. Export %s and accept the repo license.", env, env)
+				if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
+					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+						headers["Authorization"] = "Bearer " + tok
+					} else {
+						log.Warnf("Hugging Face token env %s is not set; gated repos will return 401. Export %s and accept the repo license.", env, env)
+					}
 				}
 			}
 		}
@@ -633,6 +631,13 @@ func handleDownload(ctx context.Context, args []string) error {
 		size = fi.Size()
 	}
 	dur := time.Since(startWall).Seconds()
+	// Guard against zero/near-zero durations: float64(size)/0 yields +Inf,
+	// which json.Encoder cannot serialize and silently fails. Match the
+	// non-JSON branch below by reporting 0 in that edge case.
+	avgBps := 0.0
+	if dur > 0 {
+		avgBps = float64(size) / dur
+	}
 	if *summaryJSON {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
@@ -641,7 +646,7 @@ func handleDownload(ctx context.Context, args []string) error {
 			"dest":      final,
 			"size":      size,
 			"duration":  dur,
-			"avg_bps":   float64(size) / dur,
+			"avg_bps":   avgBps,
 			"sha256":    sum,
 			"status":    "ok",
 			"extracted": extracted,
@@ -684,22 +689,22 @@ func resolveBatchDownloadCandidate(ctx context.Context, c *config.Config, uri st
 	}
 	if u, err := neturl.Parse(uri); err == nil {
 		h := strings.ToLower(u.Hostname())
+		// Only attach auth when token_env is explicitly configured. Empty
+		// token_env means "do not attach auth"; matches the existing batch
+		// import logic in cmd/modfetch/batch_cmd.go and the resolver package
+		// to avoid leaking ambient CIVITAI_TOKEN / HF_TOKEN credentials.
 		if hostIs(h, "civitai.com") && c.Sources.CivitAI.Enabled {
-			env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv)
-			if env == "" {
-				env = "CIVITAI_TOKEN"
-			}
-			if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-				headers["Authorization"] = "Bearer " + tok
+			if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
+				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+					headers["Authorization"] = "Bearer " + tok
+				}
 			}
 		}
 		if hostIs(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
-			env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv)
-			if env == "" {
-				env = "HF_TOKEN"
-			}
-			if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-				headers["Authorization"] = "Bearer " + tok
+			if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
+				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+					headers["Authorization"] = "Bearer " + tok
+				}
 			}
 		}
 	}

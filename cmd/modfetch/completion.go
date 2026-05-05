@@ -64,9 +64,9 @@ _modfetch_completions()
             fi
             case ${words[2]} in
                 search)
-                    COMPREPLY=( $(compgen -W "--config --log-level --json --provider --limit huggingface civitai all" -- "$cur") ) ;;
+                    COMPREPLY=( $(compgen -W "--config --log-level --json --provider --limit huggingface civitai modelscope all" -- "$cur") ) ;;
                 download)
-                    COMPREPLY=( $(compgen -W "--config --log-level --json --provider --limit --select --dest --place --summary-json --dry-run --quiet --no-resume huggingface civitai" -- "$cur") ) ;;
+                    COMPREPLY=( $(compgen -W "--config --log-level --json --provider --limit --select --dest --place --summary-json --dry-run --quiet --no-resume huggingface civitai modelscope all" -- "$cur") ) ;;
                 *) ;;
             esac ;;
         starter)
@@ -173,10 +173,10 @@ _modfetch() {
       else
         case $words[3] in
           search)
-            _arguments '*:options:(--config --log-level --json --provider --limit huggingface civitai all)'
+            _arguments '*:options:(--config --log-level --json --provider --limit huggingface civitai modelscope all)'
             ;;
           download)
-            _arguments '*:options:(--config --log-level --json --provider --limit --select --dest --place --summary-json --dry-run --quiet --no-resume huggingface civitai)'
+            _arguments '*:options:(--config --log-level --json --provider --limit --select --dest --place --summary-json --dry-run --quiet --no-resume huggingface civitai modelscope all)'
             ;;
         esac
       fi
@@ -325,12 +325,12 @@ complete -c modfetch -n "__fish_seen_subcommand_from discover" -a "download" -d 
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from search" -l config -d "Path to config"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from search" -l log-level -d "Log level"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from search" -l json -d "JSON output"
-complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from search" -l provider -a "huggingface civitai all" -d "Provider"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from search" -l provider -a "huggingface civitai modelscope all" -d "Provider"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from search" -l limit -d "Result limit"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l config -d "Path to config"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l log-level -d "Log level"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l json -d "JSON output"
-complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l provider -a "huggingface civitai" -d "Provider"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l provider -a "huggingface civitai modelscope all" -d "Provider"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l limit -d "Result limit"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l select -d "Result index"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l dest -d "Destination path"

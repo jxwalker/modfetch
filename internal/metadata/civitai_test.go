@@ -159,6 +159,29 @@ func TestCivitAIFetcher_FetchMetadata_Unauthorized(t *testing.T) {
 	}
 }
 
+// TestCivitAIFetcher_FetchMetadata_OversizedResponse verifies that an API
+// response larger than maxMetadataBodyBytes returns the distinct
+// "response exceeds" error rather than a generic parse/read failure, so
+// callers can branch on the size cap without log scraping.
+func TestCivitAIFetcher_FetchMetadata_OversizedResponse(t *testing.T) {
+	client := routedHTTPClient(t, "civitai.com", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		writeOversizedJSONBody(w, maxMetadataBodyBytes)
+	}))
+
+	f := NewCivitAIFetcher(client)
+	ctx := context.Background()
+	url := "https://civitai.com/api/download/models/12345"
+
+	_, err := f.FetchMetadata(ctx, url)
+	if err == nil {
+		t.Fatal("FetchMetadata() expected error for oversized response, got nil")
+	}
+	if !strings.Contains(err.Error(), "response exceeds") {
+		t.Errorf("err = %q, want a 'response exceeds' size-cap error", err.Error())
+	}
+}
+
 func TestMapCivitAIType(t *testing.T) {
 	tests := []struct {
 		name        string
