@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -401,10 +402,10 @@ func TestSearch_ModelScope(t *testing.T) {
 	}
 }
 
-func TestSearch_ModelScope_DropsResultsWithoutDownloadableFile(t *testing.T) {
-	// When the file listing fails, the model page URL would be HTML, so the
-	// result is dropped entirely rather than handed to `download --url`,
-	// which would otherwise save HTML masquerading as a model artifact.
+func TestSearch_ModelScope_FileListingFailureSurfaced(t *testing.T) {
+	// When the only model's file listing fails (404, auth, transient
+	// network), the empty result list would be misleading. Surface the
+	// underlying provider error so the user can act on it.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -432,12 +433,68 @@ func TestSearch_ModelScope_DropsResultsWithoutDownloadableFile(t *testing.T) {
 	modelScopeBaseURL = srv.URL
 	defer func() { modelScopeBaseURL = orig }()
 
+	_, err := Search(context.Background(), Options{Provider: ProviderModelScope, Query: "alice", Limit: 5})
+	if err == nil {
+		t.Fatal("expected error when every ModelScope file listing fails")
+	}
+	if !strings.Contains(err.Error(), "modelscope file listing for alice/MyModel") {
+		t.Errorf("err = %q, want provider-specific context naming the model", err.Error())
+	}
+}
+
+func TestSearch_ModelScope_PartialFileListingFailureKeepsResults(t *testing.T) {
+	// If at least one model resolves to a real downloadable file, per-model
+	// listing failures should be silently dropped so the partial result set
+	// is still useful.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v1/models":
+			_ = json.NewEncoder(w).Encode(modelScopeSearchResponse{
+				Code:    200,
+				Success: true,
+				Data: struct {
+					Models []modelScopeSearchModel `json:"Models"`
+				}{
+					Models: []modelScopeSearchModel{
+						{ID: "alice/Broken", Name: "Broken", Owner: "alice"},
+						{ID: "alice/Works", Name: "Works", Owner: "alice"},
+					},
+				},
+			})
+		case strings.Contains(r.URL.Path, "/alice/Broken/repo/files"):
+			http.Error(w, "not found", http.StatusNotFound)
+		case strings.Contains(r.URL.Path, "/alice/Works/repo/files"):
+			_ = json.NewEncoder(w).Encode(modelScopeFilesResponse{
+				Code:    200,
+				Success: true,
+				Data: struct {
+					Files []modelScopeFile `json:"Files"`
+				}{
+					Files: []modelScopeFile{
+						{Type: "blob", Path: "model.safetensors", Size: 1024},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	orig := modelScopeBaseURL
+	modelScopeBaseURL = srv.URL
+	defer func() { modelScopeBaseURL = orig }()
+
 	results, err := Search(context.Background(), Options{Provider: ProviderModelScope, Query: "alice", Limit: 5})
 	if err != nil {
 		t.Fatalf("Search ModelScope: %v", err)
 	}
-	if len(results) != 0 {
-		t.Fatalf("results len = %d, want 0 (result must be dropped when no downloadable file is resolvable)", len(results))
+	if len(results) != 1 {
+		t.Fatalf("results len = %d, want 1 (Works should survive Broken's failure)", len(results))
+	}
+	if results[0].ModelID != "alice/Works" {
+		t.Errorf("ModelID = %q, want alice/Works", results[0].ModelID)
 	}
 }
 
@@ -740,6 +797,103 @@ func TestSearch_LimitCapped(t *testing.T) {
 	}
 }
 
+// ---- doJSON oversized response -------------------------------------------
+
+// TestDoJSON_OversizedResponse verifies that a body larger than
+// maxDiscoveryBodyBytes returns the distinct errDiscoveryResponseTooLarge
+// error rather than masquerading as a JSON parse failure or being silently
+// truncated. This guards every discovery provider since they share doJSON.
+func TestDoJSON_OversizedResponse(t *testing.T) {
+	// Stream maxDiscoveryBodyBytes+1 bytes of valid JSON-ish padding so the
+	// LimitReader trips the oversized check before the decoder runs.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Open array, then write enough whitespace to exceed the cap. The
+		// payload is intentionally not closed; we never reach decoding.
+		_, _ = w.Write([]byte("["))
+		const chunk = 64 * 1024
+		buf := make([]byte, chunk)
+		for i := range buf {
+			buf[i] = ' '
+		}
+		written := 1
+		for int64(written) <= maxDiscoveryBodyBytes {
+			n, err := w.Write(buf)
+			if err != nil {
+				return
+			}
+			written += n
+		}
+	}))
+	defer srv.Close()
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	var dst []hfModel
+	err = doJSON(srv.Client(), req, &dst)
+	if !errors.Is(err, errDiscoveryResponseTooLarge) {
+		t.Fatalf("doJSON err = %v, want errDiscoveryResponseTooLarge", err)
+	}
+}
+
+// TestSearchModelScope_OversizedFileListingSurfacesError verifies that an
+// oversized /repo/files response is surfaced as a provider-level error
+// rather than silently dropping the model from results.
+func TestSearchModelScope_OversizedFileListingSurfacesError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/api/v1/models":
+			_ = json.NewEncoder(w).Encode(modelScopeSearchResponse{
+				Code:    200,
+				Success: true,
+				Data: struct {
+					Models []modelScopeSearchModel `json:"Models"`
+				}{
+					Models: []modelScopeSearchModel{
+						{ID: "alice/big", Name: "big", Owner: "alice"},
+					},
+				},
+			})
+		case strings.HasSuffix(r.URL.Path, "/repo/files"):
+			_, _ = w.Write([]byte("["))
+			const chunk = 64 * 1024
+			buf := make([]byte, chunk)
+			for i := range buf {
+				buf[i] = ' '
+			}
+			written := 1
+			for int64(written) <= maxDiscoveryBodyBytes {
+				n, werr := w.Write(buf)
+				if werr != nil {
+					return
+				}
+				written += n
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	orig := modelScopeBaseURL
+	modelScopeBaseURL = srv.URL
+	defer func() { modelScopeBaseURL = orig }()
+
+	_, err := Search(context.Background(), Options{Provider: ProviderModelScope, Query: "big", Limit: 5})
+	if err == nil {
+		t.Fatal("expected error when ModelScope file listing exceeds max body size")
+	}
+	if !errors.Is(err, errDiscoveryResponseTooLarge) {
+		t.Errorf("err = %v, want chain containing errDiscoveryResponseTooLarge", err)
+	}
+	if !strings.Contains(err.Error(), "modelscope file listing for alice/big") {
+		t.Errorf("err = %q, want provider-specific context", err.Error())
+	}
+}
+
 func TestSearch_IndexAssigned(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -760,7 +914,10 @@ func TestSearch_IndexAssigned(t *testing.T) {
 	huggingFaceBaseURL = srv.URL
 	defer func() { huggingFaceBaseURL = orig }()
 
-	results, _ := Search(context.Background(), Options{Provider: ProviderHuggingFace, Query: "model", Limit: 5})
+	results, err := Search(context.Background(), Options{Provider: ProviderHuggingFace, Query: "model", Limit: 5})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
 	for i, r := range results {
 		if r.Index != i+1 {
 			t.Errorf("results[%d].Index = %d, want %d", i, r.Index, i+1)

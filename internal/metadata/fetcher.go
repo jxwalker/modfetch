@@ -182,10 +182,11 @@ func (f *HuggingFaceFetcher) FetchMetadata(ctx context.Context, url string) (*st
 	body, err := readBoundedBody(resp.Body, maxMetadataBodyBytes)
 	if err != nil {
 		// readBoundedBody returns ErrResponseTooLarge for oversized payloads
-		// and the underlying I/O error otherwise. Both degrade to basic
-		// metadata so the user still gets a usable record, but the error
-		// itself is distinct and remains inspectable via errors.Is at the
-		// callsite if we ever want to log or branch on it.
+		// and the underlying I/O error otherwise. Either way we degrade to
+		// basic metadata so the user still gets a usable record. The original
+		// error is intentionally swallowed here (rather than logged or
+		// wrapped) because the caller has no way to act on it once we've
+		// already committed to the basic-metadata fallback.
 		return f.basicMetadata(url, modelID, filename, version), nil
 	}
 

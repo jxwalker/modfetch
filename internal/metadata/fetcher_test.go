@@ -7,6 +7,28 @@ import (
 	"time"
 )
 
+// writeOversizedJSONBody streams more than max bytes of an unterminated JSON
+// document. It's enough to trip the LimitReader cap in readBoundedBody before
+// the decoder ever sees the body.
+func writeOversizedJSONBody(w http.ResponseWriter, max int64) {
+	if _, err := w.Write([]byte("{\"description\":\"")); err != nil {
+		return
+	}
+	const chunk = 64 * 1024
+	buf := make([]byte, chunk)
+	for i := range buf {
+		buf[i] = 'x'
+	}
+	written := int64(len("{\"description\":\""))
+	for written <= max {
+		n, err := w.Write(buf)
+		if err != nil {
+			return
+		}
+		written += int64(n)
+	}
+}
+
 func TestHuggingFaceFetcher_CanHandle(t *testing.T) {
 	tests := []struct {
 		name string
@@ -136,6 +158,41 @@ func TestHuggingFaceFetcher_FetchMetadata_APIFailure(t *testing.T) {
 
 	if meta.ModelID != "TheBloke/Llama-2-7B-GGUF" {
 		t.Errorf("ModelID = %q, want %q", meta.ModelID, "TheBloke/Llama-2-7B-GGUF")
+	}
+}
+
+// TestHuggingFaceFetcher_FetchMetadata_OversizedResponse verifies that an
+// API response larger than maxMetadataBodyBytes degrades to basic metadata
+// instead of returning a JSON parse error or hanging on a runaway body.
+func TestHuggingFaceFetcher_FetchMetadata_OversizedResponse(t *testing.T) {
+	client := routedHTTPClient(t, "huggingface.co", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		writeOversizedJSONBody(w, maxMetadataBodyBytes)
+	}))
+
+	f := NewHuggingFaceFetcher(client)
+	ctx := context.Background()
+	url := "https://huggingface.co/TheBloke/Llama-2-7B-GGUF/resolve/main/llama-2-7b.Q4_K_M.gguf"
+
+	meta, err := f.FetchMetadata(ctx, url)
+	if err != nil {
+		t.Fatalf("FetchMetadata() should fall back to basic metadata on oversized body, got error = %v", err)
+	}
+	// Basic metadata derives identity from the URL, never from the (oversized)
+	// API body, so these fields should match the URL-only fallback path.
+	if meta.Source != "huggingface" {
+		t.Errorf("Source = %q, want %q", meta.Source, "huggingface")
+	}
+	if meta.ModelID != "TheBloke/Llama-2-7B-GGUF" {
+		t.Errorf("ModelID = %q, want %q", meta.ModelID, "TheBloke/Llama-2-7B-GGUF")
+	}
+	if meta.Quantization != "Q4_K_M" {
+		t.Errorf("Quantization = %q, want %q (extracted from URL filename)", meta.Quantization, "Q4_K_M")
+	}
+	// Description in the basic-metadata branch is empty; if it carried the
+	// truncated oversized body, it would be huge.
+	if meta.Description != "" {
+		t.Errorf("Description should be empty on basic-metadata fallback, got %d bytes", len(meta.Description))
 	}
 }
 
