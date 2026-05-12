@@ -137,11 +137,20 @@ func (s *Single) Download(ctx context.Context, url, destPath, expectedSHA string
 	_ = s.st.ClearChunksAndUpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ETag: etag, LastModified: lastMod, Size: size, Status: "planning"})
 
 	completed := false
-	// Cleanup on cancellation
+	// Preserve staged data on cancellation so the next invocation can resume.
 	defer func() {
 		if ctx.Err() != nil && !completed {
-			_ = os.Remove(part)
-			_ = s.st.ClearChunksAndUpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: etag, LastModified: lastMod, Size: size, Status: "canceled"})
+			_ = s.st.ClearChunksAndUpsertDownload(state.DownloadRow{
+				URL:            url,
+				Dest:           destPath,
+				ExpectedSHA256: expectedSHA,
+				ActualSHA256:   "",
+				ETag:           etag,
+				LastModified:   lastMod,
+				Size:           size,
+				Status:         "canceled",
+				LastError:      "download canceled; staged partial preserved for resume",
+			})
 		}
 	}()
 

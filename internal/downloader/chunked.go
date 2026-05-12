@@ -224,11 +224,21 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	}
 
 	completed := false
-	// Cleanup on cancellation
+	// Preserve staged data on cancellation so the next invocation can resume.
 	defer func() {
 		if ctx.Err() != nil && !completed {
-			_ = os.Remove(part)
-			_ = e.st.ClearChunksAndUpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: "", ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "canceled"})
+			_ = e.st.ResetActiveChunks(url, destPath)
+			_ = e.st.UpsertDownload(state.DownloadRow{
+				URL:            url,
+				Dest:           destPath,
+				ExpectedSHA256: expectedSHA,
+				ActualSHA256:   "",
+				ETag:           h.etag,
+				LastModified:   h.lastMod,
+				Size:           h.size,
+				Status:         "canceled",
+				LastError:      "download canceled; staged partial preserved for resume",
+			})
 		}
 	}()
 	f, err := os.OpenFile(part, os.O_CREATE|os.O_RDWR, 0o644)

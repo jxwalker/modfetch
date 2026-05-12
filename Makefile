@@ -36,7 +36,7 @@ vet:
 	go vet ./...
 
 lint:
-ifdef GOLANGCI_BIN
+ifneq ($(strip $(GOLANGCI_BIN)),)
 	$(GOLANGCI_BIN) run ./...
 else
 	@echo "golangci-lint not found. Install: https://golangci-lint.run/ or run via CI."
@@ -73,4 +73,3 @@ checksums: $(DIST)
 
 release-dist: clean linux darwin checksums
 	@echo "Artifacts in $(DIST)/ ready for release"
-

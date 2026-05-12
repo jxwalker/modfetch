@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -57,6 +58,11 @@ func startProgressLoop(ctx context.Context, st *state.DB, cfg *config.Config, ur
 					for _, c := range chunks {
 						if strings.EqualFold(c.Status, "complete") {
 							completed += c.Size
+						}
+					}
+					if cfg != nil && !strings.EqualFold(status, "planning") {
+						if allocated := stagedAllocatedBytes(cfg, url, dest); allocated > completed {
+							completed = min64(allocated, max64(total, allocated))
 						}
 					}
 				} else {
@@ -200,6 +206,25 @@ func max64(a, b int64) int64 {
 		return a
 	}
 	return b
+}
+
+func min64(a, b int64) int64 {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func stagedAllocatedBytes(cfg *config.Config, url, dest string) int64 {
+	pp := stagedPartPath(cfg, url, dest)
+	fi, err := os.Stat(pp)
+	if err != nil {
+		return 0
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok && st.Blocks > 0 {
+		return st.Blocks * 512
+	}
+	return 0
 }
 
 // stagedPartPath mirrors downloader.stagePartPath hashing to locate .part for progress
