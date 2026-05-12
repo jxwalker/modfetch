@@ -166,7 +166,7 @@ func (w *Wizard) View() string {
 		if i == w.focus {
 			marker = ">"
 		}
-		b.WriteString(fmt.Sprintf("%s %-32s %s\n", marker, w.labels[i]+":", input.View()))
+		fmt.Fprintf(&b, "%s %-32s %s\n", marker, w.labels[i]+":", input.View())
 	}
 	if w.done {
 		b.WriteString("\nDone. Saving...\n")

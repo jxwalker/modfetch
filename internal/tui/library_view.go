@@ -336,11 +336,11 @@ func (m *Model) renderLibraryDetail() string {
 		sb.WriteString(m.th.head.Render("Usage Statistics") + "\n")
 		if model.DownloadCount > 0 {
 			sb.WriteString(m.th.label.Render("Downloads: "))
-			sb.WriteString(fmt.Sprintf("%d\n", model.DownloadCount))
+			fmt.Fprintf(&sb, "%d\n", model.DownloadCount)
 		}
 		if model.TimesUsed > 0 {
 			sb.WriteString(m.th.label.Render("Times Used: "))
-			sb.WriteString(fmt.Sprintf("%d\n", model.TimesUsed))
+			fmt.Fprintf(&sb, "%d\n", model.TimesUsed)
 		}
 		if model.LastUsed != nil {
 			sb.WriteString(m.th.label.Render("Last Used: "))
@@ -435,7 +435,7 @@ func (m *Model) renderLibraryConfirm() string {
 	}
 	var sb strings.Builder
 	sb.WriteString(m.th.bad.Render(title) + "\n\n")
-	sb.WriteString(fmt.Sprintf("Affected items: %d\n", len(m.libraryConfirm.rows)))
+	fmt.Fprintf(&sb, "Affected items: %d\n", len(m.libraryConfirm.rows))
 	if m.cfg != nil && strings.TrimSpace(m.cfg.General.DownloadRoot) != "" {
 		sb.WriteString("Files under the download root may be removed; library metadata is kept.\n")
 	}

@@ -148,15 +148,15 @@ func (m *Model) renderSettings() string {
 	// Section: Download Settings
 	sb.WriteString(m.th.head.Render("Download Settings") + "\n")
 	sb.WriteString(m.th.label.Render("Timeout: "))
-	sb.WriteString(fmt.Sprintf("%d seconds\n", m.cfg.Network.TimeoutSeconds))
+	fmt.Fprintf(&sb, "%d seconds\n", m.cfg.Network.TimeoutSeconds)
 	sb.WriteString(m.th.label.Render("Max Redirects: "))
-	sb.WriteString(fmt.Sprintf("%d\n", m.cfg.Network.MaxRedirects))
+	fmt.Fprintf(&sb, "%d\n", m.cfg.Network.MaxRedirects)
 	sb.WriteString(m.th.label.Render("Chunk Size: "))
-	sb.WriteString(fmt.Sprintf("%d MB\n", m.cfg.Concurrency.ChunkSizeMB))
+	fmt.Fprintf(&sb, "%d MB\n", m.cfg.Concurrency.ChunkSizeMB)
 	sb.WriteString(m.th.label.Render("Per-File Chunks: "))
-	sb.WriteString(fmt.Sprintf("%d\n", m.cfg.Concurrency.PerFileChunks))
+	fmt.Fprintf(&sb, "%d\n", m.cfg.Concurrency.PerFileChunks)
 	sb.WriteString(m.th.label.Render("Global Files: "))
-	sb.WriteString(fmt.Sprintf("%d\n", m.cfg.Concurrency.GlobalFiles))
+	fmt.Fprintf(&sb, "%d\n", m.cfg.Concurrency.GlobalFiles)
 	sb.WriteString(m.th.label.Render("Stage Partials: "))
 	if m.cfg.General.StagePartials {
 		sb.WriteString("Yes\n")
@@ -191,7 +191,7 @@ func (m *Model) renderSettings() string {
 	}
 	sb.WriteString(m.th.label.Render("Refresh Rate: "))
 	if m.cfg.UI.RefreshHz > 0 {
-		sb.WriteString(fmt.Sprintf("%d Hz\n", m.cfg.UI.RefreshHz))
+		fmt.Fprintf(&sb, "%d Hz\n", m.cfg.UI.RefreshHz)
 	} else {
 		sb.WriteString("1 Hz (default)\n")
 	}

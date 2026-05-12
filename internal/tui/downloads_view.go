@@ -352,10 +352,10 @@ func (m *Model) renderInspector() string {
 	total := m.totalCache[keyFor(r)]
 	rate := m.rateCache[keyFor(r)]
 	eta := m.etaCache[keyFor(r)]
-	sb.WriteString(fmt.Sprintf("%s %s/%s\n", m.th.label.Render("Progress:"), humanize.Bytes(uint64(cur)), humanize.Bytes(uint64(total))))
-	sb.WriteString(fmt.Sprintf("%s %s/s\n", m.th.label.Render("Speed:"), humanize.Bytes(uint64(rate))))
-	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("ETA:"), eta))
-	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Throughput:"), m.renderSparkline(keyFor(r))))
+	fmt.Fprintf(&sb, "%s %s/%s\n", m.th.label.Render("Progress:"), humanize.Bytes(uint64(cur)), humanize.Bytes(uint64(total)))
+	fmt.Fprintf(&sb, "%s %s/s\n", m.th.label.Render("Speed:"), humanize.Bytes(uint64(rate)))
+	fmt.Fprintf(&sb, "%s %s\n", m.th.label.Render("ETA:"), eta)
+	fmt.Fprintf(&sb, "%s %s\n", m.th.label.Render("Throughput:"), m.renderSparkline(keyFor(r)))
 	// Retries and status (with transient retrying overlay)
 	statusLabel := r.Status
 	if ts, ok := m.retrying[keyFor(r)]; ok {
@@ -365,35 +365,35 @@ func (m *Model) renderInspector() string {
 			delete(m.retrying, keyFor(r))
 		}
 	}
-	sb.WriteString(fmt.Sprintf("%s %d\n", m.th.label.Render("Retries:"), r.Retries))
-	sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Status:"), statusLabel))
+	fmt.Fprintf(&sb, "%s %d\n", m.th.label.Render("Retries:"), r.Retries)
+	fmt.Fprintf(&sb, "%s %s\n", m.th.label.Render("Status:"), statusLabel)
 	// Completed job duration and average speed
 	if strings.EqualFold(strings.TrimSpace(r.Status), "complete") && r.CreatedAt > 0 && r.UpdatedAt >= r.CreatedAt {
 		dur := time.Duration((r.UpdatedAt - r.CreatedAt)) * time.Second
-		sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Duration:"), dur.String()))
+		fmt.Fprintf(&sb, "%s %s\n", m.th.label.Render("Duration:"), dur.String())
 		// Start/End wall times
 		startAt := time.Unix(r.CreatedAt, 0).Local().Format("2006-01-02 15:04:05")
 		endAt := time.Unix(r.UpdatedAt, 0).Local().Format("2006-01-02 15:04:05")
-		sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Started:"), startAt))
-		sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Finished:"), endAt))
+		fmt.Fprintf(&sb, "%s %s\n", m.th.label.Render("Started:"), startAt)
+		fmt.Fprintf(&sb, "%s %s\n", m.th.label.Render("Finished:"), endAt)
 		if r.Size > 0 && dur > 0 {
 			avg := float64(r.Size) / dur.Seconds()
-			sb.WriteString(fmt.Sprintf("%s %s/s\n", m.th.label.Render("Avg Speed:"), humanize.Bytes(uint64(avg))))
+			fmt.Fprintf(&sb, "%s %s/s\n", m.th.label.Render("Avg Speed:"), humanize.Bytes(uint64(avg)))
 		}
 	} else if strings.EqualFold(strings.TrimSpace(r.Status), "running") && r.CreatedAt > 0 {
 		// Show start time for running jobs
 		startAt := time.Unix(r.CreatedAt, 0).Local().Format("2006-01-02 15:04:05")
-		sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Started:"), startAt))
+		fmt.Fprintf(&sb, "%s %s\n", m.th.label.Render("Started:"), startAt)
 	}
 	// Verification details
 	if strings.TrimSpace(r.ExpectedSHA256) != "" || strings.TrimSpace(r.ActualSHA256) != "" {
 		sb.WriteString(m.th.label.Render("SHA256:"))
 		sb.WriteString("\n")
 		if strings.TrimSpace(r.ExpectedSHA256) != "" {
-			sb.WriteString(fmt.Sprintf("expected: %s\n", r.ExpectedSHA256))
+			fmt.Fprintf(&sb, "expected: %s\n", r.ExpectedSHA256)
 		}
 		if strings.TrimSpace(r.ActualSHA256) != "" {
-			sb.WriteString(fmt.Sprintf("actual:   %s\n", r.ActualSHA256))
+			fmt.Fprintf(&sb, "actual:   %s\n", r.ActualSHA256)
 		}
 		if r.ExpectedSHA256 != "" && r.ActualSHA256 != "" {
 			if strings.EqualFold(strings.TrimSpace(r.ExpectedSHA256), strings.TrimSpace(r.ActualSHA256)) {
@@ -405,7 +405,7 @@ func (m *Model) renderInspector() string {
 	}
 	// Show reason for hold/error if available
 	if strings.TrimSpace(r.LastError) != "" {
-		sb.WriteString(fmt.Sprintf("%s %s\n", m.th.label.Render("Reason:"), r.LastError))
+		fmt.Fprintf(&sb, "%s %s\n", m.th.label.Render("Reason:"), r.LastError)
 	}
 	return sb.String()
 }
