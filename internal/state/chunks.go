@@ -112,3 +112,13 @@ func (db *DB) DeleteChunks(url, dest string) error {
 	}
 	return err
 }
+
+// ResetActiveChunks marks in-flight chunk rows as pending so a canceled process
+// can resume by refetching any chunk that may have been only partially written.
+func (db *DB) ResetActiveChunks(url, dest string) error {
+	_, err := db.SQL.Exec(`UPDATE chunks SET status='pending', updated_at=strftime('%s','now') WHERE url=? AND dest=? AND status='running'`, url, dest)
+	if err == nil {
+		db.NotifyChange()
+	}
+	return err
+}

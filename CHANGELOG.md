@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+Fixes
+- Preserved staged partial files and chunk state on canceled downloads so large
+  Hugging Face/Xet-style transfers can resume instead of restarting from zero.
+- Improved chunked-download progress reporting by using staged sparse-file
+  allocated bytes while chunks are still in flight.
+
 ## v0.7.1 — 2026-05-05
 
 Added
