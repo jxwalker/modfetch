@@ -141,7 +141,7 @@ func (m *Model) renderToastDrawer() string {
 	var sb strings.Builder
 	for i := len(m.toasts) - 1; i >= 0; i-- { // newest first
 		t := m.toasts[i]
-		sb.WriteString(fmt.Sprintf("%s  %s\n", t.msg, m.th.label.Render(humanize.Time(t.when))))
+		fmt.Fprintf(&sb, "%s  %s\n", t.msg, m.th.label.Render(humanize.Time(t.when)))
 	}
 	return sb.String()
 }
