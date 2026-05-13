@@ -27,6 +27,7 @@ type adaptiveTransferController struct {
 	host string
 
 	mu             sync.Mutex
+	changed        chan struct{}
 	limit          int
 	max            int
 	active         int
@@ -58,6 +59,7 @@ func newAdaptiveTransferController(cfg *config.Config, log *logging.Logger, st *
 		lastProgress:   now,
 		lastAdjust:     now,
 		windowStarted:  now,
+		changed:        make(chan struct{}),
 		stopCh:         make(chan struct{}),
 		monitorStopped: make(chan struct{}),
 	}
@@ -96,11 +98,12 @@ func (c *adaptiveTransferController) acquire(ctx context.Context) error {
 			c.mu.Unlock()
 			return nil
 		}
+		changed := c.changed
 		c.mu.Unlock()
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(25 * time.Millisecond):
+		case <-changed:
 		}
 	}
 }
@@ -110,6 +113,7 @@ func (c *adaptiveTransferController) release() {
 	if c.active > 0 {
 		c.active--
 	}
+	c.notifyLocked()
 	c.mu.Unlock()
 }
 
@@ -133,6 +137,7 @@ func (c *adaptiveTransferController) observeRateLimit() {
 	c.lastAdjust = time.Now()
 	c.windowStarted = c.lastAdjust
 	c.windowBytes = 0
+	c.notifyLocked()
 	c.mu.Unlock()
 	if old != c.limit && c.log != nil {
 		c.log.Warnf("adaptive transfer: 429 backoff for %s, connections %d -> %d", c.host, old, c.limit)
@@ -157,26 +162,37 @@ func (c *adaptiveTransferController) monitor() {
 
 func (c *adaptiveTransferController) adjust() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if c.stopped {
+		c.mu.Unlock()
 		return
 	}
 	now := time.Now()
 	elapsed := now.Sub(c.windowStarted)
 	if elapsed <= 0 {
+		c.mu.Unlock()
 		return
 	}
 	old := c.limit
+	host := c.host
+	logReason := ""
+	logBPS := 0.0
 	if c.active > 0 && now.Sub(c.lastProgress) >= adaptiveStallWindow {
 		c.limit = clampInt((c.limit+1)/2, adaptiveMinLimit, c.max)
 		c.lastAdjust = now
 		c.windowStarted = now
 		c.windowBytes = 0
-		c.logLimitChangeLocked("stall backoff", old, c.limit, 0)
+		next := c.limit
+		if next != old {
+			c.notifyLocked()
+			logReason = "stall backoff"
+		}
+		c.mu.Unlock()
+		c.logLimitChange(logReason, host, old, next, 0)
 		return
 	}
 	bps := float64(c.windowBytes) / elapsed.Seconds()
 	if bps <= 0 {
+		c.mu.Unlock()
 		return
 	}
 	if c.emaBPS == 0 {
@@ -187,21 +203,29 @@ func (c *adaptiveTransferController) adjust() {
 	if now.Sub(c.lastAdjust) < adaptiveProgressWindow {
 		c.windowStarted = now
 		c.windowBytes = 0
+		c.mu.Unlock()
 		return
 	}
 	switch {
 	case c.limit > adaptiveMinLimit && c.emaBPS > 0 && bps < c.emaBPS*0.55:
 		c.limit--
 		c.lastAdjust = now
+		logReason = "throughput"
+		logBPS = bps
 	case c.active >= c.limit && c.limit < c.max && bps >= c.emaBPS*0.90:
 		c.limit++
 		c.lastAdjust = now
+		logReason = "throughput"
+		logBPS = bps
 	}
 	c.windowStarted = now
 	c.windowBytes = 0
-	if c.limit != old {
-		c.logLimitChangeLocked("throughput", old, c.limit, bps)
+	next := c.limit
+	if next != old {
+		c.notifyLocked()
 	}
+	c.mu.Unlock()
+	c.logLimitChange(logReason, host, old, next, logBPS)
 }
 
 func (c *adaptiveTransferController) stop() {
@@ -212,6 +236,7 @@ func (c *adaptiveTransferController) stop() {
 	}
 	c.stopped = true
 	close(c.stopCh)
+	c.notifyLocked()
 	c.mu.Unlock()
 	<-c.monitorStopped
 }
@@ -228,15 +253,26 @@ func (c *adaptiveTransferController) finalLimit() int {
 	return c.limit
 }
 
-func (c *adaptiveTransferController) logLimitChangeLocked(reason string, old, next int, bps float64) {
-	if old == next || c.log == nil {
+func (c *adaptiveTransferController) total() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.totalBytes
+}
+
+func (c *adaptiveTransferController) notifyLocked() {
+	close(c.changed)
+	c.changed = make(chan struct{})
+}
+
+func (c *adaptiveTransferController) logLimitChange(reason, host string, old, next int, bps float64) {
+	if reason == "" || old == next || c.log == nil {
 		return
 	}
 	if bps > 0 {
-		c.log.Infof("adaptive transfer: %s for %s, connections %d -> %d at %s/s", reason, c.host, old, next, humanize.Bytes(uint64(bps)))
+		c.log.Infof("adaptive transfer: %s for %s, connections %d -> %d at %s/s", reason, host, old, next, humanize.Bytes(uint64(bps)))
 		return
 	}
-	c.log.Infof("adaptive transfer: %s for %s, connections %d -> %d", reason, c.host, old, next)
+	c.log.Infof("adaptive transfer: %s for %s, connections %d -> %d", reason, host, old, next)
 }
 
 type adaptiveProgressReader struct {

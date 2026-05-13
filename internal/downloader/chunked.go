@@ -320,6 +320,11 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	}
 	adaptive := newAdaptiveTransferController(e.cfg, e.log, e.st, url, perFile)
 	defer adaptive.stop()
+	defer func() {
+		if !completed && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			recordModfetchTransferHistory(e.st, url, adaptive.finalLimit(), chunkSizeMBForHistory(e.cfg), adaptive.total(), time.Since(startTime), "sampled", adaptive.wasRateLimited(), ctx.Err().Error())
+		}
+	}()
 	var wg sync.WaitGroup
 	var dErr error
 	var dMu sync.Mutex

@@ -68,8 +68,9 @@ func (db *DB) UpsertTransferHistory(row TransferHistoryRow) error {
 	_, err := db.SQL.Exec(`INSERT INTO transfer_history(host, tool, connections, chunk_size_mb, avg_bps, samples, rate_limited, last_status, last_error, updated_at)
 		VALUES(?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(host, tool, connections, chunk_size_mb) DO UPDATE SET
-			avg_bps=((transfer_history.avg_bps * transfer_history.samples) + excluded.avg_bps) / (transfer_history.samples + 1),
-			samples=transfer_history.samples + 1,
+			avg_bps=((transfer_history.avg_bps * CASE WHEN transfer_history.samples >= 20 THEN 19 ELSE transfer_history.samples END) + excluded.avg_bps) /
+				(CASE WHEN transfer_history.samples >= 20 THEN 20 ELSE transfer_history.samples + 1 END),
+			samples=CASE WHEN transfer_history.samples >= 20 THEN 20 ELSE transfer_history.samples + 1 END,
 			rate_limited=CASE WHEN excluded.rate_limited != 0 THEN 1 ELSE transfer_history.rate_limited END,
 			last_status=excluded.last_status,
 			last_error=excluded.last_error,

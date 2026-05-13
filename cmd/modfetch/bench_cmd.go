@@ -31,6 +31,7 @@ type benchResult struct {
 	AvgBPS      float64 `json:"avg_bps"`
 	Connections int     `json:"connections,omitempty"`
 	ChunkSizeMB int     `json:"chunk_size_mb,omitempty"`
+	RateLimited bool    `json:"rate_limited,omitempty"`
 	Error       string  `json:"error,omitempty"`
 	Dest        string  `json:"dest,omitempty"`
 }
@@ -224,14 +225,27 @@ func runModfetchBench(ctx context.Context, base *config.Config, log *logging.Log
 		status = "error"
 		errText = err.Error()
 	}
+	connections := effectiveDownloadConnections(&cfg)
+	chunkSizeMB := fixedChunkSizeMB(&cfg)
+	rateLimited := false
+	if history, ok, hErr := st.BestTransferHistory(downloader.HostFromURLForHistory(rawURL), "modfetch"); hErr == nil && ok {
+		if history.Connections > 0 {
+			connections = history.Connections
+		}
+		if history.ChunkSizeMB >= 0 {
+			chunkSizeMB = history.ChunkSizeMB
+		}
+		rateLimited = history.RateLimited
+	}
 	return benchResult{
 		Tool:        "modfetch",
 		Status:      status,
 		Bytes:       bytes,
 		Duration:    elapsed.Seconds(),
 		AvgBPS:      bytesPerSecond(bytes, elapsed),
-		Connections: effectiveDownloadConnections(&cfg),
-		ChunkSizeMB: fixedChunkSizeMB(&cfg),
+		Connections: connections,
+		ChunkSizeMB: chunkSizeMB,
+		RateLimited: rateLimited,
 		Error:       errText,
 		Dest:        dest,
 	}
@@ -417,7 +431,7 @@ func recordBenchHistory(c *config.Config, rawURL string, results []benchResult) 
 			Connections: result.Connections,
 			ChunkSizeMB: result.ChunkSizeMB,
 			AvgBPS:      result.AvgBPS,
-			RateLimited: false,
+			RateLimited: result.RateLimited,
 			LastStatus:  status,
 			LastError:   result.Error,
 		}); err != nil {

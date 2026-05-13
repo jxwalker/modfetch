@@ -142,16 +142,18 @@ modfetch download --url 'civitai://model/123456?file=specific-file.safetensors'
 ### bench
 
 Run disposable timed download samples to compare modfetch with another transfer
-tool on the same URL. This is intended for real-world throughput checks before
-switching a large model transfer.
+tool on the same URL, or inspect the transfer history learned from prior runs.
+Benchmark mode is intended for real-world throughput checks before switching a
+large model transfer.
 
 **Syntax:**
 ```bash
 modfetch bench --url URL [OPTIONS]
+modfetch bench --history [--json]
 ```
 
 **Options:**
-- `--url URL` - URL or resolver URI to benchmark
+- `--url URL` - URL or resolver URI to benchmark in URL-driven mode
 - `--tools modfetch,aria2` - Tools to run; `aria2` is skipped with an error
   result if `aria2c` is not installed
 - Private/gated URLs: modfetch can benchmark with configured auth headers, but
@@ -164,8 +166,9 @@ modfetch bench --url URL [OPTIONS]
 - `--chunk-size-mb N` - Explicit range chunk size for both tools
 - `--json` - Emit machine-readable results
 - `--keep` - Keep the temporary benchmark download directory
-- `--history` - List persisted per-host transfer history collected from
-  benchmark samples and completed modfetch downloads
+- `--history` - Switch to URL-free history mode and list persisted per-host
+  transfer history collected from benchmark samples and completed modfetch
+  downloads. `--url` is not required in this mode.
 
 **Examples:**
 ```bash
