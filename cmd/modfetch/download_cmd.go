@@ -190,7 +190,6 @@ func handleDownload(ctx context.Context, args []string) error {
 
 		for i := 0; i < parallel; i++ {
 			g.Go(func() error {
-				dl := downloader.NewAuto(c, log, st, m)
 				for {
 					select {
 					case <-gctx.Done():
@@ -296,6 +295,18 @@ func handleDownload(ctx context.Context, args []string) error {
 						var err error
 						baseNoResume := *noResume || c.General.AlwaysNoResume
 						for attempt, candidate := range candidates {
+							candidateConfig := *c
+							adaptive, adaptiveErr := maybeApplyAdaptiveDownloadTuning(gctx, &candidateConfig, candidate.url, candidate.headers, *profile, *connections, *chunkSizeMB)
+							if adaptiveErr != nil && profileWantsAuto(*profile) {
+								logMu.Lock()
+								log.Warnf("job %d: adaptive tuning probe failed for %s: %v", it.idx, logging.SanitizeURL(candidate.url), adaptiveErr)
+								logMu.Unlock()
+							} else if adaptive != nil && adaptive.Applied {
+								logMu.Lock()
+								log.Infof("job %d: adaptive tuning: %s", it.idx, adaptive.Reason)
+								logMu.Unlock()
+							}
+							dl := downloader.NewAuto(&candidateConfig, log, st, m)
 							final, sum, err = dl.Download(gctx, candidate.url, destCandidate, expected, candidate.headers, baseNoResume || attempt > 0)
 							if err == nil {
 								if attempt > 0 {
@@ -508,7 +519,7 @@ func handleDownload(ctx context.Context, args []string) error {
 		}
 	}
 	adaptiveDecision, adaptiveErr := maybeApplyAdaptiveDownloadTuning(ctx, c, resolvedURL, headers, *profile, *connections, *chunkSizeMB)
-	if adaptiveErr != nil && strings.EqualFold(strings.TrimSpace(*profile), "auto") {
+	if adaptiveErr != nil && profileWantsAuto(*profile) {
 		log.Warnf("adaptive tuning probe failed: %v", adaptiveErr)
 	}
 	// If dry-run, compute a default destination and print plan
@@ -796,6 +807,11 @@ func maybeApplyAdaptiveDownloadTuning(ctx context.Context, c *config.Config, raw
 	}
 	decision.Reason = "remote metadata does not match large-model tuning criteria"
 	return decision, nil
+}
+
+func profileWantsAuto(profile string) bool {
+	p := strings.ToLower(strings.TrimSpace(profile))
+	return p == "" || p == "auto"
 }
 
 func shouldUseLargeModelTuning(rawURL string, meta downloader.ProbeMeta) bool {

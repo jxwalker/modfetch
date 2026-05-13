@@ -74,8 +74,14 @@ func handleBench(ctx context.Context, args []string) error {
 		return err
 	}
 	log := logging.New(*common.logLevel, false)
-	if decision, err := maybeApplyAdaptiveDownloadTuning(ctx, c, resolvedURL, headers, *profile, *connections, *chunkSizeMB); err == nil && decision.Applied && !*common.jsonOut {
-		log.Infof("adaptive tuning: %s", decision.Reason)
+	if decision, err := maybeApplyAdaptiveDownloadTuning(ctx, c, resolvedURL, headers, *profile, *connections, *chunkSizeMB); !*common.jsonOut {
+		if err != nil && profileWantsAuto(*profile) {
+			log.Warnf("adaptive tuning probe failed: %v", err)
+		} else if err == nil && decision != nil && decision.Applied {
+			log.Infof("adaptive tuning: %s", decision.Reason)
+		} else if err == nil && decision != nil && profileWantsAuto(*profile) {
+			log.Infof("adaptive tuning skipped: %s", decision.Reason)
+		}
 	}
 	workDir, err := os.MkdirTemp("", "modfetch-bench.*")
 	if err != nil {

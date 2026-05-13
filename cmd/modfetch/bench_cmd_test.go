@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -103,6 +104,31 @@ func TestParseBenchToolsDedupesAndDefaults(t *testing.T) {
 	}
 }
 
+func TestBenchRangeServerSupportsOpenEndedRanges(t *testing.T) {
+	ts := newBenchRangeServer(t, 32)
+	defer ts.Close()
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/model.bin", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Range", "bytes=10-")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusPartialContent {
+		t.Fatalf("status = %d, want 206", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(body) != 22 {
+		t.Fatalf("body len = %d, want 22", len(body))
+	}
+}
+
 func writeBenchConfig(t *testing.T) string {
 	t.Helper()
 	tmp := t.TempDir()
@@ -132,15 +158,24 @@ func newBenchRangeServer(t *testing.T, size int) *httptest.Server {
 			return
 		}
 		if rng := r.Header.Get("Range"); rng != "" {
-			var start, end int
-			if _, err := fmt.Sscanf(rng, "bytes=%d-%d", &start, &end); err == nil {
+			if spec, ok := strings.CutPrefix(rng, "bytes="); ok {
+				parts := strings.SplitN(spec, "-", 2)
+				var start, end int
+				var err error
+				if len(parts) > 0 {
+					start, err = strconv.Atoi(parts[0])
+				}
+				end = len(body) - 1
+				if err == nil && len(parts) == 2 && parts[1] != "" {
+					end, err = strconv.Atoi(parts[1])
+				}
 				if end >= len(body) || end < 0 {
 					end = len(body) - 1
 				}
 				if start < 0 {
 					start = 0
 				}
-				if start <= end && start < len(body) {
+				if err == nil && start <= end && start < len(body) {
 					w.Header().Set("Content-Length", strconv.Itoa(end-start+1))
 					w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, len(body)))
 					w.WriteHeader(http.StatusPartialContent)
