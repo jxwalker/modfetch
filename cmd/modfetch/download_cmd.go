@@ -35,6 +35,7 @@ const (
 	defaultDownloadConnections    = 4
 	autoChunkSizeMinMB            = 1
 	autoChunkSizeMaxMB            = 64
+	adaptiveLargeThresholdBytes   = int64(1 << 30)
 	largeModelDownloadConnections = 16
 	largeModelChunkSizeMB         = 64
 )
@@ -52,7 +53,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	placeFlag := fs.Bool("place", false, "place files after successful download")
 	summaryJSON := fs.Bool("summary-json", false, "print a JSON summary when a download completes")
 	batchParallel := fs.Int("batch-parallel", 0, "max parallel downloads when using --batch (default: config concurrency per_host_requests)")
-	profile := fs.String("profile", "", "download tuning profile: default or large-model")
+	profile := fs.String("profile", "", "download tuning profile: auto, default, or large-model")
 	connections := fs.Int("connections", 0, "parallel range requests per file (aria2-style; overrides concurrency.per_file_chunks)")
 	chunkSizeMB := fs.Int("chunk-size-mb", 0, "range chunk size in MiB for this invocation")
 	dryRun := fs.Bool("dry-run", false, "plan only: resolve URL/URI and compute default destination; no download")
@@ -506,6 +507,10 @@ func handleDownload(ctx context.Context, args []string) error {
 			}
 		}
 	}
+	adaptiveDecision, adaptiveErr := maybeApplyAdaptiveDownloadTuning(ctx, c, resolvedURL, headers, *profile, *connections, *chunkSizeMB)
+	if adaptiveErr != nil && strings.EqualFold(strings.TrimSpace(*profile), "auto") {
+		log.Warnf("adaptive tuning probe failed: %v", adaptiveErr)
+	}
 	// If dry-run, compute a default destination and print plan
 	if *dryRun {
 		candDest := strings.TrimSpace(*dest)
@@ -532,7 +537,12 @@ func handleDownload(ctx context.Context, args []string) error {
 				"default_dest":    candDest,
 				"connections":     effectiveDownloadConnections(c),
 				"chunk_size_mode": chunkMode,
-				"profile":         effectiveDownloadProfile(*profile),
+				"profile":         reportedDownloadProfile(*profile, adaptiveDecision),
+				"profile_source":  reportedDownloadProfileSource(*profile, adaptiveDecision),
+			}
+			if adaptiveDecision != nil && adaptiveDecision.Reason != "" {
+				summary["adaptive_reason"] = adaptiveDecision.Reason
+				summary["remote_size"] = adaptiveDecision.RemoteSize
 			}
 			if chunkSizeMB > 0 {
 				summary["chunk_size_mb"] = chunkSizeMB
@@ -551,7 +561,10 @@ func handleDownload(ctx context.Context, args []string) error {
 		fmt.Printf("  Resolver URI: %s\n", logging.SanitizeURL(*url))
 		fmt.Printf("  Resolved URL: %s\n", logging.SanitizeURL(resolvedURL))
 		fmt.Printf("  Default dest: %s\n", candDest)
-		fmt.Printf("  Profile: %s\n", effectiveDownloadProfile(*profile))
+		fmt.Printf("  Profile: %s (%s)\n", reportedDownloadProfile(*profile, adaptiveDecision), reportedDownloadProfileSource(*profile, adaptiveDecision))
+		if adaptiveDecision != nil && adaptiveDecision.Reason != "" {
+			fmt.Printf("  Adaptive: %s\n", adaptiveDecision.Reason)
+		}
 		fmt.Printf("  Connections: %d\n", effectiveDownloadConnections(c))
 		if chunkMode, chunkSizeMB := effectiveChunkSize(c); chunkMode == "fixed" {
 			fmt.Printf("  Chunk size: %d MiB\n", chunkSizeMB)
@@ -724,7 +737,7 @@ func applyDownloadTuning(c *config.Config, profile string, connections, chunkSiz
 		return errors.New("--chunk-size-mb must be >= 0")
 	}
 	switch strings.ToLower(strings.TrimSpace(profile)) {
-	case "", "default":
+	case "", "auto", "default":
 	case "large", "large-model":
 		if c.Concurrency.PerFileChunks < largeModelDownloadConnections {
 			c.Concurrency.PerFileChunks = largeModelDownloadConnections
@@ -736,7 +749,7 @@ func applyDownloadTuning(c *config.Config, profile string, connections, chunkSiz
 			c.Concurrency.ChunkSizeMB = largeModelChunkSizeMB
 		}
 	default:
-		return fmt.Errorf("unknown download profile %q (valid: default, large-model)", profile)
+		return fmt.Errorf("unknown download profile %q (valid: auto, default, large-model)", profile)
 	}
 	if connections > 0 {
 		c.Concurrency.PerFileChunks = connections
@@ -750,10 +763,111 @@ func applyDownloadTuning(c *config.Config, profile string, connections, chunkSiz
 	return nil
 }
 
+type adaptiveDownloadDecision struct {
+	Applied    bool
+	Reason     string
+	RemoteSize int64
+}
+
+func maybeApplyAdaptiveDownloadTuning(ctx context.Context, c *config.Config, rawURL string, headers map[string]string, profile string, connections, chunkSizeMB int) (*adaptiveDownloadDecision, error) {
+	if c == nil {
+		return nil, errors.New("nil config")
+	}
+	if connections > 0 || chunkSizeMB > 0 {
+		return &adaptiveDownloadDecision{Reason: "explicit tuning flags set"}, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "", "auto":
+	default:
+		return &adaptiveDownloadDecision{Reason: "profile is explicit"}, nil
+	}
+	meta, err := downloader.ProbeURL(ctx, c, rawURL, headers)
+	if err != nil {
+		return nil, err
+	}
+	decision := &adaptiveDownloadDecision{RemoteSize: meta.Size}
+	if shouldUseLargeModelTuning(rawURL, meta) {
+		if err := applyDownloadTuning(c, "large-model", 0, 0); err != nil {
+			return nil, err
+		}
+		decision.Applied = true
+		decision.Reason = adaptiveLargeModelReason(rawURL, meta)
+		return decision, nil
+	}
+	decision.Reason = "remote metadata does not match large-model tuning criteria"
+	return decision, nil
+}
+
+func shouldUseLargeModelTuning(rawURL string, meta downloader.ProbeMeta) bool {
+	if !meta.AcceptRange {
+		return false
+	}
+	if meta.Size >= adaptiveLargeThresholdBytes {
+		return true
+	}
+	target := meta.FinalURL
+	if target == "" {
+		target = rawURL
+	}
+	u, err := neturl.Parse(target)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if !hostIs(host, "huggingface.co") && !strings.Contains(host, "xet") {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(u.Path))
+	if meta.Size <= 0 {
+		switch ext {
+		case ".gguf", ".safetensors":
+			return true
+		}
+	}
+	return false
+}
+
+func adaptiveLargeModelReason(rawURL string, meta downloader.ProbeMeta) string {
+	if meta.Size >= adaptiveLargeThresholdBytes {
+		return fmt.Sprintf("range-capable object is %s; using large-model tuning", humanize.Bytes(uint64(meta.Size)))
+	}
+	target := meta.FinalURL
+	if target == "" {
+		target = rawURL
+	}
+	return fmt.Sprintf("range-capable large-model path %s; using large-model tuning", logging.SanitizeURL(target))
+}
+
+func reportedDownloadProfile(profile string, decision *adaptiveDownloadDecision) string {
+	if decision != nil && decision.Applied {
+		return "large-model"
+	}
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "", "auto":
+		return "auto"
+	default:
+		return effectiveDownloadProfile(profile)
+	}
+}
+
+func reportedDownloadProfileSource(profile string, decision *adaptiveDownloadDecision) string {
+	if decision != nil && decision.Applied {
+		return "auto"
+	}
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "":
+		return "auto"
+	default:
+		return "explicit"
+	}
+}
+
 func effectiveDownloadProfile(profile string) string {
 	switch strings.ToLower(strings.TrimSpace(profile)) {
 	case "large", "large-model":
 		return "large-model"
+	case "auto":
+		return "auto"
 	default:
 		return "default"
 	}

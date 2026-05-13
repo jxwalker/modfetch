@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 Added
+- Added `modfetch bench` to run disposable, timed download samples with
+  modfetch and aria2 on the same URL, producing comparable throughput JSON.
+- Added automatic large-transfer tuning for range-capable objects, so
+  `download` can promote very large Hugging Face/Xet-style files to
+  large-model settings without requiring YAML edits.
 - Added `modfetch download --profile large-model`, `--connections`, and
   `--chunk-size-mb` for aria2-style one-shot tuning of very large model
   downloads without editing YAML.

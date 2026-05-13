@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,6 +102,58 @@ func TestDownloadDryRunSanitizesResolverURI(t *testing.T) {
 	}
 	if strings.Contains(out, "secret") || strings.Contains(out, "token=") {
 		t.Fatalf("dry-run JSON leaked sensitive URL material: %s", out)
+	}
+}
+
+func TestDownloadDryRunAutoTunesLargeRangeCapableObject(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("Content-Length", "2147483648")
+		if r.Method == http.MethodHead {
+			return
+		}
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write([]byte{0})
+	}))
+	defer ts.Close()
+
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.yml")
+	cfgBody := "version: 1\n" +
+		"general:\n" +
+		"  data_root: " + filepath.Join(tmp, "data") + "\n" +
+		"  download_root: " + filepath.Join(tmp, "downloads") + "\n"
+	if err := os.WriteFile(cfgPath, []byte(cfgBody), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var runErr error
+	out := captureStdout(t, func() {
+		runErr = handleDownload(context.Background(), []string{
+			"--config", cfgPath,
+			"--url", ts.URL + "/large.gguf",
+			"--dry-run",
+			"--summary-json",
+		})
+	})
+	if runErr != nil {
+		t.Fatalf("download dry-run: %v", runErr)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("decode dry-run JSON: %v\n%s", err, out)
+	}
+	if got["profile"] != "large-model" {
+		t.Fatalf("profile = %v, want large-model", got["profile"])
+	}
+	if got["profile_source"] != "auto" {
+		t.Fatalf("profile_source = %v, want auto", got["profile_source"])
+	}
+	if got["connections"] != float64(16) {
+		t.Fatalf("connections = %v, want 16", got["connections"])
+	}
+	if got["chunk_size_mb"] != float64(64) {
+		t.Fatalf("chunk_size_mb = %v, want 64", got["chunk_size_mb"])
 	}
 }
 
