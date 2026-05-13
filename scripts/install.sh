@@ -4,8 +4,8 @@ set -euo pipefail
 #
 
 VERSION=${MODFETCH_VERSION:-latest}
-PUBLISHED_FALLBACK_VERSION=${PUBLISHED_FALLBACK_VERSION:-v0.7.1}
-LAST_KNOWN_PUBLISHED_VERSION=${LAST_KNOWN_PUBLISHED_VERSION:-v0.7.0}
+PUBLISHED_FALLBACK_VERSION=${PUBLISHED_FALLBACK_VERSION:-v0.8.0}
+LAST_KNOWN_PUBLISHED_VERSION=${LAST_KNOWN_PUBLISHED_VERSION:-v0.7.1}
 INSTALL_DIR=${INSTALL_DIR:-/usr/local/bin}
 CONFIG_DIR=${CONFIG_DIR:-"${XDG_CONFIG_HOME:-$HOME/.config}/modfetch"}
 DATA_DIR=${DATA_DIR:-"$HOME/modfetch-data"}
@@ -40,12 +40,16 @@ fetch_url() {
     fi
 }
 
-release_tag_exists() {
+release_asset_exists() {
     local tag="$1"
+    local os arch binary_url
+    os=$(detect_os)
+    arch=$(detect_arch)
+    binary_url="https://github.com/jxwalker/modfetch/releases/download/${tag}/modfetch_${os}_${arch}"
     if have_cmd curl; then
-        curl -fsIL "https://github.com/jxwalker/modfetch/releases/tag/${tag}" >/dev/null 2>&1
+        curl -fsIL "$binary_url" >/dev/null 2>&1
     elif have_cmd wget; then
-        wget --spider -q "https://github.com/jxwalker/modfetch/releases/tag/${tag}" >/dev/null 2>&1
+        wget --spider -q "$binary_url" >/dev/null 2>&1
     else
         return 1
     fi
@@ -120,7 +124,7 @@ get_latest_version() {
         VERSION=$(printf '%s\n' "$response" | sed -nE 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | head -n 1 || true)
         
         if [[ -z "$VERSION" ]]; then
-            if release_tag_exists "$PUBLISHED_FALLBACK_VERSION"; then
+            if release_asset_exists "$PUBLISHED_FALLBACK_VERSION"; then
                 warn "Could not fetch latest version, using ${PUBLISHED_FALLBACK_VERSION} as fallback"
                 VERSION="$PUBLISHED_FALLBACK_VERSION"
             else

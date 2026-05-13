@@ -88,7 +88,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║  modfetch v0.7.1                    Tab: [2] Active                       ║
+║  modfetch v0.8.0                    Tab: [2] Active                       ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
 ║  🔄 Active: 2   ✓ Completed: 45   ⏳ Pending: 3   ✗ Failed: 1            ║
 ║  Throughput: 32.5 MB/s   •   Auth: HF ✓  CivitAI ✓                        ║
@@ -126,14 +126,28 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 ---
 
 ## Upcoming
-- **Hardware-aware recommendations**: `modfetch recommend --task coding` detects your machine, ranks live provider results by memory fit, model signals, learned history, and runtime fit, then can download the selected result.
+- **Guided TUI recommendations**: bring the `modfetch recommend` ranking flow into
+  the TUI so new users can choose by task, hardware fit, provider, runtime, and
+  placement target before starting a download.
 
-## What's new in v0.7.1
-- **Starter downloads**: `modfetch starter` offers beginner-safe small downloads, and `starter://` aliases work in CLI, batch, and TUI flows.
-- **Real provider discovery**: `modfetch discover search` and `modfetch discover download` search live providers and hand selected files to the normal download pipeline.
-- **ModelScope discovery**: ModelScope results now participate in discovery alongside HuggingFace and CivitAI where public provider access allows it.
-- **Package maintenance**: AUR release metadata and publish checks are part of the maintained release flow, alongside Homebrew and GitHub Release assets.
-- **Release hardening**: Real-network UAT now covers direct HTTP, starter aliases, Hugging Face resolver paths, and discovery-selected `sshleifer/tiny-gpt2` downloads.
+## What's new in v0.8.0
+- **Hardware-aware recommendations**: `modfetch recommend --task coding` detects
+  your machine, ranks live provider results by memory fit, model signals,
+  learned history, and runtime fit, then can download the selected result.
+- **Learned local ranking**: recommendation history records shown, selected, and
+  skipped results per task, query, and hardware class so repeated choices improve
+  future suggestions without hiding fresh provider results.
+- **Runtime and placement hints**: recommendation output explains likely runtimes
+  for GGUF, safetensors, PyTorch, and ONNX artifacts, including llama.cpp,
+  Ollama, LM Studio, ComfyUI, Stable Diffusion WebUI, Transformers, MLX on Apple
+  Silicon, vLLM, and ONNX Runtime where appropriate.
+- **Benchmark/adaptive transfer tuning**: `modfetch bench` can compare modfetch
+  against aria2 on the same URL, and large range-capable downloads now ramp
+  chunk concurrency up or down based on observed throughput, stalls, 429s, and
+  persisted per-host transfer history.
+- **Large-model CLI tuning**: `modfetch download --profile large-model`,
+  `--connections`, and `--chunk-size-mb` expose aria2-style one-shot controls
+  while keeping modfetch's state, resume, placement, and verification pipeline.
 - **Library View**: Browse all your downloaded models with rich metadata, search, and filters
   - View model details: type, quantization, size, source, tags, descriptions
   - Search by name, filter by type (LLM, LoRA, VAE, etc.) and source (HuggingFace, CivitAI, local)
@@ -154,6 +168,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 - **Documentation**: Complete user guides for Library (docs/LIBRARY.md) and Scanner (docs/SCANNER.md)
 
 Previous releases:
+- v0.7.1: starter downloads, real-provider discovery, ModelScope discovery, AUR packaging, metadata enrichment, and non-interactive TUI snapshots
 - v0.7.0: Homebrew docs, portable catalogs, TUI bulk maintenance, placement presets, scanner repair, and docs drift validation
 - v0.6.3: Hugging Face shorthand aliases, including public single-repo forms such as `hf://gpt2/README.md?rev=main`
 - v0.6.2: Storage, archive, schema, CLI, shell completion, and release workflow updates

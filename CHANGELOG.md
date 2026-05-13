@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+## v0.8.0 — 2026-05-13
+
 Added
 - Added `modfetch recommend` to detect or override local hardware, rank live
   provider candidates by task and memory fit, and hand the selected resolver
