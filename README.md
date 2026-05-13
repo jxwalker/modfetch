@@ -54,6 +54,8 @@
 - **Hardware-aware recommendations** with `modfetch recommend`
 - **Task presets** for chat, coding, embeddings, and image models
 - **RAM/VRAM overrides** for planning downloads for another machine
+- **Learned ranking history** from selected and skipped recommendations
+- **Runtime hints** for llama.cpp, Ollama, LM Studio, ComfyUI, Stable Diffusion WebUI, Transformers, vLLM, and ONNX Runtime
 - **One-step handoff** from recommendation to the normal resumable download pipeline
 
 ### 🎯 Organization
@@ -124,7 +126,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 ---
 
 ## Upcoming
-- **Hardware-aware recommendations**: `modfetch recommend --task coding` detects your machine, ranks live provider results by memory fit and model signals, and can download the selected result.
+- **Hardware-aware recommendations**: `modfetch recommend --task coding` detects your machine, ranks live provider results by memory fit, model signals, learned history, and runtime fit, then can download the selected result.
 
 ## What's new in v0.7.1
 - **Starter downloads**: `modfetch starter` offers beginner-safe small downloads, and `starter://` aliases work in CLI, batch, and TUI flows.

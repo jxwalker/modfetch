@@ -22,7 +22,7 @@ func TestCompletionCurrentFlags(t *testing.T) {
 		"download":  {"--no-resume", "--summary-json", "--batch-parallel", "--profile", "--connections", "--chunk-size-mb", "--dry-run", "--force", "--no-auth-preflight", "--quant", "--list-quants"},
 		"bench":     {"--url", "--tools", "--duration", "--profile", "--connections", "--chunk-size-mb", "--keep", "--history"},
 		"discover":  {"--provider", "--limit", "--select", "--summary-json", "--dry-run"},
-		"recommend": {"--provider", "--task", "--ram-gb", "--vram-gb", "--unified-memory", "--download", "--select", "--dry-run"},
+		"recommend": {"--provider", "--task", "--ram-gb", "--vram-gb", "--unified-memory", "--download", "--select", "--dry-run", "--history", "--history-limit", "--no-learn"},
 		"starter":   {"--id", "--summary-json", "--dry-run"},
 		"place":     {"--dry-run", "--preset", "--list-presets"},
 		"batch":     {"--naming-pattern"},

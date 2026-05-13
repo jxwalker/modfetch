@@ -69,6 +69,9 @@ func TestRankInfersQuantizationAndParams(t *testing.T) {
 	if !strings.Contains(ranked[0].DownloadCommand, "modfetch download --url") {
 		t.Fatalf("missing download command: %q", ranked[0].DownloadCommand)
 	}
+	if len(ranked[0].RuntimeHints) == 0 || ranked[0].RuntimeHints[0].Runtime != "llama.cpp" {
+		t.Fatalf("runtime hints = %#v, want llama.cpp first", ranked[0].RuntimeHints)
+	}
 }
 
 func TestRankDemotesSplitShards(t *testing.T) {
@@ -103,6 +106,65 @@ func TestRankDemotesSplitShards(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(ranked[1].Reasons, " "), "multi-part shard") {
 		t.Fatalf("missing shard reason: %#v", ranked[1].Reasons)
+	}
+}
+
+func TestApplyFeedbackBoostsPriorSelections(t *testing.T) {
+	ranked := Rank([]discovery.Result{
+		{
+			Provider:  discovery.ProviderHuggingFace,
+			ModelID:   "acme/first",
+			Name:      "First 7B Instruct",
+			FileName:  "first-7b.Q4_K_M.gguf",
+			FileType:  "gguf",
+			Size:      5 << 30,
+			Downloads: 500000,
+			URI:       "hf://acme/first/first-7b.Q4_K_M.gguf?rev=main",
+		},
+		{
+			Provider:  discovery.ProviderHuggingFace,
+			ModelID:   "acme/second",
+			Name:      "Second 7B Instruct",
+			FileName:  "second-7b.Q4_K_M.gguf",
+			FileType:  "gguf",
+			Size:      5 << 30,
+			Downloads: 1000,
+			URI:       "hf://acme/second/second-7b.Q4_K_M.gguf?rev=main",
+		},
+	}, HardwareProfile{RAMBytes: 32 << 30, UnifiedMemory: true}, "chat")
+
+	if ranked[0].ModelID != "acme/first" {
+		t.Fatalf("initial top = %s, want first", ranked[0].ModelID)
+	}
+	ApplyFeedback(ranked, map[string]Feedback{
+		FeedbackKey("hf://acme/first/first-7b.Q4_K_M.gguf?rev=main"):   {Skipped: 4},
+		FeedbackKey("hf://acme/second/second-7b.Q4_K_M.gguf?rev=main"): {Selected: 3},
+	})
+	if ranked[0].ModelID != "acme/second" {
+		t.Fatalf("feedback top = %s, want second", ranked[0].ModelID)
+	}
+	if !strings.Contains(strings.Join(ranked[0].Reasons, " "), "prior selection") {
+		t.Fatalf("missing feedback reason: %#v", ranked[0].Reasons)
+	}
+}
+
+func TestRuntimeHintsForImageSafetensors(t *testing.T) {
+	ranked := Rank([]discovery.Result{{
+		Provider: discovery.ProviderHuggingFace,
+		ModelID:  "acme/sdxl",
+		Name:     "SDXL Checkpoint",
+		FileName: "sdxl.safetensors",
+		FileType: "safetensors",
+		Tags:     []string{"stable-diffusion", "sdxl"},
+		Size:     6 << 30,
+		URI:      "hf://acme/sdxl/sdxl.safetensors?rev=main",
+	}}, HardwareProfile{VRAMBytes: 24 << 30}, "image")
+
+	if len(ranked) != 1 {
+		t.Fatalf("ranked len = %d, want 1", len(ranked))
+	}
+	if len(ranked[0].RuntimeHints) == 0 || ranked[0].RuntimeHints[0].Runtime != "ComfyUI" {
+		t.Fatalf("runtime hints = %#v, want ComfyUI first", ranked[0].RuntimeHints)
 	}
 }
 

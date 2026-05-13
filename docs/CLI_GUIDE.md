@@ -202,7 +202,8 @@ such as `--config`, `--dest`, `--place`, `--dry-run`, `--quiet`, and
 Recommend concrete downloadable model files for the current machine, or for
 hardware you describe with RAM/VRAM overrides. Recommendations use live provider
 search, file metadata, inferred parameter counts and quantization names, task
-signals, and the detected memory budget.
+signals, the detected memory budget, persisted selection/skipping history, and
+runtime compatibility hints.
 
 ```bash
 modfetch recommend [QUERY] [OPTIONS]
@@ -219,6 +220,9 @@ modfetch recommend [QUERY] [OPTIONS]
 - `--select N` - 1-based recommendation number for `--download`
 - `--dest PATH`, `--place`, `--summary-json`, `--dry-run`, `--quiet`,
   `--no-resume` - forwarded to the selected download
+- `--history` - list persisted recommendation history instead of searching
+- `--history-limit N` - maximum history rows to show
+- `--no-learn` - ignore and avoid writing recommendation history
 - `--json` - emit the recommendation summary as JSON
 
 **Examples:**
@@ -231,7 +235,15 @@ modfetch recommend "llama 8b gguf" --ram-gb 32 --unified-memory --json
 
 # Select the top recommendation and show the exact download plan.
 modfetch recommend --task chat --download --select 1 --dry-run --summary-json
+
+# Inspect what modfetch has learned from prior recommendation runs.
+modfetch recommend --history
 ```
+
+Recommendation history is keyed by task, query, and a coarse hardware class, so
+choices made for a 128 GiB unified-memory Mac do not distort recommendations for
+a smaller discrete-GPU host. The history is advisory: it adjusts score ordering
+but does not hide live provider results.
 
 ### starter
 

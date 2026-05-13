@@ -68,7 +68,9 @@ modfetch download --config ~/.config/modfetch/config.yml \
 If you do not know which repo or quantization to choose, start with
 `recommend`. It detects the current machine, searches live providers, estimates
 memory fit from file size, parameter count, and quantization metadata, and shows
-the command it would use to download each result.
+the command it would use to download each result. The output also includes
+runtime hints, such as llama.cpp/Ollama for GGUF files or ComfyUI/Stable
+Diffusion WebUI for image safetensors.
 
 ```bash
 modfetch recommend --task chat
@@ -89,6 +91,15 @@ modfetch recommend --task coding --download --select 1
 Use `--dry-run --summary-json` first when you want to verify the selected URI,
 destination, remote size, range support, and attached auth state without writing
 files.
+
+modfetch remembers selected and skipped recommendations per task, query, and
+hardware class. That history nudges future ranking without hiding fresh provider
+results:
+
+```bash
+modfetch recommend --history
+modfetch recommend --task coding --no-learn
+```
 
 #### Dry-run planning
 

@@ -11,8 +11,10 @@ import (
 
 	"github.com/dustin/go-humanize"
 
+	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/discovery"
 	"github.com/jxwalker/modfetch/internal/recommend"
+	"github.com/jxwalker/modfetch/internal/state"
 )
 
 const maxHardwareOverrideGiB = 16384
@@ -41,11 +43,21 @@ func handleRecommend(ctx context.Context, args []string) error {
 	dryRun := fs.Bool("dry-run", false, "plan selected download without downloading")
 	quiet := fs.Bool("quiet", false, "suppress progress and info logs for selected download")
 	noResume := fs.Bool("no-resume", false, "start selected download fresh instead of resuming")
+	history := fs.Bool("history", false, "list persisted recommendation history")
+	historyLimit := fs.Int("history-limit", 50, "maximum recommendation history rows to list")
+	noLearn := fs.Bool("no-learn", false, "do not use or write recommendation history for this invocation")
 	flagArgs, queryArgs := splitDiscoverArgs(args, map[string]bool{
-		"json": true, "unified-memory": true, "download": true, "place": true, "summary-json": true, "dry-run": true, "quiet": true, "no-resume": true,
+		"json": true, "unified-memory": true, "download": true, "place": true, "summary-json": true, "dry-run": true, "quiet": true, "no-resume": true, "history": true, "no-learn": true,
 	})
 	if err := fs.Parse(flagArgs); err != nil {
 		return err
+	}
+	c, _, cfgErr := loadConfig(*common.configPath)
+	if *history {
+		if cfgErr != nil {
+			return cfgErr
+		}
+		return printRecommendationHistory(c, *historyLimit, *common.jsonOut)
 	}
 	hw := recommend.DetectHardware(ctx)
 	if err := validateGiBOverride("--ram-gb", *ramGB); err != nil {
@@ -66,20 +78,39 @@ func handleRecommend(ctx context.Context, args []string) error {
 		hw.UnifiedMemory = true
 	}
 	query := strings.TrimSpace(strings.Join(append(queryArgs, fs.Args()...), " "))
+	effectiveTask := recommend.NormalizeTask(*task)
+	effectiveQuery := query
+	if effectiveQuery == "" {
+		effectiveQuery = recommend.DefaultQuery(effectiveTask)
+	}
+	hardwareKey := recommendationHardwareKey(hw)
+	feedback := map[string]recommend.Feedback(nil)
+	var st *state.DB
+	if !*noLearn && cfgErr == nil {
+		var stErr error
+		st, stErr = state.Open(c)
+		if stErr == nil {
+			defer func() { _ = st.Close() }()
+			feedback = recommendationFeedback(st, effectiveTask, effectiveQuery, hardwareKey)
+		} else if !*quiet && !*common.jsonOut {
+			fmt.Fprintf(os.Stderr, "warning: recommendation history unavailable: %v\n", stErr)
+		}
+	} else if !*noLearn && cfgErr != nil && !*quiet && !*common.jsonOut {
+		fmt.Fprintf(os.Stderr, "warning: recommendation history unavailable: %v\n", cfgErr)
+	}
 	recs, hw, err := recommend.Recommend(ctx, recommend.Options{
 		Query:    query,
 		Task:     *task,
 		Provider: *provider,
 		Limit:    *limit,
 		Hardware: hw,
+		Feedback: feedback,
 	})
 	if err != nil {
 		return err
 	}
-	effectiveTask := recommend.NormalizeTask(*task)
-	effectiveQuery := query
-	if effectiveQuery == "" {
-		effectiveQuery = recommend.DefaultQuery(effectiveTask)
+	if st != nil {
+		recordRecommendationHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "shown", 0)
 	}
 	if *download {
 		if len(recs) == 0 {
@@ -89,6 +120,10 @@ func handleRecommend(ctx context.Context, args []string) error {
 			return fmt.Errorf("--select must be between 1 and %d", len(recs))
 		}
 		selected := recs[*selectIndex-1]
+		if st != nil {
+			recordRecommendationHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "selected", selected.Index)
+			recordRecommendationHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "skipped", selected.Index)
+		}
 		if !*quiet && !*common.jsonOut {
 			fmt.Fprintf(os.Stderr, "Selected %d: %s (%s, fit=%s)\n", selected.Index, selected.Name, selected.URI, selected.Fit)
 		}
@@ -181,6 +216,17 @@ func printRecommendations(summary recommendSummary, jsonOut bool) error {
 		if len(rec.Reasons) > 0 {
 			fmt.Printf("    why: %s\n", strings.Join(rec.Reasons, "; "))
 		}
+		if len(rec.RuntimeHints) > 0 {
+			hints := make([]string, 0, len(rec.RuntimeHints))
+			for _, hint := range rec.RuntimeHints {
+				value := hint.Runtime
+				if hint.PlacementPreset != "" {
+					value += " -> " + hint.PlacementPreset
+				}
+				hints = append(hints, value)
+			}
+			fmt.Printf("    runtimes: %s\n", strings.Join(hints, "; "))
+		}
 		fmt.Printf("    uri: %s\n", rec.URI)
 		fmt.Printf("    download: %s\n", rec.DownloadCommand)
 	}
@@ -200,6 +246,91 @@ func validateGiBOverride(name string, value float64) error {
 	}
 	if value > maxHardwareOverrideGiB {
 		return fmt.Errorf("%s value %.2f is unreasonably large; max is %d GiB", name, value, maxHardwareOverrideGiB)
+	}
+	return nil
+}
+
+func recommendationHardwareKey(hw recommend.HardwareProfile) string {
+	mem := hw.RAMBytes
+	if hw.VRAMBytes > mem {
+		mem = hw.VRAMBytes
+	}
+	gb := int64(0)
+	if mem > 0 {
+		gb = (mem + (1<<30 - 1)) >> 30
+	}
+	shared := "discrete"
+	if hw.UnifiedMemory {
+		shared = "unified"
+	}
+	return fmt.Sprintf("%s/%s/%dg/%s", strings.ToLower(hw.OS), strings.ToLower(hw.Arch), gb, shared)
+}
+
+func recommendationFeedback(st *state.DB, task, query, hardwareKey string) map[string]recommend.Feedback {
+	rows, err := st.RecommendationHistoryFor(task, query, hardwareKey)
+	if err != nil {
+		return nil
+	}
+	out := make(map[string]recommend.Feedback)
+	for _, row := range rows {
+		key := recommend.FeedbackKey(row.URI)
+		fb := out[key]
+		switch row.Action {
+		case "selected":
+			fb.Selected += row.Count
+		case "skipped":
+			fb.Skipped += row.Count
+		case "shown":
+			fb.Shown += row.Count
+		}
+		out[key] = fb
+	}
+	return out
+}
+
+func recordRecommendationHistory(st *state.DB, task, query, hardwareKey string, recs []recommend.Recommendation, action string, selectedIndex int) {
+	for _, rec := range recs {
+		switch action {
+		case "selected":
+			if rec.Index != selectedIndex {
+				continue
+			}
+		case "skipped":
+			if rec.Index == selectedIndex {
+				continue
+			}
+		}
+		_ = st.UpsertRecommendationHistory(state.RecommendationHistoryRow{
+			Task:        task,
+			Query:       query,
+			Provider:    rec.Provider,
+			ModelID:     rec.ModelID,
+			URI:         rec.URI,
+			Action:      action,
+			Score:       rec.Score,
+			Fit:         rec.Fit,
+			HardwareKey: hardwareKey,
+		})
+	}
+}
+
+func printRecommendationHistory(cfg *config.Config, limit int, jsonOut bool) error {
+	st, err := state.Open(cfg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = st.Close() }()
+	rows, err := st.ListRecommendationHistory(limit)
+	if err != nil {
+		return err
+	}
+	if jsonOut {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(rows)
+	}
+	for _, row := range rows {
+		fmt.Printf("%s\t%s\t%s\tcount=%d\tfit=%s\tscore=%d\t%s\n", row.Task, row.Action, row.HardwareKey, row.Count, row.Fit, row.Score, row.URI)
 	}
 	return nil
 }

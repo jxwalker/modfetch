@@ -28,6 +28,9 @@ Shipped baseline:
 - Hardware-aware recommendation commands that detect or accept RAM/VRAM
   constraints, rank live provider results by task and memory fit, and hand the
   selected URI to the same resumable download path.
+- Recommendation history and runtime hints, so repeated choices for the same
+  task/query/hardware class influence ranking and recommendation output explains
+  likely local runtimes and placement presets.
 
 ## v0.7.0 Goal [DONE]
 
@@ -173,14 +176,14 @@ These are useful, but not required for the first v0.7.0 release:
 
 ## v0.8.x Direction
 
-- [NEXT] Recommendation quality feedback loop:
+- [DONE] Recommendation quality feedback loop:
   persist accepted/skipped recommendations, benchmark results, and completed
   download outcomes so future recommendations learn from real local use.
-- [PLANNED] Runtime-aware guidance:
+- [DONE] Runtime-aware guidance:
   expose placement/runtime hints for Ollama, llama.cpp, MLX, ComfyUI, and
   Stable Diffusion UIs so recommendation output explains where a model can run,
   not just whether it can be downloaded.
-- [PLANNED] Interactive recommendation flow in the TUI:
+- [NEXT] Interactive recommendation flow in the TUI:
   add a guided "choose a model" workflow that filters by task, hardware, file
   size, source, and placement target before starting a download.
 

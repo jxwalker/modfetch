@@ -242,6 +242,14 @@ modfetch recommend --task chat --download --select 1 --dry-run
 The dry run shows the selected resolver URI, destination, remote size, range
 support, and auth state before any file is written.
 
+Recommendation output also shows likely runtimes and placement presets. After
+you select or skip results a few times, modfetch records that local preference
+history and uses it to adjust future ranking for the same task and hardware:
+
+```bash
+modfetch recommend --history
+```
+
 Starter IDs also work in the TUI and regular download command as
 `starter://ID`, for example `starter://gpt2-tokenizer`.
 
