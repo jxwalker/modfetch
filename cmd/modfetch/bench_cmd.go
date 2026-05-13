@@ -31,6 +31,7 @@ type benchResult struct {
 	AvgBPS      float64 `json:"avg_bps"`
 	Connections int     `json:"connections,omitempty"`
 	ChunkSizeMB int     `json:"chunk_size_mb,omitempty"`
+	RateLimited bool    `json:"rate_limited,omitempty"`
 	Error       string  `json:"error,omitempty"`
 	Dest        string  `json:"dest,omitempty"`
 }
@@ -53,18 +54,22 @@ func handleBench(ctx context.Context, args []string) error {
 	connections := fs.Int("connections", 0, "parallel range requests per file")
 	chunkSizeMB := fs.Int("chunk-size-mb", 0, "range chunk size in MiB")
 	keep := fs.Bool("keep", false, "keep temporary benchmark downloads")
+	history := fs.Bool("history", false, "list persisted transfer benchmark history")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	c, _, err := loadConfig(*common.configPath)
+	if err != nil {
+		return err
+	}
+	if *history {
+		return printBenchHistory(c, *common.jsonOut)
 	}
 	if strings.TrimSpace(*urlFlag) == "" {
 		return errors.New("--url is required")
 	}
 	if *durationFlag <= 0 {
 		return errors.New("--duration must be > 0")
-	}
-	c, _, err := loadConfig(*common.configPath)
-	if err != nil {
-		return err
 	}
 	if err := applyDownloadTuning(c, *profile, *connections, *chunkSizeMB); err != nil {
 		return err
@@ -109,6 +114,9 @@ func handleBench(ctx context.Context, args []string) error {
 	}
 	if *keep {
 		summary.WorkDir = workDir
+	}
+	if err := recordBenchHistory(c, resolvedURL, results); err != nil && !*common.jsonOut {
+		log.Warnf("benchmark history was not saved: %v", err)
 	}
 	if *common.jsonOut {
 		enc := json.NewEncoder(os.Stdout)
@@ -217,14 +225,27 @@ func runModfetchBench(ctx context.Context, base *config.Config, log *logging.Log
 		status = "error"
 		errText = err.Error()
 	}
+	connections := effectiveDownloadConnections(&cfg)
+	chunkSizeMB := fixedChunkSizeMB(&cfg)
+	rateLimited := false
+	if history, ok, hErr := st.BestTransferHistory(downloader.HostFromURLForHistory(rawURL), "modfetch"); hErr == nil && ok {
+		if history.Connections > 0 {
+			connections = history.Connections
+		}
+		if history.ChunkSizeMB >= 0 {
+			chunkSizeMB = history.ChunkSizeMB
+		}
+		rateLimited = history.RateLimited
+	}
 	return benchResult{
 		Tool:        "modfetch",
 		Status:      status,
 		Bytes:       bytes,
 		Duration:    elapsed.Seconds(),
 		AvgBPS:      bytesPerSecond(bytes, elapsed),
-		Connections: effectiveDownloadConnections(&cfg),
-		ChunkSizeMB: fixedChunkSizeMB(&cfg),
+		Connections: connections,
+		ChunkSizeMB: chunkSizeMB,
+		RateLimited: rateLimited,
 		Error:       errText,
 		Dest:        dest,
 	}
@@ -384,6 +405,66 @@ func fixedChunkSizeMB(c *config.Config) int {
 		return size
 	}
 	return 0
+}
+
+func recordBenchHistory(c *config.Config, rawURL string, results []benchResult) error {
+	st, err := state.Open(c)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = st.Close() }()
+	host := downloader.HostFromURLForHistory(rawURL)
+	if host == "" {
+		return nil
+	}
+	for _, result := range results {
+		if result.Status == "error" {
+			continue
+		}
+		status := result.Status
+		if status == "" {
+			status = "unknown"
+		}
+		if err := st.UpsertTransferHistory(state.TransferHistoryRow{
+			Host:        host,
+			Tool:        result.Tool,
+			Connections: result.Connections,
+			ChunkSizeMB: result.ChunkSizeMB,
+			AvgBPS:      result.AvgBPS,
+			RateLimited: result.RateLimited,
+			LastStatus:  status,
+			LastError:   result.Error,
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func printBenchHistory(c *config.Config, jsonOut bool) error {
+	st, err := state.Open(c)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = st.Close() }()
+	rows, err := st.ListTransferHistory()
+	if err != nil {
+		return err
+	}
+	if jsonOut {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(rows)
+	}
+	for _, row := range rows {
+		rateLimited := ""
+		if row.RateLimited {
+			rateLimited = "\trate_limited=true"
+		}
+		fmt.Printf("%s\t%s\tconnections=%d\tchunk=%dMiB\tavg=%s/s\tsamples=%d\tstatus=%s%s\n",
+			row.Host, row.Tool, row.Connections, row.ChunkSizeMB, humanize.Bytes(uint64(row.AvgBPS)), row.Samples, row.LastStatus, rateLimited)
+	}
+	return nil
 }
 
 func maxInt64(a, b int64) int64 {

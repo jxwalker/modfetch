@@ -97,7 +97,10 @@ modfetch download --url URL [OPTIONS]
 - `--extract-dir PATH` - Directory for extracted archive contents
 - `--batch-parallel N` - Concurrent downloads in batch mode
 - `--profile auto` - Let modfetch promote range-capable large objects to
-  large-model tuning automatically (default when omitted)
+  large-model tuning automatically (default when omitted). Chunked downloads
+  then adapt in flight: modfetch starts from persisted per-host history when
+  available, ramps up on sustained throughput, and backs off on stalls or HTTP
+  429 responses.
 - `--profile default` - Disable automatic tuning for this invocation
 - `--profile large-model` - Force large-file tuning for DS4/GGUF-size artifacts
   (`16` range connections and `64 MiB` chunks unless overridden)
@@ -139,16 +142,18 @@ modfetch download --url 'civitai://model/123456?file=specific-file.safetensors'
 ### bench
 
 Run disposable timed download samples to compare modfetch with another transfer
-tool on the same URL. This is intended for real-world throughput checks before
-switching a large model transfer.
+tool on the same URL, or inspect the transfer history learned from prior runs.
+Benchmark mode is intended for real-world throughput checks before switching to
+a large model transfer.
 
 **Syntax:**
 ```bash
 modfetch bench --url URL [OPTIONS]
+modfetch bench --history [--json]
 ```
 
 **Options:**
-- `--url URL` - URL or resolver URI to benchmark
+- `--url URL` - URL or resolver URI to benchmark in URL-driven mode
 - `--tools modfetch,aria2` - Tools to run; `aria2` is skipped with an error
   result if `aria2c` is not installed
 - Private/gated URLs: modfetch can benchmark with configured auth headers, but
@@ -161,12 +166,16 @@ modfetch bench --url URL [OPTIONS]
 - `--chunk-size-mb N` - Explicit range chunk size for both tools
 - `--json` - Emit machine-readable results
 - `--keep` - Keep the temporary benchmark download directory
+- `--history` - Switch to URL-free history mode and list persisted per-host
+  transfer history collected from benchmark samples and completed modfetch
+  downloads. `--url` is not required in this mode.
 
 **Examples:**
 ```bash
 modfetch bench --url 'hf://owner/repo/model.gguf?rev=main' --duration 30s --json
 modfetch bench --url 'https://huggingface.co/owner/repo/resolve/main/model.gguf' \
   --tools modfetch,aria2 --connections 16 --chunk-size-mb 64
+modfetch bench --history --json
 ```
 
 ### discover

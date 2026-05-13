@@ -111,6 +111,16 @@ func TestChunked_RangeWithTransient429(t *testing.T) {
 	if len(sha) != 64 {
 		t.Fatalf("sha len: %d", len(sha))
 	}
+	history, ok, err := st.BestTransferHistory(hostFromURL(url), "modfetch")
+	if err != nil {
+		t.Fatalf("history: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected transfer history")
+	}
+	if !history.RateLimited {
+		t.Fatalf("history should record rate limit, got %+v", history)
+	}
 }
 
 // Test fallback when HEAD/Range are not supported (no Accept-Ranges)

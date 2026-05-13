@@ -158,6 +158,9 @@ func openAtPath(path string) (*DB, error) {
 	if err := db.InitMetadataTable(); err != nil {
 		return nil, err
 	}
+	if err := db.InitTransferHistoryTable(); err != nil {
+		return nil, err
+	}
 	ready = true
 	return db, nil
 }

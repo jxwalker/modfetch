@@ -384,7 +384,8 @@ modfetch library scan --repair-stale
         modfetch download --config /path/to/config.yml --url 'hf://org/repo/path?rev=main' --dry-run
         modfetch download --config /path/to/config.yml --url 'https://example.com/file.bin' --dry-run --summary-json
   - Large model tuning: the default `--profile auto` promotes range-capable objects around 1 GiB or larger to large-model settings. Use `--profile large-model` to force DS4/GGUF tuning, `--profile default` to disable auto-tuning, or explicit aria2-style range tuning with `--connections 16 --chunk-size-mb 64`.
-  - Benchmark transfers: use `modfetch bench --url <URL> --tools modfetch,aria2 --duration 30s --json` to run disposable samples against the same URL before committing to a huge download.
+  - Adaptive transfers: chunked downloads now start from persisted per-host history when available, ramp up while throughput is healthy, and back off on stalls or 429 responses.
+  - Benchmark transfers: use `modfetch bench --url <URL> --tools modfetch,aria2 --duration 30s --json` to run disposable samples against the same URL before committing to a huge download. Use `modfetch bench --history` to inspect the persisted host/tuning history that feeds future adaptive starts.
   - On completion, a summary is printed (dest, size, SHA256, duration, average speed)
   - Cancel with Ctrl+C (SIGINT/SIGTERM); staged partial files and completed chunks are preserved for resume. Use `--no-resume` or `modfetch clean` when you want to discard staged data.
 - Place artifacts into apps:

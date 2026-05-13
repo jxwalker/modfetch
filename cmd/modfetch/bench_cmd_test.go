@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jxwalker/modfetch/internal/state"
 )
 
 func TestBenchModfetchRunsRealDownloadSample(t *testing.T) {
@@ -53,6 +56,27 @@ func TestBenchModfetchRunsRealDownloadSample(t *testing.T) {
 	if result.Bytes <= 0 || result.AvgBPS <= 0 {
 		t.Fatalf("expected positive bytes/rate, got %+v", result)
 	}
+
+	cfg, _, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	st, err := state.Open(cfg)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+	u, err := neturl.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("parse test server URL: %v", err)
+	}
+	best, ok, err := st.BestTransferHistory(u.Hostname(), "modfetch")
+	if err != nil {
+		t.Fatalf("best history: %v", err)
+	}
+	if !ok || best.AvgBPS <= 0 {
+		t.Fatalf("expected persisted modfetch history, got ok=%v best=%+v", ok, best)
+	}
 }
 
 func TestBenchAria2RunsWhenInstalled(t *testing.T) {
@@ -90,6 +114,48 @@ func TestBenchAria2RunsWhenInstalled(t *testing.T) {
 	}
 	if got.Results[0].Bytes <= 0 {
 		t.Fatalf("aria2 bytes = %d, want > 0", got.Results[0].Bytes)
+	}
+}
+
+func TestBenchHistoryListsRowsWithoutURL(t *testing.T) {
+	cfgPath := writeBenchConfig(t)
+	cfg, _, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	st, err := state.Open(cfg)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	if err := st.UpsertTransferHistory(state.TransferHistoryRow{
+		Host:        "example.com",
+		Tool:        "modfetch",
+		Connections: 4,
+		ChunkSizeMB: 1,
+		AvgBPS:      1234,
+		LastStatus:  "complete",
+	}); err != nil {
+		t.Fatalf("upsert history: %v", err)
+	}
+	_ = st.Close()
+
+	var runErr error
+	out := captureStdout(t, func() {
+		runErr = handleBench(context.Background(), []string{
+			"--config", cfgPath,
+			"--history",
+			"--json",
+		})
+	})
+	if runErr != nil {
+		t.Fatalf("bench history: %v", runErr)
+	}
+	var rows []state.TransferHistoryRow
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatalf("decode history JSON: %v\n%s", err, out)
+	}
+	if len(rows) != 1 || rows[0].Host != "example.com" || rows[0].Tool != "modfetch" {
+		t.Fatalf("history rows = %+v", rows)
 	}
 }
 

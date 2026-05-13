@@ -318,15 +318,24 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	if ph := e.cfg.Concurrency.PerHostRequests; ph > 0 && perFile > ph {
 		perFile = ph
 	}
-	sem := make(chan struct{}, perFile)
+	adaptive := newAdaptiveTransferController(e.cfg, e.log, e.st, url, perFile)
+	defer adaptive.stop()
+	defer func() {
+		if !completed && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			recordModfetchTransferHistory(e.st, url, adaptive.finalLimit(), chunkSizeMBForHistory(e.cfg), adaptive.total(), time.Since(startTime), "sampled", adaptive.wasRateLimited(), ctx.Err().Error())
+		}
+	}()
 	var wg sync.WaitGroup
 	var dErr error
 	var dMu sync.Mutex
 
 	downloadOne := func(c state.ChunkRow) {
 		defer wg.Done()
-		sem <- struct{}{}
-		defer func() { <-sem }()
+		if err := adaptive.acquire(ctx); err != nil {
+			setErr(&dErr, &dMu, err)
+			return
+		}
+		defer adaptive.release()
 
 		select {
 		case <-ctx.Done():
@@ -342,7 +351,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 			setErr(&dErr, &dMu, err)
 			return
 		}
-		sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers, perDownloadLimiter)
+		sha, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers, perDownloadLimiter, adaptive)
 		if err != nil {
 			setErr(&dErr, &dMu, err)
 			return
@@ -376,7 +385,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 		// re-download this chunk
 		e.log.WarnfThrottled(fmt.Sprintf("repair:%s|%s", url, destPath), 2*time.Second, "chunk %d sha mismatch on self-check; re-fetching", c.Index)
 		_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
-		sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers, perDownloadLimiter)
+		sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers, perDownloadLimiter, adaptive)
 		if err != nil {
 			return "", "", err
 		}
@@ -405,7 +414,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 			// re-download this chunk
 			e.log.Debugf("chunk %d sha mismatch; re-fetching", c.Index)
 			_ = e.st.UpdateChunkStatus(url, destPath, c.Index, "dirty")
-			sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers, perDownloadLimiter)
+			sha3, err := e.fetchChunk(ctx, url, destPath, h, f, c, headers, perDownloadLimiter, adaptive)
 			if err != nil {
 				return "", "", err
 			}
@@ -466,6 +475,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	_ = fsyncDir(filepath.Dir(destPath))
 	completed = true
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: finalSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "complete"})
+	recordModfetchTransferHistory(e.st, url, adaptive.finalLimit(), chunkSizeMBForHistory(e.cfg), adaptive.total(), time.Since(startTime), "complete", adaptive.wasRateLimited(), "")
 	if e.metrics != nil {
 		e.metrics.IncDownloadsSuccess()
 		e.metrics.ObserveDownloadSeconds(time.Since(startTime).Seconds())
@@ -474,7 +484,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	return destPath, finalSHA, nil
 }
 
-func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string, perDownloadLimiter *bandwidthLimiter) (string, error) {
+func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string, perDownloadLimiter *bandwidthLimiter, adaptive *adaptiveTransferController) (string, error) {
 	// retry loop
 	max := e.cfg.Concurrency.MaxRetries
 	if max <= 0 {
@@ -485,7 +495,7 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 		if ctx.Err() != nil {
 			return "", ctx.Err()
 		}
-		sha, err := e.tryFetchChunk(ctx, url, h, f, c, headers, perDownloadLimiter)
+		sha, err := e.tryFetchChunk(ctx, url, h, f, c, headers, perDownloadLimiter, adaptive)
 		if err == nil {
 			return sha, nil
 		}
@@ -494,6 +504,9 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 		}
 		lastErr = err
 		// backoff or honor Retry-After for 429 if enabled
+		if _, ok := err.(rateLimitedError); ok && adaptive != nil {
+			adaptive.observeRateLimit()
+		}
 		if rle, ok := err.(rateLimitedError); ok && e.cfg.Network.RetryOnRateLimit {
 			if e.metrics != nil {
 				e.metrics.IncRetries(1)
@@ -567,7 +580,7 @@ func (e *Chunked) fetchChunk(ctx context.Context, url string, destPath string, h
 	return "", lastErr
 }
 
-func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string, perDownloadLimiter *bandwidthLimiter) (string, error) {
+func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *os.File, c state.ChunkRow, headers map[string]string, perDownloadLimiter *bandwidthLimiter, adaptive *adaptiveTransferController) (string, error) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	req.Header.Set("User-Agent", userAgent(e.cfg))
 	for k, v := range headers {
@@ -613,8 +626,11 @@ func (e *Chunked) tryFetchChunk(ctx context.Context, url string, h headInfo, f *
 	hasher := sha256.New()
 	ow := &offsetWriterAt{w: f, off: c.Start}
 	mw := io.MultiWriter(ow, hasher)
-	body := newThrottledReader(ctx, resp.Body, perDownloadLimiter, e.globalLimiter)
-	written, err := io.CopyN(mw, body, c.Size)
+	source := newThrottledReader(ctx, resp.Body, perDownloadLimiter, e.globalLimiter)
+	if adaptive != nil {
+		source = &adaptiveProgressReader{r: source, onBytes: adaptive.observeBytes}
+	}
+	written, err := io.CopyN(mw, source, c.Size)
 	if e.metrics != nil && written > 0 {
 		e.metrics.AddBytes(written)
 	}

@@ -84,6 +84,10 @@ func initTestSchema(db *state.DB) error {
 		return fmt.Errorf("init metadata table: %w", err)
 	}
 
+	if err := db.InitTransferHistoryTable(); err != nil {
+		return fmt.Errorf("init transfer history table: %w", err)
+	}
+
 	return nil
 }
 

@@ -10,6 +10,12 @@ Added
 - Added automatic large-transfer tuning for range-capable objects, so
   `download` can promote very large Hugging Face/Xet-style files to
   large-model settings without requiring YAML edits.
+- Added live adaptive chunk concurrency that ramps up on sustained throughput,
+  backs off on stalls or 429 responses, and seeds future transfers from
+  persisted per-host benchmark history.
+- Added persisted transfer history from `modfetch bench` and completed
+  modfetch downloads so future auto-tuned downloads can start from previously
+  observed good connection counts.
 - Added `modfetch download --profile large-model`, `--connections`, and
   `--chunk-size-mb` for aria2-style one-shot tuning of very large model
   downloads without editing YAML.
