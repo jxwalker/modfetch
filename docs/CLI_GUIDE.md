@@ -143,8 +143,8 @@ modfetch download --url 'civitai://model/123456?file=specific-file.safetensors'
 
 Run disposable timed download samples to compare modfetch with another transfer
 tool on the same URL, or inspect the transfer history learned from prior runs.
-Benchmark mode is intended for real-world throughput checks before switching a
-large model transfer.
+Benchmark mode is intended for real-world throughput checks before switching to
+a large model transfer.
 
 **Syntax:**
 ```bash

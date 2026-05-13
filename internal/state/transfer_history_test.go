@@ -114,6 +114,25 @@ func TestTransferHistoryWeightedAverageCapsSamples(t *testing.T) {
 		t.Fatalf("best after rate limit: %v", err)
 	}
 	if !ok || !best.RateLimited {
-		t.Fatalf("expected sticky rate limit, got ok=%v best=%+v", ok, best)
+		t.Fatalf("expected rate limit after limited sample, got ok=%v best=%+v", ok, best)
+	}
+
+	if err := db.UpsertTransferHistory(TransferHistoryRow{
+		Host:        "example.com",
+		Tool:        "modfetch",
+		Connections: 4,
+		ChunkSizeMB: 8,
+		AvgBPS:      600,
+		RateLimited: false,
+		LastStatus:  "Complete",
+	}); err != nil {
+		t.Fatalf("upsert clean conflict: %v", err)
+	}
+	best, ok, err = db.BestTransferHistory("example.com", "modfetch")
+	if err != nil {
+		t.Fatalf("best after clean sample: %v", err)
+	}
+	if !ok || best.RateLimited || best.LastStatus != "complete" {
+		t.Fatalf("expected clean normalized history, got ok=%v best=%+v", ok, best)
 	}
 }

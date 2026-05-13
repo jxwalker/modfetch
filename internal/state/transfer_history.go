@@ -48,7 +48,7 @@ func (db *DB) UpsertTransferHistory(row TransferHistoryRow) error {
 	}
 	row.Host = strings.ToLower(strings.TrimSpace(row.Host))
 	row.Tool = strings.ToLower(strings.TrimSpace(row.Tool))
-	row.LastStatus = strings.TrimSpace(row.LastStatus)
+	row.LastStatus = strings.ToLower(strings.TrimSpace(row.LastStatus))
 	if row.Host == "" || row.Tool == "" {
 		return errors.New("transfer history host and tool required")
 	}
@@ -71,7 +71,7 @@ func (db *DB) UpsertTransferHistory(row TransferHistoryRow) error {
 			avg_bps=((transfer_history.avg_bps * CASE WHEN transfer_history.samples >= 20 THEN 19 ELSE transfer_history.samples END) + excluded.avg_bps) /
 				(CASE WHEN transfer_history.samples >= 20 THEN 20 ELSE transfer_history.samples + 1 END),
 			samples=CASE WHEN transfer_history.samples >= 20 THEN 20 ELSE transfer_history.samples + 1 END,
-			rate_limited=CASE WHEN excluded.rate_limited != 0 THEN 1 ELSE transfer_history.rate_limited END,
+			rate_limited=excluded.rate_limited,
 			last_status=excluded.last_status,
 			last_error=excluded.last_error,
 			updated_at=excluded.updated_at`,
