@@ -7,7 +7,7 @@ import (
 
 func TestCompletionTopLevelCommands(t *testing.T) {
 	for name, script := range completionScripts() {
-		for _, command := range []string{"config", "download", "bench", "discover", "starter", "place", "verify", "status", "tui", "batch", "dedupe", "clean", "hostcaps", "version", "help", "completion"} {
+		for _, command := range []string{"config", "download", "bench", "discover", "recommend", "starter", "place", "verify", "status", "tui", "library", "batch", "dedupe", "clean", "hostcaps", "version", "help", "completion"} {
 			want := completionCommandToken(name, command)
 			if !strings.Contains(script, want) {
 				t.Fatalf("%s completion missing top-level command %q", name, command)
@@ -18,17 +18,18 @@ func TestCompletionTopLevelCommands(t *testing.T) {
 
 func TestCompletionCurrentFlags(t *testing.T) {
 	tests := map[string][]string{
-		"config":   {"--strict", "--out"},
-		"download": {"--no-resume", "--summary-json", "--batch-parallel", "--profile", "--connections", "--chunk-size-mb", "--dry-run", "--force", "--no-auth-preflight", "--quant", "--list-quants"},
-		"bench":    {"--url", "--tools", "--duration", "--profile", "--connections", "--chunk-size-mb", "--keep", "--history"},
-		"discover": {"--provider", "--limit", "--select", "--summary-json", "--dry-run"},
-		"starter":  {"--id", "--summary-json", "--dry-run"},
-		"place":    {"--dry-run", "--preset", "--list-presets"},
-		"batch":    {"--naming-pattern"},
-		"hostcaps": {"--config", "--list", "--clear", "--clear-all", "--json"},
-		"tui":      {"--json", "--snapshot"},
-		"clean":    {"--days", "--dry-run", "--dest", "--include-next-to-dest", "--sidecars"},
-		"library":  {"--target"},
+		"config":    {"--strict", "--out"},
+		"download":  {"--no-resume", "--summary-json", "--batch-parallel", "--profile", "--connections", "--chunk-size-mb", "--dry-run", "--force", "--no-auth-preflight", "--quant", "--list-quants"},
+		"bench":     {"--url", "--tools", "--duration", "--profile", "--connections", "--chunk-size-mb", "--keep", "--history"},
+		"discover":  {"--provider", "--limit", "--select", "--summary-json", "--dry-run"},
+		"recommend": {"--provider", "--task", "--ram-gb", "--vram-gb", "--unified-memory", "--download", "--select", "--dry-run"},
+		"starter":   {"--id", "--summary-json", "--dry-run"},
+		"place":     {"--dry-run", "--preset", "--list-presets"},
+		"batch":     {"--naming-pattern"},
+		"hostcaps":  {"--config", "--list", "--clear", "--clear-all", "--json"},
+		"tui":       {"--json", "--snapshot"},
+		"clean":     {"--days", "--dry-run", "--dest", "--include-next-to-dest", "--sidecars"},
+		"library":   {"--target"},
 	}
 
 	for name, script := range completionScripts() {

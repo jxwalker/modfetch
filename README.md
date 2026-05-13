@@ -8,6 +8,7 @@
 ║   SHA256 Integrity Verification                           ║
 ║   Rich TUI with Model Library Browser                     ║
 ║   Smart Classification & Auto-Placement                   ║
+║   Hardware-Aware Model Recommendations                    ║
 ║   10-100x Faster with Indexed Model Discovery             ║
 ╚═══════════════════════════════════════════════════════════╝
 ```
@@ -48,6 +49,12 @@
 - **Detailed view** with specs, descriptions, tags, and links
 - **Filter by type and source** (LLM, LoRA, VAE, Checkpoint, etc.)
 - **ModelScope and Ollama source support** with registry-backed enrichment; see the [Library Guide](docs/LIBRARY.md#metadata-sources)
+
+### 🧭 Model Selection
+- **Hardware-aware recommendations** with `modfetch recommend`
+- **Task presets** for chat, coding, embeddings, and image models
+- **RAM/VRAM overrides** for planning downloads for another machine
+- **One-step handoff** from recommendation to the normal resumable download pipeline
 
 ### 🎯 Organization
 - **Automatic placement** into app directories
@@ -115,6 +122,9 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 📖 **Documentation:** Comprehensive guides with visual examples
 
 ---
+
+## Upcoming
+- **Hardware-aware recommendations**: `modfetch recommend --task coding` detects your machine, ranks live provider results by memory fit and model signals, and can download the selected result.
 
 ## What's new in v0.7.1
 - **Starter downloads**: `modfetch starter` offers beginner-safe small downloads, and `starter://` aliases work in CLI, batch, and TUI flows.

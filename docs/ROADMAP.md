@@ -25,6 +25,9 @@ Shipped baseline:
   uses `CHANGELOG.md` sections for GitHub Release notes.
 - Beginner-friendly starter aliases and real-provider discovery commands for
   users who do not already know the exact model URL to download.
+- Hardware-aware recommendation commands that detect or accept RAM/VRAM
+  constraints, rank live provider results by task and memory fit, and hand the
+  selected URI to the same resumable download path.
 
 ## v0.7.0 Goal [DONE]
 
@@ -163,6 +166,23 @@ These are useful, but not required for the first v0.7.0 release:
   `modfetch tui --snapshot` exits without launching the Bubble Tea interface
   and `--snapshot --json` emits script-friendly downloads, library, and config
   state.
+- [DONE] Hardware-aware model recommendation:
+  `modfetch recommend` provides an llmfit-style path from user task and local
+  hardware to ranked provider results, with JSON output and one-step dry-run or
+  download handoff.
+
+## v0.8.x Direction
+
+- [NEXT] Recommendation quality feedback loop:
+  persist accepted/skipped recommendations, benchmark results, and completed
+  download outcomes so future recommendations learn from real local use.
+- [PLANNED] Runtime-aware guidance:
+  expose placement/runtime hints for Ollama, llama.cpp, MLX, ComfyUI, and
+  Stable Diffusion UIs so recommendation output explains where a model can run,
+  not just whether it can be downloaded.
+- [PLANNED] Interactive recommendation flow in the TUI:
+  add a guided "choose a model" workflow that filters by task, hardware, file
+  size, source, and placement target before starting a download.
 
 ## Completed Release History
 
