@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+Added
+- Added `modfetch download --profile large-model`, `--connections`, and
+  `--chunk-size-mb` for aria2-style one-shot tuning of very large model
+  downloads without editing YAML.
+
 Fixes
 - Preserved staged partial files and chunk state on canceled downloads so large
   Hugging Face/Xet-style transfers can resume instead of restarting from zero.

@@ -383,8 +383,9 @@ modfetch library scan --repair-stale
     
         modfetch download --config /path/to/config.yml --url 'hf://org/repo/path?rev=main' --dry-run
         modfetch download --config /path/to/config.yml --url 'https://example.com/file.bin' --dry-run --summary-json
+  - Large model tuning: use `--profile large-model` for DS4/GGUF-size artifacts, or set explicit aria2-style range tuning with `--connections 16 --chunk-size-mb 64`.
   - On completion, a summary is printed (dest, size, SHA256, duration, average speed)
-  - Cancel with Ctrl+C (SIGINT/SIGTERM); partial files are cleaned up
+  - Cancel with Ctrl+C (SIGINT/SIGTERM); staged partial files and completed chunks are preserved for resume. Use `--no-resume` or `modfetch clean` when you want to discard staged data.
 - Place artifacts into apps:
   
   modfetch place --config /path/to/config.yml --path /path/to/model.safetensors
