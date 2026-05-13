@@ -1,25 +1,25 @@
 class Modfetch < Formula
   desc "Robust CLI/TUI downloader for LLM and Stable Diffusion assets"
   homepage "https://github.com/jxwalker/modfetch"
-  version "0.7.1"
+  version "0.8.0"
   on_macos do
     on_arm do
       url "https://github.com/jxwalker/modfetch/releases/download/v#{version}/modfetch_darwin_arm64"
-      sha256 "9b1eb0498197e10616c13996839aba4648800f4ac9d6ed8f17bdc9c4a54ca464"
+      sha256 "9561c974403b7c24cdbbf7d61bdffee8cbf98c2e7eec0078dd0f7b04627348bc"
     end
     on_intel do
       url "https://github.com/jxwalker/modfetch/releases/download/v#{version}/modfetch_darwin_amd64"
-      sha256 "174f34693fcae4476633d3c670a8f3366f3002baa15ea1ad6882d3f25ede1e6b"
+      sha256 "90b390ee9f1d9a9fa0ec712c1e5d7d07ce5efc2462cd3975ff1077a3c7acf2e1"
     end
   end
   on_linux do
     on_arm do
       url "https://github.com/jxwalker/modfetch/releases/download/v#{version}/modfetch_linux_arm64"
-      sha256 "893e51802932381bc14d472d94002813c491c5170f14e50573e0b30cf873c868"
+      sha256 "063f70619266d9a89ebf9178f412a50ae757977f9615d1fb8c3faa2e6771e150"
     end
     on_intel do
       url "https://github.com/jxwalker/modfetch/releases/download/v#{version}/modfetch_linux_amd64"
-      sha256 "c7db15650986c32cf4b1550699e624a929e21b926194a2523896fbacec95276c"
+      sha256 "a7bbfb6ce482b91ab1a93eb3b3aa9618b1e61b943e078bf84befc0e3114c5e2a"
     end
   end
 
