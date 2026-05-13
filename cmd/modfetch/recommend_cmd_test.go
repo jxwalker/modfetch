@@ -89,8 +89,18 @@ func TestRecommendationHardwareKey(t *testing.T) {
 		RAMBytes:      127<<30 + 1,
 		UnifiedMemory: true,
 	})
-	if got != "darwin/arm64/128g/unified" {
+	if got != "darwin/arm64/ram128g/unified" {
 		t.Fatalf("hardware key = %q", got)
+	}
+
+	got = recommendationHardwareKey(recommend.HardwareProfile{
+		OS:        "linux",
+		Arch:      "amd64",
+		RAMBytes:  64 << 30,
+		VRAMBytes: 8 << 30,
+	})
+	if got != "linux/amd64/vram8g-ram64g/discrete" {
+		t.Fatalf("discrete hardware key = %q", got)
 	}
 }
 

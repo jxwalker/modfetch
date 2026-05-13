@@ -261,19 +261,23 @@ func validateGiBOverride(name string, value float64) error {
 }
 
 func recommendationHardwareKey(hw recommend.HardwareProfile) string {
-	mem := hw.RAMBytes
-	if hw.VRAMBytes > mem {
-		mem = hw.VRAMBytes
+	ramGB := roundedGiB(hw.RAMBytes)
+	vramGB := roundedGiB(hw.VRAMBytes)
+	switch {
+	case hw.UnifiedMemory:
+		return fmt.Sprintf("%s/%s/ram%dg/unified", strings.ToLower(hw.OS), strings.ToLower(hw.Arch), ramGB)
+	case hw.VRAMBytes > 0:
+		return fmt.Sprintf("%s/%s/vram%dg-ram%dg/discrete", strings.ToLower(hw.OS), strings.ToLower(hw.Arch), vramGB, ramGB)
+	default:
+		return fmt.Sprintf("%s/%s/ram%dg/system", strings.ToLower(hw.OS), strings.ToLower(hw.Arch), ramGB)
 	}
-	gb := int64(0)
-	if mem > 0 {
-		gb = (mem + (1<<30 - 1)) >> 30
+}
+
+func roundedGiB(bytes int64) int64 {
+	if bytes <= 0 {
+		return 0
 	}
-	shared := "discrete"
-	if hw.UnifiedMemory {
-		shared = "unified"
-	}
-	return fmt.Sprintf("%s/%s/%dg/%s", strings.ToLower(hw.OS), strings.ToLower(hw.Arch), gb, shared)
+	return (bytes + (1<<30 - 1)) >> 30
 }
 
 func recommendationFeedback(st *state.DB, task, query, hardwareKey string) (map[string]recommend.Feedback, error) {

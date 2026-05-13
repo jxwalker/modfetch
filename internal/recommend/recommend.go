@@ -162,9 +162,6 @@ func ApplyFeedback(recs []Recommendation, feedback map[string]Feedback) {
 		}
 	}
 	sort.SliceStable(recs, func(i, j int) bool { return betterRecommendation(recs[i], recs[j]) })
-	for i := range recs {
-		recs[i].Index = i + 1
-	}
 }
 
 func FeedbackKey(uri string) string {

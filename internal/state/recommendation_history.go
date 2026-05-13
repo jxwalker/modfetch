@@ -45,7 +45,6 @@ func (db *DB) InitRecommendationHistoryTable() error {
 		updated_at INTEGER NOT NULL,
 		UNIQUE(task, query, uri, action, hardware_key)
 	);
-	CREATE INDEX IF NOT EXISTS idx_recommendation_history_lookup ON recommendation_history(task, query, uri, hardware_key);
 	CREATE INDEX IF NOT EXISTS idx_recommendation_history_lookup_by_hardware ON recommendation_history(task, query, hardware_key, updated_at DESC);
 	CREATE INDEX IF NOT EXISTS idx_recommendation_history_updated_at ON recommendation_history(updated_at);`)
 	return err
