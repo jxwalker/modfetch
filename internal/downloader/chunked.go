@@ -475,7 +475,7 @@ func (e *Chunked) Download(ctx context.Context, url, destPath, expectedSHA strin
 	_ = fsyncDir(filepath.Dir(destPath))
 	completed = true
 	_ = e.st.UpsertDownload(state.DownloadRow{URL: url, Dest: destPath, ExpectedSHA256: expectedSHA, ActualSHA256: finalSHA, ETag: h.etag, LastModified: h.lastMod, Size: h.size, Status: "complete"})
-	recordModfetchTransferHistory(e.st, url, adaptive.finalLimit(), chunkSizeMBForHistory(e.cfg), h.size, time.Since(startTime), "complete", adaptive.wasRateLimited(), "")
+	recordModfetchTransferHistory(e.st, url, adaptive.finalLimit(), chunkSizeMBForHistory(e.cfg), adaptive.total(), time.Since(startTime), "complete", adaptive.wasRateLimited(), "")
 	if e.metrics != nil {
 		e.metrics.IncDownloadsSuccess()
 		e.metrics.ObserveDownloadSeconds(time.Since(startTime).Seconds())

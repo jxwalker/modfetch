@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -31,9 +32,9 @@ type adaptiveTransferController struct {
 	limit          int
 	max            int
 	active         int
-	totalBytes     int64
-	windowBytes    int64
-	lastProgress   time.Time
+	totalBytes     atomic.Int64
+	windowBytes    atomic.Int64
+	lastProgress   atomic.Int64
 	lastAdjust     time.Time
 	windowStarted  time.Time
 	emaBPS         float64
@@ -56,13 +57,13 @@ func newAdaptiveTransferController(cfg *config.Config, log *logging.Logger, st *
 		host:           strings.ToLower(host),
 		limit:          initialAdaptiveLimit(st, host, max),
 		max:            max,
-		lastProgress:   now,
 		lastAdjust:     now,
 		windowStarted:  now,
 		changed:        make(chan struct{}),
 		stopCh:         make(chan struct{}),
 		monitorStopped: make(chan struct{}),
 	}
+	c.lastProgress.Store(now.UnixNano())
 	go c.monitor()
 	return c
 }
@@ -73,11 +74,7 @@ func initialAdaptiveLimit(st *state.DB, host string, max int) int {
 	}
 	if st != nil {
 		if row, ok, err := st.BestTransferHistory(strings.ToLower(host), "modfetch"); err == nil && ok && row.Connections > 0 {
-			connections := row.Connections
-			if row.RateLimited {
-				connections = (connections + 1) / 2
-			}
-			return clampInt(connections, adaptiveMinLimit, max)
+			return clampInt(row.Connections, adaptiveMinLimit, max)
 		}
 	}
 	if max <= 4 {
@@ -121,12 +118,10 @@ func (c *adaptiveTransferController) observeBytes(n int64) {
 	if n <= 0 {
 		return
 	}
-	c.mu.Lock()
 	now := time.Now()
-	c.totalBytes += n
-	c.windowBytes += n
-	c.lastProgress = now
-	c.mu.Unlock()
+	c.totalBytes.Add(n)
+	c.windowBytes.Add(n)
+	c.lastProgress.Store(now.UnixNano())
 }
 
 func (c *adaptiveTransferController) observeRateLimit() {
@@ -136,7 +131,7 @@ func (c *adaptiveTransferController) observeRateLimit() {
 	c.limit = clampInt((c.limit+1)/2, adaptiveMinLimit, c.max)
 	c.lastAdjust = time.Now()
 	c.windowStarted = c.lastAdjust
-	c.windowBytes = 0
+	c.windowBytes.Store(0)
 	c.notifyLocked()
 	c.mu.Unlock()
 	if old != c.limit && c.log != nil {
@@ -176,11 +171,11 @@ func (c *adaptiveTransferController) adjust() {
 	host := c.host
 	logReason := ""
 	logBPS := 0.0
-	if c.active > 0 && now.Sub(c.lastProgress) >= adaptiveStallWindow {
+	if c.active > 0 && now.Sub(time.Unix(0, c.lastProgress.Load())) >= adaptiveStallWindow {
 		c.limit = clampInt((c.limit+1)/2, adaptiveMinLimit, c.max)
 		c.lastAdjust = now
 		c.windowStarted = now
-		c.windowBytes = 0
+		c.windowBytes.Store(0)
 		next := c.limit
 		if next != old {
 			c.notifyLocked()
@@ -190,7 +185,8 @@ func (c *adaptiveTransferController) adjust() {
 		c.logLimitChange(logReason, host, old, next, 0)
 		return
 	}
-	bps := float64(c.windowBytes) / elapsed.Seconds()
+	windowBytes := c.windowBytes.Load()
+	bps := float64(windowBytes) / elapsed.Seconds()
 	if bps <= 0 {
 		c.mu.Unlock()
 		return
@@ -202,7 +198,7 @@ func (c *adaptiveTransferController) adjust() {
 	}
 	if now.Sub(c.lastAdjust) < adaptiveProgressWindow {
 		c.windowStarted = now
-		c.windowBytes = 0
+		c.windowBytes.Store(0)
 		c.mu.Unlock()
 		return
 	}
@@ -219,7 +215,7 @@ func (c *adaptiveTransferController) adjust() {
 		logBPS = bps
 	}
 	c.windowStarted = now
-	c.windowBytes = 0
+	c.windowBytes.Store(0)
 	next := c.limit
 	if next != old {
 		c.notifyLocked()
@@ -254,9 +250,7 @@ func (c *adaptiveTransferController) finalLimit() int {
 }
 
 func (c *adaptiveTransferController) total() int64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.totalBytes
+	return c.totalBytes.Load()
 }
 
 func (c *adaptiveTransferController) notifyLocked() {

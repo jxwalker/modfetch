@@ -117,6 +117,48 @@ func TestBenchAria2RunsWhenInstalled(t *testing.T) {
 	}
 }
 
+func TestBenchHistoryListsRowsWithoutURL(t *testing.T) {
+	cfgPath := writeBenchConfig(t)
+	cfg, _, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	st, err := state.Open(cfg)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	if err := st.UpsertTransferHistory(state.TransferHistoryRow{
+		Host:        "example.com",
+		Tool:        "modfetch",
+		Connections: 4,
+		ChunkSizeMB: 1,
+		AvgBPS:      1234,
+		LastStatus:  "complete",
+	}); err != nil {
+		t.Fatalf("upsert history: %v", err)
+	}
+	_ = st.Close()
+
+	var runErr error
+	out := captureStdout(t, func() {
+		runErr = handleBench(context.Background(), []string{
+			"--config", cfgPath,
+			"--history",
+			"--json",
+		})
+	})
+	if runErr != nil {
+		t.Fatalf("bench history: %v", runErr)
+	}
+	var rows []state.TransferHistoryRow
+	if err := json.Unmarshal([]byte(out), &rows); err != nil {
+		t.Fatalf("decode history JSON: %v\n%s", err, out)
+	}
+	if len(rows) != 1 || rows[0].Host != "example.com" || rows[0].Tool != "modfetch" {
+		t.Fatalf("history rows = %+v", rows)
+	}
+}
+
 func TestParseBenchToolsDedupesAndDefaults(t *testing.T) {
 	got := parseBenchTools(" modfetch,aria2,modfetch ,,")
 	want := []string{"modfetch", "aria2"}

@@ -5,6 +5,7 @@ import (
 	"io"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/jxwalker/modfetch/internal/state"
 )
@@ -52,8 +53,40 @@ func TestInitialAdaptiveLimitUsesTransferHistory(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert limited history: %v", err)
 	}
-	if got := initialAdaptiveLimit(db2, "limited.example", 16); got != 6 {
-		t.Fatalf("rate-limited initial limit = %d, want 6", got)
+	if got := initialAdaptiveLimit(db2, "limited.example", 16); got != 12 {
+		t.Fatalf("rate-limited initial limit = %d, want stored final limit 12", got)
+	}
+}
+
+func TestAdaptiveAdjustRampAndBackoff(t *testing.T) {
+	c := newAdaptiveTransferController(nil, nil, nil, "https://example.com/model.bin", 8)
+	defer c.stop()
+
+	c.mu.Lock()
+	c.limit = 4
+	c.active = 4
+	c.windowStarted = time.Now().Add(-2 * adaptiveProgressWindow)
+	c.lastAdjust = time.Now().Add(-2 * adaptiveProgressWindow)
+	c.emaBPS = 50
+	c.mu.Unlock()
+	c.windowBytes.Store(200)
+	c.lastProgress.Store(time.Now().UnixNano())
+	c.adjust()
+	if got := c.finalLimit(); got != 5 {
+		t.Fatalf("ramp limit = %d, want 5", got)
+	}
+
+	c.mu.Lock()
+	c.active = 5
+	c.windowStarted = time.Now().Add(-2 * adaptiveProgressWindow)
+	c.lastAdjust = time.Now().Add(-2 * adaptiveProgressWindow)
+	c.emaBPS = 1000
+	c.mu.Unlock()
+	c.windowBytes.Store(100)
+	c.lastProgress.Store(time.Now().UnixNano())
+	c.adjust()
+	if got := c.finalLimit(); got != 4 {
+		t.Fatalf("backoff limit = %d, want 4", got)
 	}
 }
 

@@ -97,4 +97,23 @@ func TestTransferHistoryWeightedAverageCapsSamples(t *testing.T) {
 	if best.AvgBPS <= 100 || best.AvgBPS >= 124 {
 		t.Fatalf("avg_bps = %f, want bounded weighted average", best.AvgBPS)
 	}
+
+	if err := db.UpsertTransferHistory(TransferHistoryRow{
+		Host:        "example.com",
+		Tool:        "modfetch",
+		Connections: 4,
+		ChunkSizeMB: 8,
+		AvgBPS:      500,
+		RateLimited: true,
+		LastStatus:  "complete",
+	}); err != nil {
+		t.Fatalf("upsert rate-limited conflict: %v", err)
+	}
+	best, ok, err = db.BestTransferHistory("example.com", "modfetch")
+	if err != nil {
+		t.Fatalf("best after rate limit: %v", err)
+	}
+	if !ok || !best.RateLimited {
+		t.Fatalf("expected sticky rate limit, got ok=%v best=%+v", ok, best)
+	}
 }
