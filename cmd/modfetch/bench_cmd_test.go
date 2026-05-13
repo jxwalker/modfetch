@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBenchModfetchRunsRealDownloadSample(t *testing.T) {
@@ -101,6 +102,15 @@ func TestParseBenchToolsDedupesAndDefaults(t *testing.T) {
 	got = parseBenchTools(" , ")
 	if len(got) != 1 || got[0] != "modfetch" {
 		t.Fatalf("empty parseBenchTools = %v, want modfetch", got)
+	}
+}
+
+func TestAria2BenchSkipsSensitiveHeaders(t *testing.T) {
+	result := runAria2Bench(context.Background(), nil, "https://example.com/model.bin", map[string]string{
+		"Authorization": "Bearer secret",
+	}, t.TempDir(), time.Second)
+	if result.Status != "error" || !strings.Contains(result.Error, "sensitive headers") {
+		t.Fatalf("result = %+v, want sensitive-header error", result)
 	}
 }
 

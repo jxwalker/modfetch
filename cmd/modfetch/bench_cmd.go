@@ -235,6 +235,9 @@ func runAria2Bench(ctx context.Context, cfg *config.Config, rawURL string, heade
 	if err != nil {
 		return benchResult{Tool: "aria2", Status: "error", Error: "aria2c not found on PATH"}
 	}
+	if hasSensitiveHeaders(headers) {
+		return benchResult{Tool: "aria2", Status: "error", Error: "aria2 benchmark skipped: sensitive headers cannot be passed safely to aria2c"}
+	}
 	dir := filepath.Join(workDir, "aria2")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return benchResult{Tool: "aria2", Status: "error", Error: err.Error()}
@@ -294,6 +297,19 @@ func runAria2Bench(ctx context.Context, cfg *config.Config, rawURL string, heade
 		Error:       errText,
 		Dest:        dest,
 	}
+}
+
+func hasSensitiveHeaders(headers map[string]string) bool {
+	for name, value := range headers {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(name)) {
+		case "authorization", "cookie", "x-api-key":
+			return true
+		}
+	}
+	return false
 }
 
 func completedChunkBytes(st *state.DB, rawURL, dest string) (int64, int) {

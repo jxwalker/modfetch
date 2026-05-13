@@ -151,6 +151,9 @@ modfetch bench --url URL [OPTIONS]
 - `--url URL` - URL or resolver URI to benchmark
 - `--tools modfetch,aria2` - Tools to run; `aria2` is skipped with an error
   result if `aria2c` is not installed
+- Private/gated URLs: modfetch can benchmark with configured auth headers, but
+  aria2 is skipped when sensitive headers would otherwise be exposed through
+  process arguments.
 - `--duration 15s` - Sample duration per tool
 - `--profile auto|default|large-model` - Tuning profile for modfetch and
   matching aria2 connection/chunk parameters
