@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 
@@ -13,6 +14,8 @@ import (
 	"github.com/jxwalker/modfetch/internal/discovery"
 	"github.com/jxwalker/modfetch/internal/recommend"
 )
+
+const maxHardwareOverrideGiB = 16384
 
 type recommendSummary struct {
 	Query           string                     `json:"query"`
@@ -45,6 +48,12 @@ func handleRecommend(ctx context.Context, args []string) error {
 		return err
 	}
 	hw := recommend.DetectHardware(ctx)
+	if err := validateGiBOverride("--ram-gb", *ramGB); err != nil {
+		return err
+	}
+	if err := validateGiBOverride("--vram-gb", *vramGB); err != nil {
+		return err
+	}
 	if *ramGB > 0 {
 		hw.RAMBytes = gibToBytes(*ramGB)
 		hw.Source = "override"
@@ -180,4 +189,17 @@ func printRecommendations(summary recommendSummary, jsonOut bool) error {
 
 func gibToBytes(v float64) int64 {
 	return int64(v * 1024 * 1024 * 1024)
+}
+
+func validateGiBOverride(name string, value float64) error {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return fmt.Errorf("%s must be a finite GiB value", name)
+	}
+	if value < 0 {
+		return fmt.Errorf("%s must be non-negative", name)
+	}
+	if value > maxHardwareOverrideGiB {
+		return fmt.Errorf("%s value %.2f is unreasonably large; max is %d GiB", name, value, maxHardwareOverrideGiB)
+	}
+	return nil
 }

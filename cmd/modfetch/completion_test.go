@@ -7,7 +7,7 @@ import (
 
 func TestCompletionTopLevelCommands(t *testing.T) {
 	for name, script := range completionScripts() {
-		for _, command := range []string{"config", "download", "bench", "discover", "recommend", "starter", "place", "verify", "status", "tui", "batch", "dedupe", "clean", "hostcaps", "version", "help", "completion"} {
+		for _, command := range []string{"config", "download", "bench", "discover", "recommend", "starter", "place", "verify", "status", "tui", "library", "batch", "dedupe", "clean", "hostcaps", "version", "help", "completion"} {
 			want := completionCommandToken(name, command)
 			if !strings.Contains(script, want) {
 				t.Fatalf("%s completion missing top-level command %q", name, command)

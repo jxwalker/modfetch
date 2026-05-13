@@ -123,8 +123,10 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 
 ---
 
-## What's new in v0.7.1
+## Upcoming
 - **Hardware-aware recommendations**: `modfetch recommend --task coding` detects your machine, ranks live provider results by memory fit and model signals, and can download the selected result.
+
+## What's new in v0.7.1
 - **Starter downloads**: `modfetch starter` offers beginner-safe small downloads, and `starter://` aliases work in CLI, batch, and TUI flows.
 - **Real provider discovery**: `modfetch discover search` and `modfetch discover download` search live providers and hand selected files to the normal download pipeline.
 - **ModelScope discovery**: ModelScope results now participate in discovery alongside HuggingFace and CivitAI where public provider access allows it.

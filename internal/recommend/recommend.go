@@ -127,11 +127,11 @@ func Rank(results []discovery.Result, hw HardwareProfile, task string) []Recomme
 		out = append(out, rec)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Fit != out[j].Fit {
-			return fitRank(out[i].Fit) > fitRank(out[j].Fit)
-		}
 		if out[i].Score != out[j].Score {
 			return out[i].Score > out[j].Score
+		}
+		if out[i].Fit != out[j].Fit {
+			return fitRank(out[i].Fit) > fitRank(out[j].Fit)
 		}
 		return out[i].Downloads > out[j].Downloads
 	})
