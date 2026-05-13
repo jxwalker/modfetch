@@ -91,7 +91,11 @@ func handleRecommend(ctx context.Context, args []string) error {
 		st, stErr = state.Open(c)
 		if stErr == nil {
 			defer func() { _ = st.Close() }()
-			feedback = recommendationFeedback(st, effectiveTask, effectiveQuery, hardwareKey)
+			var feedbackErr error
+			feedback, feedbackErr = recommendationFeedback(st, effectiveTask, effectiveQuery, hardwareKey)
+			if feedbackErr != nil {
+				return fmt.Errorf("load recommendation history: %w", feedbackErr)
+			}
 		} else if !*quiet && !*common.jsonOut {
 			fmt.Fprintf(os.Stderr, "warning: recommendation history unavailable: %v\n", stErr)
 		}
@@ -110,7 +114,9 @@ func handleRecommend(ctx context.Context, args []string) error {
 		return err
 	}
 	if st != nil {
-		recordRecommendationHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "shown", 0)
+		if err := recordRecommendationHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "shown", 0); err != nil {
+			return fmt.Errorf("record shown recommendations: %w", err)
+		}
 	}
 	if *download {
 		if len(recs) == 0 {
@@ -121,8 +127,12 @@ func handleRecommend(ctx context.Context, args []string) error {
 		}
 		selected := recs[*selectIndex-1]
 		if st != nil {
-			recordRecommendationHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "selected", selected.Index)
-			recordRecommendationHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "skipped", selected.Index)
+			if err := recordRecommendationHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "selected", selected.Index); err != nil {
+				return fmt.Errorf("record selected recommendation: %w", err)
+			}
+			if err := recordRecommendationHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "skipped", selected.Index); err != nil {
+				return fmt.Errorf("record skipped recommendations: %w", err)
+			}
 		}
 		if !*quiet && !*common.jsonOut {
 			fmt.Fprintf(os.Stderr, "Selected %d: %s (%s, fit=%s)\n", selected.Index, selected.Name, selected.URI, selected.Fit)
@@ -266,10 +276,10 @@ func recommendationHardwareKey(hw recommend.HardwareProfile) string {
 	return fmt.Sprintf("%s/%s/%dg/%s", strings.ToLower(hw.OS), strings.ToLower(hw.Arch), gb, shared)
 }
 
-func recommendationFeedback(st *state.DB, task, query, hardwareKey string) map[string]recommend.Feedback {
+func recommendationFeedback(st *state.DB, task, query, hardwareKey string) (map[string]recommend.Feedback, error) {
 	rows, err := st.RecommendationHistoryFor(task, query, hardwareKey)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	out := make(map[string]recommend.Feedback)
 	for _, row := range rows {
@@ -285,10 +295,11 @@ func recommendationFeedback(st *state.DB, task, query, hardwareKey string) map[s
 		}
 		out[key] = fb
 	}
-	return out
+	return out, nil
 }
 
-func recordRecommendationHistory(st *state.DB, task, query, hardwareKey string, recs []recommend.Recommendation, action string, selectedIndex int) {
+func recordRecommendationHistory(st *state.DB, task, query, hardwareKey string, recs []recommend.Recommendation, action string, selectedIndex int) error {
+	rows := make([]state.RecommendationHistoryRow, 0, len(recs))
 	for _, rec := range recs {
 		switch action {
 		case "selected":
@@ -300,7 +311,7 @@ func recordRecommendationHistory(st *state.DB, task, query, hardwareKey string, 
 				continue
 			}
 		}
-		_ = st.UpsertRecommendationHistory(state.RecommendationHistoryRow{
+		rows = append(rows, state.RecommendationHistoryRow{
 			Task:        task,
 			Query:       query,
 			Provider:    rec.Provider,
@@ -312,6 +323,7 @@ func recordRecommendationHistory(st *state.DB, task, query, hardwareKey string, 
 			HardwareKey: hardwareKey,
 		})
 	}
+	return st.BatchUpsertRecommendationHistory(rows)
 }
 
 func printRecommendationHistory(cfg *config.Config, limit int, jsonOut bool) error {

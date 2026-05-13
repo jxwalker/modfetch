@@ -31,13 +31,18 @@ func TestRecommendationHistoryUpsertListAndLookup(t *testing.T) {
 	if err := db.UpsertRecommendationHistory(row); err != nil {
 		t.Fatalf("upsert skipped: %v", err)
 	}
+	row.Action = "shown"
+	row.URI = "hf://owner/shown/shown.gguf?rev=main"
+	if err := db.BatchUpsertRecommendationHistory([]RecommendationHistoryRow{row}); err != nil {
+		t.Fatalf("batch upsert shown: %v", err)
+	}
 
 	lookup, err := db.RecommendationHistoryFor("coding", "qwen coder gguf", "darwin/arm64/128g/unified")
 	if err != nil {
 		t.Fatalf("lookup: %v", err)
 	}
-	if len(lookup) != 2 {
-		t.Fatalf("lookup len = %d, want 2", len(lookup))
+	if len(lookup) != 3 {
+		t.Fatalf("lookup len = %d, want 3", len(lookup))
 	}
 	var selected RecommendationHistoryRow
 	for _, got := range lookup {

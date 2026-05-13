@@ -168,6 +168,29 @@ func TestRuntimeHintsForImageSafetensors(t *testing.T) {
 	}
 }
 
+func TestRuntimeHintsForSafetensorsAreHardwareAware(t *testing.T) {
+	result := discovery.Result{
+		Provider: discovery.ProviderHuggingFace,
+		ModelID:  "acme/llm",
+		Name:     "LLM",
+		FileName: "model.safetensors",
+		FileType: "safetensors",
+		URI:      "hf://acme/llm/model.safetensors?rev=main",
+	}
+
+	linux := Rank([]discovery.Result{result}, HardwareProfile{OS: "linux", Arch: "amd64", VRAMBytes: 24 << 30}, "chat")
+	for _, hint := range linux[0].RuntimeHints {
+		if hint.Runtime == "MLX" {
+			t.Fatalf("linux runtime hints include MLX: %#v", linux[0].RuntimeHints)
+		}
+	}
+
+	darwin := Rank([]discovery.Result{result}, HardwareProfile{OS: "darwin", Arch: "arm64", RAMBytes: 64 << 30, UnifiedMemory: true}, "chat")
+	if !hasRuntimeHint(darwin[0].RuntimeHints, "MLX") {
+		t.Fatalf("darwin runtime hints = %#v, want MLX", darwin[0].RuntimeHints)
+	}
+}
+
 func TestDefaultQueryForTask(t *testing.T) {
 	if got := DefaultQuery("coding"); !strings.Contains(got, "coder") {
 		t.Fatalf("coding default query = %q", got)
@@ -175,4 +198,13 @@ func TestDefaultQueryForTask(t *testing.T) {
 	if got := NormalizeTask("code"); got != "coding" {
 		t.Fatalf("NormalizeTask(code) = %q, want coding", got)
 	}
+}
+
+func hasRuntimeHint(hints []RuntimeHint, runtime string) bool {
+	for _, hint := range hints {
+		if hint.Runtime == runtime {
+			return true
+		}
+	}
+	return false
 }

@@ -29,8 +29,8 @@ Shipped baseline:
   constraints, rank live provider results by task and memory fit, and hand the
   selected URI to the same resumable download path.
 - Recommendation history and runtime hints, so repeated choices for the same
-  task/query/hardware class influence ranking and recommendation output explains
-  likely local runtimes and placement presets.
+  task, query, and hardware class influence ranking, and recommendation output
+  explains likely local runtimes and placement presets.
 
 ## v0.7.0 Goal [DONE]
 

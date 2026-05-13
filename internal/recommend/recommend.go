@@ -161,15 +161,7 @@ func ApplyFeedback(recs []Recommendation, feedback map[string]Feedback) {
 			recs[i].Reasons = append(recs[i].Reasons, fmt.Sprintf("previously skipped %d time(s)", fb.Skipped))
 		}
 	}
-	sort.SliceStable(recs, func(i, j int) bool {
-		if recs[i].Score != recs[j].Score {
-			return recs[i].Score > recs[j].Score
-		}
-		if recs[i].Fit != recs[j].Fit {
-			return fitRank(recs[i].Fit) > fitRank(recs[j].Fit)
-		}
-		return recs[i].Downloads > recs[j].Downloads
-	})
+	sort.SliceStable(recs, func(i, j int) bool { return betterRecommendation(recs[i], recs[j]) })
 	for i := range recs {
 		recs[i].Index = i + 1
 	}
@@ -189,15 +181,7 @@ func Rank(results []discovery.Result, hw HardwareProfile, task string) []Recomme
 		}
 		out = append(out, rec)
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Score != out[j].Score {
-			return out[i].Score > out[j].Score
-		}
-		if out[i].Fit != out[j].Fit {
-			return fitRank(out[i].Fit) > fitRank(out[j].Fit)
-		}
-		return out[i].Downloads > out[j].Downloads
-	})
+	sort.SliceStable(out, func(i, j int) bool { return betterRecommendation(out[i], out[j]) })
 	for i := range out {
 		out[i].Index = i + 1
 	}
@@ -217,6 +201,16 @@ func NormalizeTask(task string) string {
 	default:
 		return strings.ToLower(strings.TrimSpace(task))
 	}
+}
+
+func betterRecommendation(a, b Recommendation) bool {
+	if a.Score != b.Score {
+		return a.Score > b.Score
+	}
+	if a.Fit != b.Fit {
+		return fitRank(a.Fit) > fitRank(b.Fit)
+	}
+	return a.Downloads > b.Downloads
 }
 
 func DefaultQuery(task string) string {
@@ -309,14 +303,14 @@ func scoreResult(result discovery.Result, hw HardwareProfile, task string) Recom
 		MemoryBudget:      budget,
 		ParameterCount:    params,
 		Quantization:      quant,
-		RuntimeHints:      runtimeHints(result, task),
+		RuntimeHints:      runtimeHints(result, task, hw),
 		Reasons:           reasons,
 		DownloadCommand:   "modfetch download --url " + strconv.Quote(result.URI) + " --profile auto",
 		Raw:               result,
 	}
 }
 
-func runtimeHints(result discovery.Result, task string) []RuntimeHint {
+func runtimeHints(result discovery.Result, task string, hw HardwareProfile) []RuntimeHint {
 	ext := strings.ToLower(strings.TrimPrefix(result.FileType, "."))
 	if ext == "" {
 		name := strings.ToLower(firstNonEmpty(result.FileName, result.FilePath))
@@ -338,11 +332,14 @@ func runtimeHints(result discovery.Result, task string) []RuntimeHint {
 				{Runtime: "AUTOMATIC1111/Forge", Reason: "safetensors image artifacts are supported by Stable Diffusion WebUI layouts", PlacementPreset: "automatic1111"},
 			}
 		}
-		return []RuntimeHint{
+		hints := []RuntimeHint{
 			{Runtime: "Transformers", Reason: "safetensors is the preferred safe weight format for Transformers models", PlacementPreset: "hf-cache"},
-			{Runtime: "MLX", Reason: "many Hugging Face safetensors language models can be converted for Apple Silicon with mlx-lm", SetupCommand: "mlx_lm.convert --hf-path REPO --mlx-path OUT"},
 			{Runtime: "vLLM", Reason: "many safetensors causal language models can be served by vLLM"},
 		}
+		if hw.OS == "darwin" && hw.Arch == "arm64" {
+			hints = append(hints, RuntimeHint{Runtime: "MLX", Reason: "many Hugging Face safetensors language models can be converted for Apple Silicon with mlx-lm", SetupCommand: "mlx_lm.convert --hf-path REPO --mlx-path OUT"})
+		}
+		return hints
 	case "bin", "pt", "pth":
 		return []RuntimeHint{
 			{Runtime: "Transformers", Reason: "PyTorch-format weights usually require a Transformers-compatible repo layout", PlacementPreset: "hf-cache"},

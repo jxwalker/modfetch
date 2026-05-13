@@ -105,10 +105,17 @@ func TestRecommendationFeedbackFromHistory(t *testing.T) {
 		{Index: 1, Provider: discovery.ProviderHuggingFace, ModelID: "owner/selected", URI: "hf://owner/selected/model.gguf?rev=main", Score: 100, Fit: "excellent"},
 		{Index: 2, Provider: discovery.ProviderHuggingFace, ModelID: "owner/skipped", URI: "hf://owner/skipped/model.gguf?rev=main", Score: 90, Fit: "excellent"},
 	}
-	recordRecommendationHistory(db, "coding", "qwen coder gguf", "darwin/arm64/128g/unified", recs, "selected", 1)
-	recordRecommendationHistory(db, "coding", "qwen coder gguf", "darwin/arm64/128g/unified", recs, "skipped", 1)
+	if err := recordRecommendationHistory(db, "coding", "qwen coder gguf", "darwin/arm64/128g/unified", recs, "selected", 1); err != nil {
+		t.Fatalf("record selected history: %v", err)
+	}
+	if err := recordRecommendationHistory(db, "coding", "qwen coder gguf", "darwin/arm64/128g/unified", recs, "skipped", 1); err != nil {
+		t.Fatalf("record skipped history: %v", err)
+	}
 
-	feedback := recommendationFeedback(db, "coding", "qwen coder gguf", "darwin/arm64/128g/unified")
+	feedback, err := recommendationFeedback(db, "coding", "qwen coder gguf", "darwin/arm64/128g/unified")
+	if err != nil {
+		t.Fatalf("load feedback: %v", err)
+	}
 	selected := feedback[recommend.FeedbackKey("hf://owner/selected/model.gguf?rev=main")]
 	skipped := feedback[recommend.FeedbackKey("hf://owner/skipped/model.gguf?rev=main")]
 	if selected.Selected != 1 {

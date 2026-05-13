@@ -46,6 +46,7 @@ func (db *DB) InitRecommendationHistoryTable() error {
 		UNIQUE(task, query, uri, action, hardware_key)
 	);
 	CREATE INDEX IF NOT EXISTS idx_recommendation_history_lookup ON recommendation_history(task, query, uri, hardware_key);
+	CREATE INDEX IF NOT EXISTS idx_recommendation_history_lookup_by_hardware ON recommendation_history(task, query, hardware_key, updated_at DESC);
 	CREATE INDEX IF NOT EXISTS idx_recommendation_history_updated_at ON recommendation_history(updated_at);`)
 	return err
 }
@@ -54,6 +55,37 @@ func (db *DB) UpsertRecommendationHistory(row RecommendationHistoryRow) error {
 	if db == nil || db.SQL == nil {
 		return errors.New("nil db")
 	}
+	row, err := normalizeRecommendationHistoryRow(row, time.Now().Unix())
+	if err != nil {
+		return err
+	}
+	if err := upsertRecommendationHistory(db.SQL, row); err != nil {
+		return err
+	}
+	db.NotifyChange()
+	return nil
+}
+
+func (db *DB) BatchUpsertRecommendationHistory(rows []RecommendationHistoryRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	return db.WithTx(func(tx *sql.Tx) error {
+		now := time.Now().Unix()
+		for _, row := range rows {
+			normalized, err := normalizeRecommendationHistoryRow(row, now)
+			if err != nil {
+				return err
+			}
+			if err := upsertRecommendationHistory(tx, normalized); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func normalizeRecommendationHistoryRow(row RecommendationHistoryRow, now int64) (RecommendationHistoryRow, error) {
 	row.Task = strings.ToLower(strings.TrimSpace(row.Task))
 	row.Query = strings.TrimSpace(row.Query)
 	row.Provider = strings.ToLower(strings.TrimSpace(row.Provider))
@@ -63,7 +95,7 @@ func (db *DB) UpsertRecommendationHistory(row RecommendationHistoryRow) error {
 	row.Fit = strings.ToLower(strings.TrimSpace(row.Fit))
 	row.HardwareKey = strings.ToLower(strings.TrimSpace(row.HardwareKey))
 	if row.Task == "" || row.Query == "" || row.URI == "" || row.Action == "" || row.HardwareKey == "" {
-		return errors.New("recommendation history task, query, uri, action, and hardware key required")
+		return RecommendationHistoryRow{}, errors.New("recommendation history task, query, uri, action, and hardware key required")
 	}
 	if row.Provider == "" {
 		row.Provider = "unknown"
@@ -74,7 +106,6 @@ func (db *DB) UpsertRecommendationHistory(row RecommendationHistoryRow) error {
 	if row.Count <= 0 {
 		row.Count = 1
 	}
-	now := time.Now().Unix()
 	switch row.Action {
 	case "selected":
 		row.LastSelected = now
@@ -84,7 +115,16 @@ func (db *DB) UpsertRecommendationHistory(row RecommendationHistoryRow) error {
 		row.Action = "shown"
 		row.LastShown = now
 	}
-	_, err := db.SQL.Exec(`INSERT INTO recommendation_history(task, query, provider, model_id, uri, action, score, fit, hardware_key, count, last_selected, last_skipped, last_shown, updated_at)
+	row.UpdatedAt = now
+	return row, nil
+}
+
+type recommendationHistoryExecer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+func upsertRecommendationHistory(exec recommendationHistoryExecer, row RecommendationHistoryRow) error {
+	_, err := exec.Exec(`INSERT INTO recommendation_history(task, query, provider, model_id, uri, action, score, fit, hardware_key, count, last_selected, last_skipped, last_shown, updated_at)
 		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(task, query, uri, action, hardware_key) DO UPDATE SET
 			provider=excluded.provider,
@@ -96,10 +136,7 @@ func (db *DB) UpsertRecommendationHistory(row RecommendationHistoryRow) error {
 			last_skipped=COALESCE(excluded.last_skipped, recommendation_history.last_skipped),
 			last_shown=COALESCE(excluded.last_shown, recommendation_history.last_shown),
 			updated_at=excluded.updated_at`,
-		row.Task, row.Query, row.Provider, row.ModelID, row.URI, row.Action, row.Score, row.Fit, row.HardwareKey, row.Count, nullableUnix(row.LastSelected), nullableUnix(row.LastSkipped), nullableUnix(row.LastShown), now)
-	if err == nil {
-		db.NotifyChange()
-	}
+		row.Task, row.Query, row.Provider, row.ModelID, row.URI, row.Action, row.Score, row.Fit, row.HardwareKey, row.Count, nullableUnix(row.LastSelected), nullableUnix(row.LastSkipped), nullableUnix(row.LastShown), row.UpdatedAt)
 	return err
 }
 
