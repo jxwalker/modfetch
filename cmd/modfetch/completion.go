@@ -72,7 +72,7 @@ _modfetch_completions()
                 *) ;;
             esac ;;
         recommend)
-            COMPREPLY=( $(compgen -W "--config --log-level --json --provider --task --limit --ram-gb --vram-gb --unified-memory --select --download --dest --place --summary-json --dry-run --quiet --no-resume chat coding embedding image huggingface civitai modelscope all" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --provider --task --limit --ram-gb --vram-gb --unified-memory --select --download --dest --place --summary-json --dry-run --quiet --no-resume --history --history-limit --no-learn chat coding embedding image huggingface civitai modelscope all" -- "$cur") ) ;;
         starter)
             if [[ ${cword} -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "list show download" -- "$cur") )
@@ -189,7 +189,7 @@ _modfetch() {
       fi
       ;;
     recommend)
-      _arguments '*:options:(--config --log-level --json --provider --task --limit --ram-gb --vram-gb --unified-memory --select --download --dest --place --summary-json --dry-run --quiet --no-resume chat coding embedding image huggingface civitai modelscope all)'
+      _arguments '*:options:(--config --log-level --json --provider --task --limit --ram-gb --vram-gb --unified-memory --select --download --dest --place --summary-json --dry-run --quiet --no-resume --history --history-limit --no-learn chat coding embedding image huggingface civitai modelscope all)'
       ;;
     starter)
       if (( CURRENT == 3 )); then
@@ -376,6 +376,9 @@ complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l summary-json 
 complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l dry-run -d "Plan without downloading"
 complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l quiet -d "Suppress progress and info logs"
 complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l no-resume -d "Start fresh instead of resuming"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l history -d "List recommendation history"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l history-limit -d "Recommendation history row limit"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l no-learn -d "Disable recommendation history for this invocation"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "list" -d "List starter downloads"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "show" -d "Show starter details"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "download" -d "Download a starter"

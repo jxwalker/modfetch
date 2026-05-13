@@ -31,6 +31,20 @@ type Options struct {
 	Provider string
 	Limit    int
 	Hardware HardwareProfile
+	Feedback map[string]Feedback
+}
+
+type Feedback struct {
+	Selected int
+	Skipped  int
+	Shown    int
+}
+
+type RuntimeHint struct {
+	Runtime         string `json:"runtime"`
+	Reason          string `json:"reason"`
+	PlacementPreset string `json:"placement_preset,omitempty"`
+	SetupCommand    string `json:"setup_command,omitempty"`
 }
 
 type Recommendation struct {
@@ -50,6 +64,7 @@ type Recommendation struct {
 	MemoryBudget      int64            `json:"memory_budget_bytes,omitempty"`
 	ParameterCount    string           `json:"parameter_count,omitempty"`
 	Quantization      string           `json:"quantization,omitempty"`
+	RuntimeHints      []RuntimeHint    `json:"runtime_hints,omitempty"`
 	Reasons           []string         `json:"reasons,omitempty"`
 	DownloadCommand   string           `json:"download_command"`
 	Raw               discovery.Result `json:"raw,omitempty"`
@@ -107,6 +122,7 @@ func Recommend(ctx context.Context, opts Options) ([]Recommendation, HardwarePro
 		return nil, hw, err
 	}
 	ranked := Rank(results, hw, task)
+	ApplyFeedback(ranked, opts.Feedback)
 	if len(ranked) > limit {
 		ranked = ranked[:limit]
 	}
@@ -114,6 +130,42 @@ func Recommend(ctx context.Context, opts Options) ([]Recommendation, HardwarePro
 		ranked[i].Index = i + 1
 	}
 	return ranked, hw, nil
+}
+
+func ApplyFeedback(recs []Recommendation, feedback map[string]Feedback) {
+	if len(recs) == 0 || len(feedback) == 0 {
+		return
+	}
+	for i := range recs {
+		fb, ok := feedback[FeedbackKey(recs[i].URI)]
+		if !ok {
+			continue
+		}
+		delta := fb.Selected*18 - fb.Skipped*10
+		if delta > 54 {
+			delta = 54
+		}
+		if delta < -40 {
+			delta = -40
+		}
+		if delta == 0 && fb.Shown > 0 {
+			delta = -2
+		}
+		recs[i].Score += delta
+		switch {
+		case fb.Selected > 0 && fb.Skipped > 0:
+			recs[i].Reasons = append(recs[i].Reasons, fmt.Sprintf("learned from prior selections (%d selected, %d skipped)", fb.Selected, fb.Skipped))
+		case fb.Selected > 0:
+			recs[i].Reasons = append(recs[i].Reasons, fmt.Sprintf("learned from %d prior selection(s)", fb.Selected))
+		case fb.Skipped > 0:
+			recs[i].Reasons = append(recs[i].Reasons, fmt.Sprintf("previously skipped %d time(s)", fb.Skipped))
+		}
+	}
+	sort.SliceStable(recs, func(i, j int) bool { return betterRecommendation(recs[i], recs[j]) })
+}
+
+func FeedbackKey(uri string) string {
+	return strings.TrimSpace(uri)
 }
 
 func Rank(results []discovery.Result, hw HardwareProfile, task string) []Recommendation {
@@ -126,15 +178,7 @@ func Rank(results []discovery.Result, hw HardwareProfile, task string) []Recomme
 		}
 		out = append(out, rec)
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Score != out[j].Score {
-			return out[i].Score > out[j].Score
-		}
-		if out[i].Fit != out[j].Fit {
-			return fitRank(out[i].Fit) > fitRank(out[j].Fit)
-		}
-		return out[i].Downloads > out[j].Downloads
-	})
+	sort.SliceStable(out, func(i, j int) bool { return betterRecommendation(out[i], out[j]) })
 	for i := range out {
 		out[i].Index = i + 1
 	}
@@ -154,6 +198,16 @@ func NormalizeTask(task string) string {
 	default:
 		return strings.ToLower(strings.TrimSpace(task))
 	}
+}
+
+func betterRecommendation(a, b Recommendation) bool {
+	if a.Score != b.Score {
+		return a.Score > b.Score
+	}
+	if a.Fit != b.Fit {
+		return fitRank(a.Fit) > fitRank(b.Fit)
+	}
+	return a.Downloads > b.Downloads
 }
 
 func DefaultQuery(task string) string {
@@ -246,9 +300,53 @@ func scoreResult(result discovery.Result, hw HardwareProfile, task string) Recom
 		MemoryBudget:      budget,
 		ParameterCount:    params,
 		Quantization:      quant,
+		RuntimeHints:      runtimeHints(result, task, hw),
 		Reasons:           reasons,
 		DownloadCommand:   "modfetch download --url " + strconv.Quote(result.URI) + " --profile auto",
 		Raw:               result,
+	}
+}
+
+func runtimeHints(result discovery.Result, task string, hw HardwareProfile) []RuntimeHint {
+	ext := strings.ToLower(strings.TrimPrefix(result.FileType, "."))
+	if ext == "" {
+		name := strings.ToLower(firstNonEmpty(result.FileName, result.FilePath))
+		if dot := strings.LastIndexByte(name, '.'); dot >= 0 {
+			ext = strings.TrimPrefix(name[dot:], ".")
+		}
+	}
+	switch ext {
+	case "gguf":
+		return []RuntimeHint{
+			{Runtime: "llama.cpp", Reason: "GGUF is directly runnable by llama.cpp-style runtimes", PlacementPreset: "hf-cache"},
+			{Runtime: "Ollama", Reason: "GGUF can be imported with a Modelfile", PlacementPreset: "ollama", SetupCommand: "ollama create NAME -f Modelfile"},
+			{Runtime: "LM Studio", Reason: "LM Studio can load local GGUF files"},
+		}
+	case "safetensors":
+		if NormalizeTask(task) == "image" || containsAny(strings.ToLower(strings.Join(result.Tags, " ")), "diffusion", "sdxl", "lora") {
+			return []RuntimeHint{
+				{Runtime: "ComfyUI", Reason: "safetensors image checkpoints and LoRAs belong under ComfyUI model folders", PlacementPreset: "comfyui"},
+				{Runtime: "AUTOMATIC1111/Forge", Reason: "safetensors image artifacts are supported by Stable Diffusion WebUI layouts", PlacementPreset: "automatic1111"},
+			}
+		}
+		hints := []RuntimeHint{
+			{Runtime: "Transformers", Reason: "safetensors is the preferred safe weight format for Transformers models", PlacementPreset: "hf-cache"},
+			{Runtime: "vLLM", Reason: "many safetensors causal language models can be served by vLLM"},
+		}
+		if hw.OS == "darwin" && hw.Arch == "arm64" {
+			hints = append(hints, RuntimeHint{Runtime: "MLX", Reason: "many Hugging Face safetensors language models can be converted for Apple Silicon with mlx-lm", SetupCommand: "mlx_lm.convert --hf-path REPO --mlx-path OUT"})
+		}
+		return hints
+	case "bin", "pt", "pth":
+		return []RuntimeHint{
+			{Runtime: "Transformers", Reason: "PyTorch-format weights usually require a Transformers-compatible repo layout", PlacementPreset: "hf-cache"},
+		}
+	case "onnx":
+		return []RuntimeHint{
+			{Runtime: "ONNX Runtime", Reason: "ONNX artifacts are designed for ONNX Runtime inference"},
+		}
+	default:
+		return nil
 	}
 }
 
