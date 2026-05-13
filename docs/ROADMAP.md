@@ -1,6 +1,6 @@
 # Roadmap
 
-This is the active project roadmap after the v0.7.1 release. Historical backlog
+This is the active project roadmap after the v0.8.0 release. Historical backlog
 items that shipped in v0.6.x and v0.7.x are summarized at the end for traceability.
 
 Status key:
@@ -11,7 +11,7 @@ Status key:
 
 ## Current Baseline
 
-Current release: v0.7.1, tagged 2026-05-05.
+Current release: v0.8.0, tagged 2026-05-13.
 
 Shipped baseline:
 - Reliable direct, Hugging Face, and CivitAI downloads with resume, retries,
@@ -189,6 +189,10 @@ These are useful, but not required for the first v0.7.0 release:
 
 ## Completed Release History
 
+- v0.8.0: delivered benchmark-driven transfer tuning, live adaptive
+  ramp-up/backoff, persisted per-host transfer history, hardware-aware
+  recommendations, learned recommendation history, and runtime/placement hints
+  for local model execution.
 - v0.7.1: delivered beginner-safe starter downloads, real-provider discovery
   search/download, ModelScope discovery support, AUR release automation,
   catalog sync HTTP targets, metadata enrichment for ModelScope and Ollama
