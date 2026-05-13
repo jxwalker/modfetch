@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/dustin/go-humanize"
@@ -112,7 +113,13 @@ func handleBench(ctx context.Context, args []string) error {
 	if *common.jsonOut {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		return enc.Encode(summary)
+		if err := enc.Encode(summary); err != nil {
+			return err
+		}
+		if !hasSuccessfulBench(results) {
+			return errors.New("no successful benchmarks")
+		}
+		return nil
 	}
 	fmt.Printf("Benchmark: %s\n", logging.SanitizeURL(resolvedURL))
 	for _, r := range results {
@@ -129,7 +136,19 @@ func handleBench(ctx context.Context, args []string) error {
 	if *keep {
 		fmt.Printf("Work dir: %s\n", workDir)
 	}
+	if !hasSuccessfulBench(results) {
+		return errors.New("no successful benchmarks")
+	}
 	return nil
+}
+
+func hasSuccessfulBench(results []benchResult) bool {
+	for _, result := range results {
+		if result.Status != "error" {
+			return true
+		}
+	}
+	return false
 }
 
 func parseBenchTools(raw string) []string {
@@ -186,11 +205,9 @@ func runModfetchBench(ctx context.Context, base *config.Config, log *logging.Log
 	final, _, err := downloader.NewAuto(&cfg, log, st, nil).Download(sampleCtx, rawURL, dest, "", headers, true)
 	elapsed := time.Since(start)
 	bytes, chunkRows := completedChunkBytes(st, rawURL, dest)
+	bytes = maxInt64(bytes, sampledPartBytes(&cfg, rawURL, dest, chunkRows))
 	if final != "" {
 		bytes = maxInt64(bytes, fileSize(final))
-	}
-	if chunkRows == 0 {
-		bytes = maxInt64(bytes, fileSize(downloader.StagePartPath(&cfg, rawURL, dest)))
 	}
 	status := "sampled"
 	errText := ""
@@ -285,7 +302,7 @@ func hasSensitiveHeaders(headers map[string]string) bool {
 			continue
 		}
 		switch strings.ToLower(strings.TrimSpace(name)) {
-		case "authorization", "cookie", "x-api-key":
+		case "authorization", "proxy-authorization", "cookie", "x-api-key":
 			return true
 		}
 	}
@@ -316,6 +333,28 @@ func fileSize(path string) int64 {
 	fi, err := os.Stat(path)
 	if err != nil {
 		return 0
+	}
+	return fi.Size()
+}
+
+func sampledPartBytes(cfg *config.Config, rawURL, dest string, chunkRows int) int64 {
+	part := downloader.StagePartPath(cfg, rawURL, dest)
+	if chunkRows > 0 {
+		return allocatedFileBytes(part)
+	}
+	return fileSize(part)
+}
+
+func allocatedFileBytes(path string) int64 {
+	if path == "" {
+		return 0
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return 0
+	}
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok && st.Blocks > 0 {
+		return st.Blocks * 512
 	}
 	return fi.Size()
 }

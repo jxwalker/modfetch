@@ -112,6 +112,13 @@ func TestAria2BenchSkipsSensitiveHeaders(t *testing.T) {
 	if result.Status != "error" || !strings.Contains(result.Error, "sensitive headers") {
 		t.Fatalf("result = %+v, want sensitive-header error", result)
 	}
+
+	result = runAria2Bench(context.Background(), nil, "https://example.com/model.bin", map[string]string{
+		"Proxy-Authorization": "Basic secret",
+	}, t.TempDir(), time.Second)
+	if result.Status != "error" || !strings.Contains(result.Error, "sensitive headers") {
+		t.Fatalf("result = %+v, want proxy sensitive-header error", result)
+	}
 }
 
 func TestBenchRangeServerSupportsOpenEndedRanges(t *testing.T) {
@@ -136,6 +143,30 @@ func TestBenchRangeServerSupportsOpenEndedRanges(t *testing.T) {
 	}
 	if len(body) != 22 {
 		t.Fatalf("body len = %d, want 22", len(body))
+	}
+}
+
+func TestBenchReturnsErrorWhenEveryToolFails(t *testing.T) {
+	cfgPath := writeBenchConfig(t)
+	var runErr error
+	out := captureStdout(t, func() {
+		runErr = handleBench(context.Background(), []string{
+			"--config", cfgPath,
+			"--url", "https://example.com/model.bin",
+			"--tools", "not-a-tool",
+			"--duration", "1s",
+			"--json",
+		})
+	})
+	if runErr == nil || !strings.Contains(runErr.Error(), "no successful benchmarks") {
+		t.Fatalf("bench error = %v, want no successful benchmarks", runErr)
+	}
+	var got benchSummary
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("decode bench JSON: %v\n%s", err, out)
+	}
+	if len(got.Results) != 1 || got.Results[0].Status != "error" {
+		t.Fatalf("unexpected results: %+v", got.Results)
 	}
 }
 
