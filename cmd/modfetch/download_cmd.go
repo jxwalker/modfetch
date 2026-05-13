@@ -33,7 +33,8 @@ import (
 
 const (
 	defaultDownloadConnections    = 4
-	defaultDownloadChunkSizeMB    = 8
+	autoChunkSizeMinMB            = 1
+	autoChunkSizeMaxMB            = 64
 	largeModelDownloadConnections = 16
 	largeModelChunkSizeMB         = 64
 )
@@ -524,16 +525,26 @@ func handleDownload(ctx context.Context, args []string) error {
 			candDest = filepath.Join(c.General.DownloadRoot, util.SafeFileName(base))
 		}
 		if *summaryJSON {
+			chunkMode, chunkSizeMB := effectiveChunkSize(c)
+			summary := map[string]any{
+				"resolver_uri":    logging.SanitizeURL(*url),
+				"resolved_url":    logging.SanitizeURL(resolvedURL),
+				"default_dest":    candDest,
+				"connections":     effectiveDownloadConnections(c),
+				"chunk_size_mode": chunkMode,
+				"profile":         effectiveDownloadProfile(*profile),
+			}
+			if chunkSizeMB > 0 {
+				summary["chunk_size_mb"] = chunkSizeMB
+			} else {
+				summary["chunk_size_range_mb"] = map[string]int{
+					"min": autoChunkSizeMinMB,
+					"max": autoChunkSizeMaxMB,
+				}
+			}
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
-			_ = enc.Encode(map[string]any{
-				"resolver_uri":  logging.SanitizeURL(*url),
-				"resolved_url":  logging.SanitizeURL(resolvedURL),
-				"default_dest":  candDest,
-				"connections":   effectiveDownloadConnections(c),
-				"chunk_size_mb": effectiveChunkSizeMB(c),
-				"profile":       effectiveDownloadProfile(*profile),
-			})
+			_ = enc.Encode(summary)
 			return nil
 		}
 		fmt.Printf("Plan (dry-run)\n")
@@ -542,7 +553,11 @@ func handleDownload(ctx context.Context, args []string) error {
 		fmt.Printf("  Default dest: %s\n", candDest)
 		fmt.Printf("  Profile: %s\n", effectiveDownloadProfile(*profile))
 		fmt.Printf("  Connections: %d\n", effectiveDownloadConnections(c))
-		fmt.Printf("  Chunk size: %d MiB\n", effectiveChunkSizeMB(c))
+		if chunkMode, chunkSizeMB := effectiveChunkSize(c); chunkMode == "fixed" {
+			fmt.Printf("  Chunk size: %d MiB\n", chunkSizeMB)
+		} else {
+			fmt.Printf("  Chunk size: auto (%d-%d MiB)\n", autoChunkSizeMinMB, autoChunkSizeMaxMB)
+		}
 		return nil
 	}
 	if !*noAuthPreflight && !c.Network.DisableAuthPreflight {
@@ -755,11 +770,11 @@ func effectiveDownloadConnections(c *config.Config) int {
 	return connections
 }
 
-func effectiveChunkSizeMB(c *config.Config) int {
+func effectiveChunkSize(c *config.Config) (string, int) {
 	if c == nil || c.Concurrency.ChunkSizeMB <= 0 {
-		return defaultDownloadChunkSizeMB
+		return "auto", 0
 	}
-	return c.Concurrency.ChunkSizeMB
+	return "fixed", c.Concurrency.ChunkSizeMB
 }
 
 // resolveBatchDownloadCandidate resolves a single source URI or direct URL to

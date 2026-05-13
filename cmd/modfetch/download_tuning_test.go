@@ -47,6 +47,9 @@ func TestDownloadDryRunReportsTuning(t *testing.T) {
 	if got["connections"] != float64(20) {
 		t.Fatalf("connections = %v, want 20", got["connections"])
 	}
+	if got["chunk_size_mode"] != "fixed" {
+		t.Fatalf("chunk_size_mode = %v, want fixed", got["chunk_size_mode"])
+	}
 	if got["chunk_size_mb"] != float64(32) {
 		t.Fatalf("chunk_size_mb = %v, want 32", got["chunk_size_mb"])
 	}
@@ -81,6 +84,19 @@ func TestDownloadDryRunSanitizesResolverURI(t *testing.T) {
 	}
 	if got["resolver_uri"] != "https://example.com/model.gguf" {
 		t.Fatalf("resolver_uri = %v, want sanitized URL", got["resolver_uri"])
+	}
+	if got["chunk_size_mode"] != "auto" {
+		t.Fatalf("chunk_size_mode = %v, want auto", got["chunk_size_mode"])
+	}
+	if _, ok := got["chunk_size_mb"]; ok {
+		t.Fatalf("chunk_size_mb should be omitted in auto mode: %v", got["chunk_size_mb"])
+	}
+	chunkRange, ok := got["chunk_size_range_mb"].(map[string]any)
+	if !ok {
+		t.Fatalf("chunk_size_range_mb = %T, want object", got["chunk_size_range_mb"])
+	}
+	if chunkRange["min"] != float64(1) || chunkRange["max"] != float64(64) {
+		t.Fatalf("chunk_size_range_mb = %v, want min=1 max=64", chunkRange)
 	}
 	if strings.Contains(out, "secret") || strings.Contains(out, "token=") {
 		t.Fatalf("dry-run JSON leaked sensitive URL material: %s", out)
@@ -145,5 +161,19 @@ func TestApplyDownloadTuningRejectsInvalidValues(t *testing.T) {
 				t.Fatalf("error = %v, want containing %q", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestEffectiveChunkSizeReportsAutoWhenUnset(t *testing.T) {
+	mode, size := effectiveChunkSize(&config.Config{})
+	if mode != "auto" || size != 0 {
+		t.Fatalf("effectiveChunkSize = (%q, %d), want (auto, 0)", mode, size)
+	}
+
+	cfg := &config.Config{}
+	cfg.Concurrency.ChunkSizeMB = 32
+	mode, size = effectiveChunkSize(cfg)
+	if mode != "fixed" || size != 32 {
+		t.Fatalf("effectiveChunkSize = (%q, %d), want (fixed, 32)", mode, size)
 	}
 }
