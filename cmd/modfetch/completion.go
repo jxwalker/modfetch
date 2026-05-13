@@ -56,7 +56,7 @@ _modfetch_completions()
                 *) ;;
             esac ;;
         download)
-            COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --dry-run --force --no-auth-preflight --extract --extract-dir --quant --list-quants" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --profile --connections --chunk-size-mb --dry-run --force --no-auth-preflight --extract --extract-dir --quant --list-quants" -- "$cur") ) ;;
         discover)
             if [[ ${cword} -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "search download" -- "$cur") )
@@ -165,7 +165,7 @@ _modfetch() {
       fi
       ;;
     download)
-      _arguments '*:options:(--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --dry-run --force --no-auth-preflight --extract --extract-dir --quant --list-quants)'
+      _arguments '*:options:(--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --profile --connections --chunk-size-mb --dry-run --force --no-auth-preflight --extract --extract-dir --quant --list-quants)'
       ;;
     discover)
       if (( CURRENT == 3 )); then
@@ -313,6 +313,9 @@ complete -c modfetch -n "__fish_seen_subcommand_from download" -l quiet -d "Supp
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l no-resume -d "Start fresh instead of resuming"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l summary-json -d "Print completion summary as JSON"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l batch-parallel -d "Parallel batch downloads"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l profile -d "Download tuning profile"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l connections -d "Parallel range requests per file"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l chunk-size-mb -d "Range chunk size in MiB"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l dry-run -d "Plan without downloading"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l force -d "Skip SHA256 verification"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l no-auth-preflight -d "Skip auth preflight probe"

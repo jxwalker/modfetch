@@ -19,7 +19,7 @@ func TestCompletionTopLevelCommands(t *testing.T) {
 func TestCompletionCurrentFlags(t *testing.T) {
 	tests := map[string][]string{
 		"config":   {"--strict", "--out"},
-		"download": {"--no-resume", "--summary-json", "--batch-parallel", "--dry-run", "--force", "--no-auth-preflight", "--quant", "--list-quants"},
+		"download": {"--no-resume", "--summary-json", "--batch-parallel", "--profile", "--connections", "--chunk-size-mb", "--dry-run", "--force", "--no-auth-preflight", "--quant", "--list-quants"},
 		"discover": {"--provider", "--limit", "--select", "--summary-json", "--dry-run"},
 		"starter":  {"--id", "--summary-json", "--dry-run"},
 		"place":    {"--dry-run", "--preset", "--list-presets"},

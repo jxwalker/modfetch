@@ -44,6 +44,9 @@ func handleDownload(ctx context.Context, args []string) error {
 	placeFlag := fs.Bool("place", false, "place files after successful download")
 	summaryJSON := fs.Bool("summary-json", false, "print a JSON summary when a download completes")
 	batchParallel := fs.Int("batch-parallel", 0, "max parallel downloads when using --batch (default: config concurrency per_host_requests)")
+	profile := fs.String("profile", "", "download tuning profile: default or large-model")
+	connections := fs.Int("connections", 0, "parallel range requests per file (aria2-style; overrides concurrency.per_file_chunks)")
+	chunkSizeMB := fs.Int("chunk-size-mb", 0, "range chunk size in MiB for this invocation")
 	dryRun := fs.Bool("dry-run", false, "plan only: resolve URL/URI and compute default destination; no download")
 	forceSkip := fs.Bool("force", false, "skip SHA256 verification even if --sha256/--sha256-file is provided")
 	noAuthPreflight := fs.Bool("no-auth-preflight", false, "skip auth preflight probe")
@@ -58,6 +61,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	batchDefaultParallel := c.Concurrency.PerHostRequests
 	if strings.TrimSpace(*sha) == "" && strings.TrimSpace(*shaFile) != "" {
 		v, perr := parseSHA256FromFile(*shaFile)
 		if perr != nil {
@@ -67,6 +71,9 @@ func handleDownload(ctx context.Context, args []string) error {
 	}
 	if storage.IsS3URI(strings.TrimSpace(*dest)) && (*extractFlag || *placeFlag) {
 		return errors.New("s3 destinations cannot be combined with --extract or --place")
+	}
+	if err := applyDownloadTuning(c, *profile, *connections, *chunkSizeMB); err != nil {
+		return err
 	}
 	// quiet forces log level to error unless JSON is requested
 	if *quiet && !*common.jsonOut {
@@ -153,7 +160,7 @@ func handleDownload(ctx context.Context, args []string) error {
 			}
 			return "", fmt.Errorf("could not reserve unique destination for %q in %s after %d attempts", base, dir, maxSuffixAttempts)
 		}
-		parallel := c.Concurrency.PerHostRequests
+		parallel := batchDefaultParallel
 		if *batchParallel > 0 {
 			parallel = *batchParallel
 		}
@@ -511,9 +518,12 @@ func handleDownload(ctx context.Context, args []string) error {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
 			_ = enc.Encode(map[string]any{
-				"resolver_uri": *url,
-				"resolved_url": logging.SanitizeURL(resolvedURL),
-				"default_dest": candDest,
+				"resolver_uri":  *url,
+				"resolved_url":  logging.SanitizeURL(resolvedURL),
+				"default_dest":  candDest,
+				"connections":   effectiveDownloadConnections(c),
+				"chunk_size_mb": effectiveChunkSizeMB(c),
+				"profile":       effectiveDownloadProfile(*profile),
 			})
 			return nil
 		}
@@ -521,6 +531,9 @@ func handleDownload(ctx context.Context, args []string) error {
 		fmt.Printf("  Resolver URI: %s\n", logging.SanitizeURL(*url))
 		fmt.Printf("  Resolved URL: %s\n", logging.SanitizeURL(resolvedURL))
 		fmt.Printf("  Default dest: %s\n", candDest)
+		fmt.Printf("  Profile: %s\n", effectiveDownloadProfile(*profile))
+		fmt.Printf("  Connections: %d\n", effectiveDownloadConnections(c))
+		fmt.Printf("  Chunk size: %d MiB\n", effectiveChunkSizeMB(c))
 		return nil
 	}
 	if !*noAuthPreflight && !c.Network.DisableAuthPreflight {
@@ -674,6 +687,70 @@ func handleDownload(ctx context.Context, args []string) error {
 		}
 	}
 	return nil
+}
+
+func applyDownloadTuning(c *config.Config, profile string, connections, chunkSizeMB int) error {
+	if c == nil {
+		return errors.New("nil config")
+	}
+	if connections < 0 {
+		return errors.New("--connections must be >= 0")
+	}
+	if chunkSizeMB < 0 {
+		return errors.New("--chunk-size-mb must be >= 0")
+	}
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "", "default":
+	case "large", "large-model":
+		if c.Concurrency.PerFileChunks < 16 {
+			c.Concurrency.PerFileChunks = 16
+		}
+		if c.Concurrency.PerHostRequests < 16 {
+			c.Concurrency.PerHostRequests = 16
+		}
+		if c.Concurrency.ChunkSizeMB < 64 {
+			c.Concurrency.ChunkSizeMB = 64
+		}
+	default:
+		return fmt.Errorf("unknown download profile %q (valid: default, large-model)", profile)
+	}
+	if connections > 0 {
+		c.Concurrency.PerFileChunks = connections
+		if c.Concurrency.PerHostRequests < connections {
+			c.Concurrency.PerHostRequests = connections
+		}
+	}
+	if chunkSizeMB > 0 {
+		c.Concurrency.ChunkSizeMB = chunkSizeMB
+	}
+	return nil
+}
+
+func effectiveDownloadProfile(profile string) string {
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "large", "large-model":
+		return "large-model"
+	default:
+		return "default"
+	}
+}
+
+func effectiveDownloadConnections(c *config.Config) int {
+	if c == nil || c.Concurrency.PerFileChunks <= 0 {
+		return 4
+	}
+	connections := c.Concurrency.PerFileChunks
+	if c.Concurrency.PerHostRequests > 0 && c.Concurrency.PerHostRequests < connections {
+		return c.Concurrency.PerHostRequests
+	}
+	return connections
+}
+
+func effectiveChunkSizeMB(c *config.Config) int {
+	if c == nil || c.Concurrency.ChunkSizeMB <= 0 {
+		return 8
+	}
+	return c.Concurrency.ChunkSizeMB
 }
 
 // resolveBatchDownloadCandidate resolves a single source URI or direct URL to

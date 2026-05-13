@@ -95,6 +95,10 @@ modfetch download --url URL [OPTIONS]
 - `--extract` - Extract `.zip`, `.tar`, `.tar.gz`, `.tgz`, or `.7z` archives after download. 7z archives require `7zz`, `7z`, or `7za` on `PATH`.
 - `--extract-dir PATH` - Directory for extracted archive contents
 - `--batch-parallel N` - Concurrent downloads in batch mode
+- `--profile large-model` - Apply large-file tuning for DS4/GGUF-size artifacts
+  (`16` range connections and `64 MiB` chunks unless overridden)
+- `--connections N` - Parallel range requests per file, similar to aria2 `-x/-s`
+- `--chunk-size-mb N` - Range chunk size for this invocation
 - `--no-resume` - Remove staged partial data and start fresh
 - `--force` - Skip SHA256 verification even when a hash is provided
 - `--quant NAME` - Select a Hugging Face quantization to download
@@ -116,6 +120,10 @@ modfetch download --url 'https://example.com/model.safetensors'
 # Hugging Face (requires HF_TOKEN for private repos)
 modfetch download --url 'hf://gpt2/README.md?rev=main'
 modfetch download --url 'hf://TheBloke/Llama-2-7B-GGUF/llama-2-7b.Q4_K_M.gguf?rev=main'
+
+# Large GGUF / Hugging Face Xet-style object
+modfetch download --url 'hf://owner/repo/model.gguf?rev=main' --profile large-model
+modfetch download --url 'https://huggingface.co/owner/repo/resolve/main/model.gguf' --connections 16 --chunk-size-mb 64
 
 # CivitAI (requires CIVITAI_TOKEN for restricted content)
 modfetch download --url 'civitai://model/123456'
