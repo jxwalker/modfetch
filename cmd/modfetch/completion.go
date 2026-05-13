@@ -35,7 +35,7 @@ _modfetch_completions()
     local cur prev words cword
     _init_completion || return
     local presets="automatic1111 comfyui forge hf-cache ollama"
-    local cmds="config download bench discover starter place verify status tui library batch dedupe clean hostcaps version help completion"
+    local cmds="config download bench discover recommend starter place verify status tui library batch dedupe clean hostcaps version help completion"
     if [[ ${cword} -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${cmds}" -- "$cur") )
         return
@@ -71,6 +71,8 @@ _modfetch_completions()
                     COMPREPLY=( $(compgen -W "--config --log-level --json --provider --limit --select --dest --place --summary-json --dry-run --quiet --no-resume huggingface civitai modelscope all" -- "$cur") ) ;;
                 *) ;;
             esac ;;
+        recommend)
+            COMPREPLY=( $(compgen -W "--config --log-level --json --provider --task --limit --ram-gb --vram-gb --unified-memory --select --download --dest --place --summary-json --dry-run --quiet --no-resume chat coding embedding image huggingface civitai modelscope all" -- "$cur") ) ;;
         starter)
             if [[ ${cword} -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "list show download" -- "$cur") )
@@ -143,7 +145,7 @@ const zshCompletion = `#compdef modfetch
 # zsh completion for modfetch (basic)
 _modfetch() {
   local -a cmds
-  cmds=(config download bench discover starter place verify status tui library batch dedupe clean hostcaps version help completion)
+  cmds=(config download bench discover recommend starter place verify status tui library batch dedupe clean hostcaps version help completion)
   if (( CURRENT == 2 )); then
     _describe 'command' cmds
     return
@@ -185,6 +187,9 @@ _modfetch() {
             ;;
         esac
       fi
+      ;;
+    recommend)
+      _arguments '*:options:(--config --log-level --json --provider --task --limit --ram-gb --vram-gb --unified-memory --select --download --dest --place --summary-json --dry-run --quiet --no-resume chat coding embedding image huggingface civitai modelscope all)'
       ;;
     starter)
       if (( CURRENT == 3 )); then
@@ -269,6 +274,7 @@ complete -c modfetch -f -n "__fish_use_subcommand" -a "config" -d "config ops"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "download" -d "download assets"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "bench" -d "benchmark download tools"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "discover" -d "search real model providers"
+complete -c modfetch -f -n "__fish_use_subcommand" -a "recommend" -d "recommend models for hardware"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "starter" -d "beginner starter downloads"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "dedupe" -d "dedupe duplicate downloads"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "place" -d "place files"
@@ -293,7 +299,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from clean" -l include-next-to-d
 complete -c modfetch -n "__fish_seen_subcommand_from clean" -l sidecars -d "Remove orphan .sha256"
 
 # Common flags
-for cmd in download bench place verify status tui library dedupe clean
+for cmd in download bench recommend place verify status tui library dedupe clean
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l config -d "Path to config"
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l log-level -d "Log level"
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l json -d "JSON output"
@@ -356,6 +362,20 @@ complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_s
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l dry-run -d "Plan without downloading"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l quiet -d "Suppress progress and info logs"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l no-resume -d "Start fresh instead of resuming"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l provider -a "huggingface civitai modelscope all" -d "Provider"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l task -a "chat coding embedding image" -d "Use case"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l limit -d "Recommendation limit"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l ram-gb -d "Override RAM in GiB"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l vram-gb -d "Override VRAM in GiB"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l unified-memory -d "Treat RAM as unified memory"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l select -d "Selected recommendation index"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l download -d "Download selected recommendation"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l dest -d "Destination path"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l place -d "Place after download"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l summary-json -d "Print completion summary as JSON"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l dry-run -d "Plan without downloading"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l quiet -d "Suppress progress and info logs"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l no-resume -d "Start fresh instead of resuming"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "list" -d "List starter downloads"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "show" -d "Show starter details"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "download" -d "Download a starter"

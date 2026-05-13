@@ -10,6 +10,7 @@ Complete command-line reference for modfetch. For the visual TUI interface, see 
   - [download](#download)
   - [bench](#bench)
   - [discover](#discover)
+  - [recommend](#recommend)
   - [starter](#starter)
   - [verify](#verify)
   - [place](#place)
@@ -36,6 +37,7 @@ modfetch provides a rich CLI for downloading, verifying, and managing AI models.
 modfetch download --url URL       # Download a file
 modfetch discover search "tiny gpt2"
 modfetch discover download "sshleifer/tiny-gpt2" --select 1
+modfetch recommend --task coding   # Pick a model that fits this machine
 modfetch verify --all              # Verify all downloads
 modfetch place --path FILE         # Place model into app
 modfetch clean --days 7            # Clean old partials
@@ -194,6 +196,42 @@ files, or the TUI new-download modal. `discover download` searches first, picks
 the `--select` result number, and then delegates to `download`, so normal flags
 such as `--config`, `--dest`, `--place`, `--dry-run`, `--quiet`, and
 `--summary-json` still apply.
+
+### recommend
+
+Recommend concrete downloadable model files for the current machine, or for
+hardware you describe with RAM/VRAM overrides. Recommendations use live provider
+search, file metadata, inferred parameter counts and quantization names, task
+signals, and the detected memory budget.
+
+```bash
+modfetch recommend [QUERY] [OPTIONS]
+```
+
+**Options:**
+- `--provider huggingface|civitai|modelscope|all` - provider search scope
+- `--task chat|coding|embedding|image` - intended use case
+- `--limit N` - number of recommendations to show
+- `--ram-gb N` - override detected system RAM in GiB
+- `--vram-gb N` - override detected dedicated VRAM in GiB
+- `--unified-memory` - treat system RAM as shared CPU/GPU memory
+- `--download` - pass the selected recommendation to `download`
+- `--select N` - 1-based recommendation number for `--download`
+- `--dest PATH`, `--place`, `--summary-json`, `--dry-run`, `--quiet`,
+  `--no-resume` - forwarded to the selected download
+- `--json` - emit the recommendation summary as JSON
+
+**Examples:**
+```bash
+# Let modfetch detect this machine and pick coding-friendly models.
+modfetch recommend --task coding
+
+# Plan for another host with 32 GiB unified memory.
+modfetch recommend "llama 8b gguf" --ram-gb 32 --unified-memory --json
+
+# Select the top recommendation and show the exact download plan.
+modfetch recommend --task chat --download --select 1 --dry-run --summary-json
+```
 
 ### starter
 

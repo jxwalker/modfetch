@@ -230,6 +230,18 @@ modfetch discover search "sshleifer/tiny-gpt2"
 modfetch discover download "sshleifer/tiny-gpt2" --select 1
 ```
 
+If you want modfetch to choose a model that fits your hardware, use
+`recommend`:
+
+```bash
+modfetch recommend --task chat
+modfetch recommend --task coding
+modfetch recommend --task chat --download --select 1 --dry-run
+```
+
+The dry run shows the selected resolver URI, destination, remote size, range
+support, and auth state before any file is written.
+
 Starter IDs also work in the TUI and regular download command as
 `starter://ID`, for example `starter://gpt2-tokenizer`.
 

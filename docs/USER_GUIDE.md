@@ -4,7 +4,7 @@ This guide walks you through configuration, common workflows, and tips to get th
 
 - Build: `make build` (produces `./bin/modfetch`)
 - Config file path can be passed with `--config` or via the environment variable `MODFETCH_CONFIG`.
-- Current release: v0.7.1. The examples below include the Hugging Face shorthand URI form fixed in v0.6.3, the v0.7.0 library maintenance workflows, and the v0.7.1 starter and discovery commands.
+- Current release: v0.7.1. The examples below include the Hugging Face shorthand URI form fixed in v0.6.3, the v0.7.0 library maintenance workflows, and the v0.7.1 starter, discovery, and recommendation commands.
 
 ## Configure
 
@@ -62,6 +62,33 @@ modfetch download --config ~/.config/modfetch/config.yml \
   --url 'hf://org/repo?rev=main&quant=Q4_K_M'
 modfetch download --config ~/.config/modfetch/config.yml \
   --url 'civitai://model/123456?file=myfile.safetensors'
+
+### Recommend a model for your hardware
+
+If you do not know which repo or quantization to choose, start with
+`recommend`. It detects the current machine, searches live providers, estimates
+memory fit from file size, parameter count, and quantization metadata, and shows
+the command it would use to download each result.
+
+```bash
+modfetch recommend --task chat
+modfetch recommend --task coding
+modfetch recommend "llama 8b gguf" --ram-gb 32 --unified-memory --json
+```
+
+The `--task` flag tunes ranking for `chat`, `coding`, `embedding`, or `image`
+models. To plan for a different host, use `--ram-gb`, `--vram-gb`, and
+`--unified-memory`.
+
+When you like a result, download it through the same resumable pipeline:
+
+```bash
+modfetch recommend --task coding --download --select 1
+```
+
+Use `--dry-run --summary-json` first when you want to verify the selected URI,
+destination, remote size, range support, and attached auth state without writing
+files.
 
 #### Dry-run planning
 

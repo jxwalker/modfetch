@@ -5,6 +5,9 @@ All notable changes to this project will be documented in this file.
 ## Unreleased
 
 Added
+- Added `modfetch recommend` to detect or override local hardware, rank live
+  provider candidates by task and memory fit, and hand the selected resolver
+  URI to the normal `download` pipeline.
 - Added `modfetch bench` to run disposable, timed download samples with
   modfetch and aria2 on the same URL, producing comparable throughput JSON.
 - Added automatic large-transfer tuning for range-capable objects, so
