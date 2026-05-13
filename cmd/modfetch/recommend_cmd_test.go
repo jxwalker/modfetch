@@ -17,6 +17,7 @@ func TestValidateGiBOverride(t *testing.T) {
 		{name: "negative", value: -1, wantErr: true},
 		{name: "too large", value: maxHardwareOverrideGiB + 1, wantErr: true},
 		{name: "nan", value: math.NaN(), wantErr: true},
+		{name: "-inf", value: math.Inf(-1), wantErr: true},
 		{name: "inf", value: math.Inf(1), wantErr: true},
 	}
 
