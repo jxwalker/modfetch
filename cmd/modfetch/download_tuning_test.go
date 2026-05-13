@@ -52,6 +52,41 @@ func TestDownloadDryRunReportsTuning(t *testing.T) {
 	}
 }
 
+func TestDownloadDryRunSanitizesResolverURI(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.yml")
+	cfgBody := "version: 1\n" +
+		"general:\n" +
+		"  data_root: " + filepath.Join(tmp, "data") + "\n" +
+		"  download_root: " + filepath.Join(tmp, "downloads") + "\n"
+	if err := os.WriteFile(cfgPath, []byte(cfgBody), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	var runErr error
+	out := captureStdout(t, func() {
+		runErr = handleDownload(context.Background(), []string{
+			"--config", cfgPath,
+			"--url", "https://user:secret@example.com/model.gguf?token=secret&x=1",
+			"--dry-run",
+			"--summary-json",
+		})
+	})
+	if runErr != nil {
+		t.Fatalf("download dry-run: %v", runErr)
+	}
+	var got map[string]any
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("decode dry-run JSON: %v\n%s", err, out)
+	}
+	if got["resolver_uri"] != "https://example.com/model.gguf" {
+		t.Fatalf("resolver_uri = %v, want sanitized URL", got["resolver_uri"])
+	}
+	if strings.Contains(out, "secret") || strings.Contains(out, "token=") {
+		t.Fatalf("dry-run JSON leaked sensitive URL material: %s", out)
+	}
+}
+
 func TestApplyDownloadTuningLargeModelProfile(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Concurrency.PerFileChunks = 4

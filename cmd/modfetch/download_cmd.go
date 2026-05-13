@@ -31,6 +31,13 @@ import (
 	"github.com/jxwalker/modfetch/internal/util"
 )
 
+const (
+	defaultDownloadConnections    = 4
+	defaultDownloadChunkSizeMB    = 8
+	largeModelDownloadConnections = 16
+	largeModelChunkSizeMB         = 64
+)
+
 func handleDownload(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("download", flag.ContinueOnError)
 	common := addCommonConfigLogFlags(fs, "")
@@ -61,7 +68,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	batchDefaultParallel := c.Concurrency.PerHostRequests
+	batchFileParallel := c.Concurrency.PerHostRequests
 	if strings.TrimSpace(*sha) == "" && strings.TrimSpace(*shaFile) != "" {
 		v, perr := parseSHA256FromFile(*shaFile)
 		if perr != nil {
@@ -160,7 +167,9 @@ func handleDownload(ctx context.Context, args []string) error {
 			}
 			return "", fmt.Errorf("could not reserve unique destination for %q in %s after %d attempts", base, dir, maxSuffixAttempts)
 		}
-		parallel := batchDefaultParallel
+		// Download tuning flags control range concurrency inside each worker.
+		// Keep batch file fan-out on the original config unless explicitly set.
+		parallel := batchFileParallel
 		if *batchParallel > 0 {
 			parallel = *batchParallel
 		}
@@ -518,7 +527,7 @@ func handleDownload(ctx context.Context, args []string) error {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
 			_ = enc.Encode(map[string]any{
-				"resolver_uri":  *url,
+				"resolver_uri":  logging.SanitizeURL(*url),
 				"resolved_url":  logging.SanitizeURL(resolvedURL),
 				"default_dest":  candDest,
 				"connections":   effectiveDownloadConnections(c),
@@ -702,14 +711,14 @@ func applyDownloadTuning(c *config.Config, profile string, connections, chunkSiz
 	switch strings.ToLower(strings.TrimSpace(profile)) {
 	case "", "default":
 	case "large", "large-model":
-		if c.Concurrency.PerFileChunks < 16 {
-			c.Concurrency.PerFileChunks = 16
+		if c.Concurrency.PerFileChunks < largeModelDownloadConnections {
+			c.Concurrency.PerFileChunks = largeModelDownloadConnections
 		}
-		if c.Concurrency.PerHostRequests < 16 {
-			c.Concurrency.PerHostRequests = 16
+		if c.Concurrency.PerHostRequests < largeModelDownloadConnections {
+			c.Concurrency.PerHostRequests = largeModelDownloadConnections
 		}
-		if c.Concurrency.ChunkSizeMB < 64 {
-			c.Concurrency.ChunkSizeMB = 64
+		if c.Concurrency.ChunkSizeMB < largeModelChunkSizeMB {
+			c.Concurrency.ChunkSizeMB = largeModelChunkSizeMB
 		}
 	default:
 		return fmt.Errorf("unknown download profile %q (valid: default, large-model)", profile)
@@ -737,7 +746,7 @@ func effectiveDownloadProfile(profile string) string {
 
 func effectiveDownloadConnections(c *config.Config) int {
 	if c == nil || c.Concurrency.PerFileChunks <= 0 {
-		return 4
+		return defaultDownloadConnections
 	}
 	connections := c.Concurrency.PerFileChunks
 	if c.Concurrency.PerHostRequests > 0 && c.Concurrency.PerHostRequests < connections {
@@ -748,7 +757,7 @@ func effectiveDownloadConnections(c *config.Config) int {
 
 func effectiveChunkSizeMB(c *config.Config) int {
 	if c == nil || c.Concurrency.ChunkSizeMB <= 0 {
-		return 8
+		return defaultDownloadChunkSizeMB
 	}
 	return c.Concurrency.ChunkSizeMB
 }
