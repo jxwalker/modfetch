@@ -97,7 +97,10 @@ modfetch download --url URL [OPTIONS]
 - `--extract-dir PATH` - Directory for extracted archive contents
 - `--batch-parallel N` - Concurrent downloads in batch mode
 - `--profile auto` - Let modfetch promote range-capable large objects to
-  large-model tuning automatically (default when omitted)
+  large-model tuning automatically (default when omitted). Chunked downloads
+  then adapt in flight: modfetch starts from persisted per-host history when
+  available, ramps up on sustained throughput, and backs off on stalls or HTTP
+  429 responses.
 - `--profile default` - Disable automatic tuning for this invocation
 - `--profile large-model` - Force large-file tuning for DS4/GGUF-size artifacts
   (`16` range connections and `64 MiB` chunks unless overridden)
@@ -161,12 +164,15 @@ modfetch bench --url URL [OPTIONS]
 - `--chunk-size-mb N` - Explicit range chunk size for both tools
 - `--json` - Emit machine-readable results
 - `--keep` - Keep the temporary benchmark download directory
+- `--history` - List persisted per-host transfer history collected from
+  benchmark samples and completed modfetch downloads
 
 **Examples:**
 ```bash
 modfetch bench --url 'hf://owner/repo/model.gguf?rev=main' --duration 30s --json
 modfetch bench --url 'https://huggingface.co/owner/repo/resolve/main/model.gguf' \
   --tools modfetch,aria2 --connections 16 --chunk-size-mb 64
+modfetch bench --history --json
 ```
 
 ### discover

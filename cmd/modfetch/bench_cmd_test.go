@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	neturl "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jxwalker/modfetch/internal/state"
 )
 
 func TestBenchModfetchRunsRealDownloadSample(t *testing.T) {
@@ -52,6 +55,27 @@ func TestBenchModfetchRunsRealDownloadSample(t *testing.T) {
 	}
 	if result.Bytes <= 0 || result.AvgBPS <= 0 {
 		t.Fatalf("expected positive bytes/rate, got %+v", result)
+	}
+
+	cfg, _, err := loadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	st, err := state.Open(cfg)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	defer func() { _ = st.Close() }()
+	u, err := neturl.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("parse test server URL: %v", err)
+	}
+	best, ok, err := st.BestTransferHistory(u.Hostname(), "modfetch")
+	if err != nil {
+		t.Fatalf("best history: %v", err)
+	}
+	if !ok || best.AvgBPS <= 0 {
+		t.Fatalf("expected persisted modfetch history, got ok=%v best=%+v", ok, best)
 	}
 }
 

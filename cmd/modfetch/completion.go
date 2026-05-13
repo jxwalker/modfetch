@@ -58,7 +58,7 @@ _modfetch_completions()
         download)
             COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --profile --connections --chunk-size-mb --dry-run --force --no-auth-preflight --extract --extract-dir --quant --list-quants" -- "$cur") ) ;;
         bench)
-            COMPREPLY=( $(compgen -W "--config --log-level --json --url --tools --duration --profile --connections --chunk-size-mb --keep modfetch aria2" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --url --tools --duration --profile --connections --chunk-size-mb --keep --history modfetch aria2" -- "$cur") ) ;;
         discover)
             if [[ ${cword} -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "search download" -- "$cur") )
@@ -170,7 +170,7 @@ _modfetch() {
       _arguments '*:options:(--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --profile --connections --chunk-size-mb --dry-run --force --no-auth-preflight --extract --extract-dir --quant --list-quants)'
       ;;
     bench)
-      _arguments '*:options:(--config --log-level --json --url --tools --duration --profile --connections --chunk-size-mb --keep modfetch aria2)'
+      _arguments '*:options:(--config --log-level --json --url --tools --duration --profile --connections --chunk-size-mb --keep --history modfetch aria2)'
       ;;
     discover)
       if (( CURRENT == 3 )); then
@@ -336,6 +336,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from bench" -l profile -d "Downl
 complete -c modfetch -n "__fish_seen_subcommand_from bench" -l connections -d "Parallel range requests per file"
 complete -c modfetch -n "__fish_seen_subcommand_from bench" -l chunk-size-mb -d "Range chunk size in MiB"
 complete -c modfetch -n "__fish_seen_subcommand_from bench" -l keep -d "Keep benchmark downloads"
+complete -c modfetch -n "__fish_seen_subcommand_from bench" -l history -d "List persisted benchmark history"
 complete -c modfetch -n "__fish_seen_subcommand_from discover" -a "search" -d "Search real model providers"
 complete -c modfetch -n "__fish_seen_subcommand_from discover" -a "download" -d "Download a selected discovery result"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from search" -l config -d "Path to config"
