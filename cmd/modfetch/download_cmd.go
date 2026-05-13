@@ -489,34 +489,7 @@ func handleDownload(ctx context.Context, args []string) error {
 		resolvedURL = res.URL
 		headers = res.Headers
 	} else {
-		// Attach auth headers for direct URLs when possible, but only when
-		// sources.<provider>.token_env is explicitly configured. An empty
-		// token_env means "do not attach auth", matching the semantics in
-		// internal/resolver/{civitai,huggingface}.go and cmd/modfetch/batch_cmd.go;
-		// we deliberately do not fall back to ambient CIVITAI_TOKEN / HF_TOKEN
-		// here so users who left token_env unset never get unexpected
-		// credentials sent to direct URLs.
-		if u, err := neturl.Parse(resolvedURL); err == nil {
-			h := strings.ToLower(u.Hostname())
-			if hostIs(h, "civitai.com") && c.Sources.CivitAI.Enabled {
-				if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
-					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-						headers["Authorization"] = "Bearer " + tok
-					} else {
-						log.Warnf("CivitAI token env %s is not set; gated content will return 401. Export %s.", env, env)
-					}
-				}
-			}
-			if hostIs(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
-				if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
-					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-						headers["Authorization"] = "Bearer " + tok
-					} else {
-						log.Warnf("Hugging Face token env %s is not set; gated repos will return 401. Export %s and accept the repo license.", env, env)
-					}
-				}
-			}
-		}
+		headers = attachDirectProviderAuthHeaders(c, resolvedURL, headers, log)
 	}
 	adaptiveDecision, adaptiveErr := maybeApplyAdaptiveDownloadTuning(ctx, c, resolvedURL, headers, *profile, *connections, *chunkSizeMB)
 	if adaptiveErr != nil && profileWantsAuto(*profile) {
@@ -800,6 +773,9 @@ func maybeApplyAdaptiveDownloadTuning(ctx context.Context, c *config.Config, raw
 	if err != nil {
 		return nil, err
 	}
+	if emptyProbeMeta(meta) {
+		return nil, errors.New("adaptive tuning probe returned no useful remote metadata")
+	}
 	decision := &adaptiveDownloadDecision{Probed: true, RemoteSize: meta.Size}
 	if shouldUseLargeModelTuning(rawURL, meta) {
 		if err := applyDownloadTuning(c, "large-model", 0, 0); err != nil {
@@ -816,6 +792,14 @@ func maybeApplyAdaptiveDownloadTuning(ctx context.Context, c *config.Config, raw
 func profileWantsAuto(profile string) bool {
 	p := strings.ToLower(strings.TrimSpace(profile))
 	return p == "" || p == "auto"
+}
+
+func emptyProbeMeta(meta downloader.ProbeMeta) bool {
+	return meta.Size <= 0 &&
+		!meta.AcceptRange &&
+		strings.TrimSpace(meta.Filename) == "" &&
+		strings.TrimSpace(meta.ETag) == "" &&
+		strings.TrimSpace(meta.LastModified) == ""
 }
 
 func shouldProbeForAdaptiveTuning(rawURL string) bool {
@@ -949,28 +933,38 @@ func resolveBatchDownloadCandidate(ctx context.Context, c *config.Config, uri st
 		}
 		return res.URL, res.Headers, nil
 	}
-	if u, err := neturl.Parse(uri); err == nil {
+	return uri, attachDirectProviderAuthHeaders(c, uri, headers, nil), nil
+}
+
+func attachDirectProviderAuthHeaders(c *config.Config, rawURL string, headers map[string]string, log *logging.Logger) map[string]string {
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	if c == nil {
+		return headers
+	}
+	if u, err := neturl.Parse(rawURL); err == nil {
 		h := strings.ToLower(u.Hostname())
-		// Only attach auth when token_env is explicitly configured. Empty
-		// token_env means "do not attach auth"; matches the existing batch
-		// import logic in cmd/modfetch/batch_cmd.go and the resolver package
-		// to avoid leaking ambient CIVITAI_TOKEN / HF_TOKEN credentials.
 		if hostIs(h, "civitai.com") && c.Sources.CivitAI.Enabled {
-			if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
-				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-					headers["Authorization"] = "Bearer " + tok
-				}
-			}
+			attachBearerFromConfiguredEnv(headers, c.Sources.CivitAI.TokenEnv, "CivitAI", "gated content will return 401", log)
 		}
 		if hostIs(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
-			if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
-				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-					headers["Authorization"] = "Bearer " + tok
-				}
-			}
+			attachBearerFromConfiguredEnv(headers, c.Sources.HuggingFace.TokenEnv, "Hugging Face", "gated repos will return 401; accept the repo license if required", log)
 		}
 	}
-	return uri, headers, nil
+	return headers
+}
+
+func attachBearerFromConfiguredEnv(headers map[string]string, env, provider, missingGuidance string, log *logging.Logger) {
+	env = strings.TrimSpace(env)
+	if env == "" {
+		return
+	}
+	if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+		headers["Authorization"] = "Bearer " + tok
+	} else if log != nil {
+		log.Warnf("%s token env %s is not set; %s. Export %s.", provider, env, missingGuidance, env)
+	}
 }
 
 // parseSHA256FromFile reads the first 64-hex token from a file (supports .sha256 "hash  filename" format).

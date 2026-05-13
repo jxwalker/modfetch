@@ -157,6 +157,17 @@ func TestDownloadDryRunAutoTunesLargeRangeCapableObject(t *testing.T) {
 	}
 }
 
+func TestAdaptiveTuningReturnsErrorForEmptyProbeMetadata(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer ts.Close()
+
+	cfg := &config.Config{}
+	decision, err := maybeApplyAdaptiveDownloadTuning(context.Background(), cfg, ts.URL+"/empty.gguf", nil, "", 0, 0)
+	if err == nil {
+		t.Fatalf("expected empty probe metadata error, got decision=%+v", decision)
+	}
+}
+
 func TestApplyDownloadTuningLargeModelProfile(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.Concurrency.PerFileChunks = 4

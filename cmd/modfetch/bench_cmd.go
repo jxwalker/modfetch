@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -45,7 +44,7 @@ type benchSummary struct {
 
 func handleBench(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("bench", flag.ContinueOnError)
-	common := addCommonConfigLogFlags(fs, "")
+	common := addCommonConfigLogFlags(fs, "emit benchmark results as JSON")
 	urlFlag := fs.String("url", "", "HTTP URL or resolver URI to benchmark")
 	toolsFlag := fs.String("tools", "modfetch,aria2", "comma-separated tools: modfetch,aria2")
 	durationFlag := fs.Duration("duration", 15*time.Second, "sample duration per tool")
@@ -162,23 +161,7 @@ func resolveBenchURL(ctx context.Context, c *config.Config, raw string) (string,
 		return res.URL, res.Headers, nil
 	}
 	headers := map[string]string{}
-	if u, err := url.Parse(raw); err == nil {
-		host := strings.ToLower(u.Hostname())
-		if hostIs(host, "huggingface.co") && c.Sources.HuggingFace.Enabled {
-			if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
-				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-					headers["Authorization"] = "Bearer " + tok
-				}
-			}
-		}
-		if hostIs(host, "civitai.com") && c.Sources.CivitAI.Enabled {
-			if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
-				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-					headers["Authorization"] = "Bearer " + tok
-				}
-			}
-		}
-	}
+	headers = attachDirectProviderAuthHeaders(c, raw, headers, nil)
 	return raw, headers, nil
 }
 
@@ -244,9 +227,6 @@ func runAria2Bench(ctx context.Context, cfg *config.Config, rawURL string, heade
 	}
 	destName := "aria2-bench.bin"
 	connections := effectiveDownloadConnections(cfg)
-	if connections <= 0 {
-		connections = defaultDownloadConnections
-	}
 	chunkSize := fixedChunkSizeMB(cfg)
 	if chunkSize <= 0 {
 		chunkSize = autoChunkSizeMaxMB
