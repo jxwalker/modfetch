@@ -35,6 +35,7 @@ const (
 	defaultDownloadConnections    = 4
 	autoChunkSizeMinMB            = 1
 	autoChunkSizeMaxMB            = 64
+	adaptiveLargeThresholdBytes   = int64(1 << 30)
 	largeModelDownloadConnections = 16
 	largeModelChunkSizeMB         = 64
 )
@@ -52,7 +53,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	placeFlag := fs.Bool("place", false, "place files after successful download")
 	summaryJSON := fs.Bool("summary-json", false, "print a JSON summary when a download completes")
 	batchParallel := fs.Int("batch-parallel", 0, "max parallel downloads when using --batch (default: config concurrency per_host_requests)")
-	profile := fs.String("profile", "", "download tuning profile: default or large-model")
+	profile := fs.String("profile", "", "download tuning profile: auto, default, or large-model")
 	connections := fs.Int("connections", 0, "parallel range requests per file (aria2-style; overrides concurrency.per_file_chunks)")
 	chunkSizeMB := fs.Int("chunk-size-mb", 0, "range chunk size in MiB for this invocation")
 	dryRun := fs.Bool("dry-run", false, "plan only: resolve URL/URI and compute default destination; no download")
@@ -189,7 +190,6 @@ func handleDownload(ctx context.Context, args []string) error {
 
 		for i := 0; i < parallel; i++ {
 			g.Go(func() error {
-				dl := downloader.NewAuto(c, log, st, m)
 				for {
 					select {
 					case <-gctx.Done():
@@ -295,6 +295,18 @@ func handleDownload(ctx context.Context, args []string) error {
 						var err error
 						baseNoResume := *noResume || c.General.AlwaysNoResume
 						for attempt, candidate := range candidates {
+							candidateConfig := *c
+							adaptive, adaptiveErr := maybeApplyAdaptiveDownloadTuning(gctx, &candidateConfig, candidate.url, candidate.headers, *profile, *connections, *chunkSizeMB)
+							if adaptiveErr != nil && profileWantsAuto(*profile) {
+								logMu.Lock()
+								log.Warnf("job %d: adaptive tuning probe failed for %s: %v", it.idx, logging.SanitizeURL(candidate.url), adaptiveErr)
+								logMu.Unlock()
+							} else if adaptive != nil && adaptive.Applied {
+								logMu.Lock()
+								log.Infof("job %d: adaptive tuning: %s", it.idx, adaptive.Reason)
+								logMu.Unlock()
+							}
+							dl := downloader.NewAuto(&candidateConfig, log, st, m)
 							final, sum, err = dl.Download(gctx, candidate.url, destCandidate, expected, candidate.headers, baseNoResume || attempt > 0)
 							if err == nil {
 								if attempt > 0 {
@@ -477,34 +489,11 @@ func handleDownload(ctx context.Context, args []string) error {
 		resolvedURL = res.URL
 		headers = res.Headers
 	} else {
-		// Attach auth headers for direct URLs when possible, but only when
-		// sources.<provider>.token_env is explicitly configured. An empty
-		// token_env means "do not attach auth", matching the semantics in
-		// internal/resolver/{civitai,huggingface}.go and cmd/modfetch/batch_cmd.go;
-		// we deliberately do not fall back to ambient CIVITAI_TOKEN / HF_TOKEN
-		// here so users who left token_env unset never get unexpected
-		// credentials sent to direct URLs.
-		if u, err := neturl.Parse(resolvedURL); err == nil {
-			h := strings.ToLower(u.Hostname())
-			if hostIs(h, "civitai.com") && c.Sources.CivitAI.Enabled {
-				if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
-					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-						headers["Authorization"] = "Bearer " + tok
-					} else {
-						log.Warnf("CivitAI token env %s is not set; gated content will return 401. Export %s.", env, env)
-					}
-				}
-			}
-			if hostIs(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
-				if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
-					if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-						headers["Authorization"] = "Bearer " + tok
-					} else {
-						log.Warnf("Hugging Face token env %s is not set; gated repos will return 401. Export %s and accept the repo license.", env, env)
-					}
-				}
-			}
-		}
+		headers = attachDirectProviderAuthHeaders(c, resolvedURL, headers, log)
+	}
+	adaptiveDecision, adaptiveErr := maybeApplyAdaptiveDownloadTuning(ctx, c, resolvedURL, headers, *profile, *connections, *chunkSizeMB)
+	if adaptiveErr != nil && profileWantsAuto(*profile) {
+		log.Warnf("adaptive tuning probe failed: %v", adaptiveErr)
 	}
 	// If dry-run, compute a default destination and print plan
 	if *dryRun {
@@ -525,17 +514,22 @@ func handleDownload(ctx context.Context, args []string) error {
 			candDest = filepath.Join(c.General.DownloadRoot, util.SafeFileName(base))
 		}
 		if *summaryJSON {
-			chunkMode, chunkSizeMB := effectiveChunkSize(c)
+			chunkMode, effectiveChunkMB := effectiveChunkSize(c)
 			summary := map[string]any{
 				"resolver_uri":    logging.SanitizeURL(*url),
 				"resolved_url":    logging.SanitizeURL(resolvedURL),
 				"default_dest":    candDest,
 				"connections":     effectiveDownloadConnections(c),
 				"chunk_size_mode": chunkMode,
-				"profile":         effectiveDownloadProfile(*profile),
+				"profile":         reportedDownloadProfile(*profile, *connections, *chunkSizeMB, adaptiveDecision),
+				"profile_source":  reportedDownloadProfileSource(*profile, *connections, *chunkSizeMB, adaptiveDecision),
 			}
-			if chunkSizeMB > 0 {
-				summary["chunk_size_mb"] = chunkSizeMB
+			if adaptiveDecision != nil && adaptiveDecision.Probed && adaptiveDecision.Reason != "" {
+				summary["adaptive_reason"] = adaptiveDecision.Reason
+				summary["remote_size"] = adaptiveDecision.RemoteSize
+			}
+			if effectiveChunkMB > 0 {
+				summary["chunk_size_mb"] = effectiveChunkMB
 			} else {
 				summary["chunk_size_range_mb"] = map[string]int{
 					"min": autoChunkSizeMinMB,
@@ -551,7 +545,10 @@ func handleDownload(ctx context.Context, args []string) error {
 		fmt.Printf("  Resolver URI: %s\n", logging.SanitizeURL(*url))
 		fmt.Printf("  Resolved URL: %s\n", logging.SanitizeURL(resolvedURL))
 		fmt.Printf("  Default dest: %s\n", candDest)
-		fmt.Printf("  Profile: %s\n", effectiveDownloadProfile(*profile))
+		fmt.Printf("  Profile: %s (%s)\n", reportedDownloadProfile(*profile, *connections, *chunkSizeMB, adaptiveDecision), reportedDownloadProfileSource(*profile, *connections, *chunkSizeMB, adaptiveDecision))
+		if adaptiveDecision != nil && adaptiveDecision.Probed && adaptiveDecision.Reason != "" {
+			fmt.Printf("  Adaptive: %s\n", adaptiveDecision.Reason)
+		}
 		fmt.Printf("  Connections: %d\n", effectiveDownloadConnections(c))
 		if chunkMode, chunkSizeMB := effectiveChunkSize(c); chunkMode == "fixed" {
 			fmt.Printf("  Chunk size: %d MiB\n", chunkSizeMB)
@@ -724,7 +721,7 @@ func applyDownloadTuning(c *config.Config, profile string, connections, chunkSiz
 		return errors.New("--chunk-size-mb must be >= 0")
 	}
 	switch strings.ToLower(strings.TrimSpace(profile)) {
-	case "", "default":
+	case "", "auto", "default":
 	case "large", "large-model":
 		if c.Concurrency.PerFileChunks < largeModelDownloadConnections {
 			c.Concurrency.PerFileChunks = largeModelDownloadConnections
@@ -736,7 +733,7 @@ func applyDownloadTuning(c *config.Config, profile string, connections, chunkSiz
 			c.Concurrency.ChunkSizeMB = largeModelChunkSizeMB
 		}
 	default:
-		return fmt.Errorf("unknown download profile %q (valid: default, large-model)", profile)
+		return fmt.Errorf("unknown download profile %q (valid: auto, default, large-model)", profile)
 	}
 	if connections > 0 {
 		c.Concurrency.PerFileChunks = connections
@@ -750,10 +747,158 @@ func applyDownloadTuning(c *config.Config, profile string, connections, chunkSiz
 	return nil
 }
 
+type adaptiveDownloadDecision struct {
+	Applied    bool
+	Probed     bool
+	Reason     string
+	RemoteSize int64
+}
+
+func maybeApplyAdaptiveDownloadTuning(ctx context.Context, c *config.Config, rawURL string, headers map[string]string, profile string, connections, chunkSizeMB int) (*adaptiveDownloadDecision, error) {
+	if c == nil {
+		return nil, errors.New("nil config")
+	}
+	if connections > 0 || chunkSizeMB > 0 {
+		return nil, nil
+	}
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "", "auto":
+	default:
+		return nil, nil
+	}
+	if !shouldProbeForAdaptiveTuning(rawURL) {
+		return nil, nil
+	}
+	meta, err := downloader.ProbeURL(ctx, c, rawURL, headers)
+	if err != nil {
+		return nil, err
+	}
+	if emptyProbeMeta(meta) {
+		return nil, errors.New("adaptive tuning probe returned no useful remote metadata")
+	}
+	decision := &adaptiveDownloadDecision{Probed: true, RemoteSize: meta.Size}
+	if shouldUseLargeModelTuning(rawURL, meta) {
+		if err := applyDownloadTuning(c, "large-model", 0, 0); err != nil {
+			return nil, err
+		}
+		decision.Applied = true
+		decision.Reason = adaptiveLargeModelReason(rawURL, meta)
+		return decision, nil
+	}
+	decision.Reason = "remote metadata does not match large-model tuning criteria"
+	return decision, nil
+}
+
+func profileWantsAuto(profile string) bool {
+	p := strings.ToLower(strings.TrimSpace(profile))
+	return p == "" || p == "auto"
+}
+
+func emptyProbeMeta(meta downloader.ProbeMeta) bool {
+	return meta.Size <= 0 &&
+		!meta.AcceptRange &&
+		strings.TrimSpace(meta.Filename) == "" &&
+		strings.TrimSpace(meta.ETag) == "" &&
+		strings.TrimSpace(meta.LastModified) == ""
+}
+
+func shouldProbeForAdaptiveTuning(rawURL string) bool {
+	u, err := neturl.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if hostIs(host, "huggingface.co") || strings.Contains(host, "xet") {
+		return true
+	}
+	switch strings.ToLower(filepath.Ext(u.Path)) {
+	case ".gguf", ".safetensors":
+		return true
+	default:
+		return false
+	}
+}
+
+func shouldUseLargeModelTuning(rawURL string, meta downloader.ProbeMeta) bool {
+	if !meta.AcceptRange {
+		return false
+	}
+	if meta.Size >= adaptiveLargeThresholdBytes {
+		return true
+	}
+	target := meta.FinalURL
+	if target == "" {
+		target = rawURL
+	}
+	u, err := neturl.Parse(target)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if !hostIs(host, "huggingface.co") && !strings.Contains(host, "xet") {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(u.Path))
+	if meta.Size <= 0 {
+		switch ext {
+		case ".gguf", ".safetensors":
+			return true
+		}
+	}
+	return false
+}
+
+func adaptiveLargeModelReason(rawURL string, meta downloader.ProbeMeta) string {
+	if meta.Size >= adaptiveLargeThresholdBytes {
+		return fmt.Sprintf("range-capable object is %s; using large-model tuning", humanize.Bytes(uint64(meta.Size)))
+	}
+	target := meta.FinalURL
+	if target == "" {
+		target = rawURL
+	}
+	return fmt.Sprintf("range-capable large-model path %s; using large-model tuning", logging.SanitizeURL(target))
+}
+
+func reportedDownloadProfile(profile string, connections, chunkSizeMB int, decision *adaptiveDownloadDecision) string {
+	if decision != nil && decision.Applied {
+		return "large-model"
+	}
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "large", "large-model":
+		return "large-model"
+	}
+	if connections > 0 || chunkSizeMB > 0 {
+		return "custom"
+	}
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "", "auto":
+		return "auto"
+	default:
+		return effectiveDownloadProfile(profile)
+	}
+}
+
+func reportedDownloadProfileSource(profile string, connections, chunkSizeMB int, decision *adaptiveDownloadDecision) string {
+	if connections > 0 || chunkSizeMB > 0 {
+		return "explicit-flags"
+	}
+	if decision != nil && decision.Applied {
+		return "auto"
+	}
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "":
+		return "auto"
+	default:
+		return "explicit"
+	}
+}
+
 func effectiveDownloadProfile(profile string) string {
 	switch strings.ToLower(strings.TrimSpace(profile)) {
 	case "large", "large-model":
 		return "large-model"
+	case "auto":
+		return "auto"
 	default:
 		return "default"
 	}
@@ -788,28 +933,38 @@ func resolveBatchDownloadCandidate(ctx context.Context, c *config.Config, uri st
 		}
 		return res.URL, res.Headers, nil
 	}
-	if u, err := neturl.Parse(uri); err == nil {
+	return uri, attachDirectProviderAuthHeaders(c, uri, headers, nil), nil
+}
+
+func attachDirectProviderAuthHeaders(c *config.Config, rawURL string, headers map[string]string, log *logging.Logger) map[string]string {
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	if c == nil {
+		return headers
+	}
+	if u, err := neturl.Parse(rawURL); err == nil {
 		h := strings.ToLower(u.Hostname())
-		// Only attach auth when token_env is explicitly configured. Empty
-		// token_env means "do not attach auth"; matches the existing batch
-		// import logic in cmd/modfetch/batch_cmd.go and the resolver package
-		// to avoid leaking ambient CIVITAI_TOKEN / HF_TOKEN credentials.
 		if hostIs(h, "civitai.com") && c.Sources.CivitAI.Enabled {
-			if env := strings.TrimSpace(c.Sources.CivitAI.TokenEnv); env != "" {
-				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-					headers["Authorization"] = "Bearer " + tok
-				}
-			}
+			attachBearerFromConfiguredEnv(headers, c.Sources.CivitAI.TokenEnv, "CivitAI", "gated content will return 401", log)
 		}
 		if hostIs(h, "huggingface.co") && c.Sources.HuggingFace.Enabled {
-			if env := strings.TrimSpace(c.Sources.HuggingFace.TokenEnv); env != "" {
-				if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
-					headers["Authorization"] = "Bearer " + tok
-				}
-			}
+			attachBearerFromConfiguredEnv(headers, c.Sources.HuggingFace.TokenEnv, "Hugging Face", "gated repos will return 401; accept the repo license if required", log)
 		}
 	}
-	return uri, headers, nil
+	return headers
+}
+
+func attachBearerFromConfiguredEnv(headers map[string]string, env, provider, missingGuidance string, log *logging.Logger) {
+	env = strings.TrimSpace(env)
+	if env == "" {
+		return
+	}
+	if tok := strings.TrimSpace(os.Getenv(env)); tok != "" {
+		headers["Authorization"] = "Bearer " + tok
+	} else if log != nil {
+		log.Warnf("%s token env %s is not set; %s. Export %s.", provider, env, missingGuidance, env)
+	}
 }
 
 // parseSHA256FromFile reads the first 64-hex token from a file (supports .sha256 "hash  filename" format).

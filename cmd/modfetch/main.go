@@ -48,6 +48,8 @@ func run(ctx context.Context, args []string) error {
 		return handleStatus(ctx, args[1:])
 	case "download":
 		return handleDownload(ctx, args[1:])
+	case "bench":
+		return handleBench(ctx, args[1:])
 	case "discover":
 		return handleDiscover(ctx, args[1:])
 	case "starter":
@@ -93,6 +95,7 @@ Commands:
   config print      Print the loaded config as JSON
   config wizard     Interactive TUI to generate a YAML config
   download          Download a file via direct URL or resolver URI (starter://, hf://, civitai://)
+  bench             Benchmark modfetch against aria2 on the same URL
   discover          Search real model providers and download a selected result
   starter           List or download beginner-safe starter artifacts
   status            Show download status (table or JSON)
@@ -554,7 +557,6 @@ func handleClean(ctx context.Context, args []string) error {
 	}
 	return nil
 }
-
 
 func isResolverURI(uri string) bool {
 	uri = strings.TrimSpace(uri)

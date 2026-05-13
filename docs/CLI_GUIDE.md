@@ -8,6 +8,7 @@ Complete command-line reference for modfetch. For the visual TUI interface, see 
 - [Global Flags](#global-flags)
 - [Commands](#commands)
   - [download](#download)
+  - [bench](#bench)
   - [discover](#discover)
   - [starter](#starter)
   - [verify](#verify)
@@ -95,7 +96,10 @@ modfetch download --url URL [OPTIONS]
 - `--extract` - Extract `.zip`, `.tar`, `.tar.gz`, `.tgz`, or `.7z` archives after download. 7z archives require `7zz`, `7z`, or `7za` on `PATH`.
 - `--extract-dir PATH` - Directory for extracted archive contents
 - `--batch-parallel N` - Concurrent downloads in batch mode
-- `--profile large-model` - Apply large-file tuning for DS4/GGUF-size artifacts
+- `--profile auto` - Let modfetch promote range-capable large objects to
+  large-model tuning automatically (default when omitted)
+- `--profile default` - Disable automatic tuning for this invocation
+- `--profile large-model` - Force large-file tuning for DS4/GGUF-size artifacts
   (`16` range connections and `64 MiB` chunks unless overridden)
 - `--connections N` - Parallel range requests per file, similar to aria2 `-x/-s`
 - `--chunk-size-mb N` - Range chunk size for this invocation
@@ -122,6 +126,7 @@ modfetch download --url 'hf://gpt2/README.md?rev=main'
 modfetch download --url 'hf://TheBloke/Llama-2-7B-GGUF/llama-2-7b.Q4_K_M.gguf?rev=main'
 
 # Large GGUF / Hugging Face Xet-style object
+modfetch download --url 'hf://owner/repo/model.gguf?rev=main'
 modfetch download --url 'hf://owner/repo/model.gguf?rev=main' --profile large-model
 modfetch download --url 'https://huggingface.co/owner/repo/resolve/main/model.gguf' --connections 16 --chunk-size-mb 64
 
@@ -129,6 +134,39 @@ modfetch download --url 'https://huggingface.co/owner/repo/resolve/main/model.gg
 modfetch download --url 'civitai://model/123456'
 modfetch download --url 'civitai://model/123456?version=456789'
 modfetch download --url 'civitai://model/123456?file=specific-file.safetensors'
+```
+
+### bench
+
+Run disposable timed download samples to compare modfetch with another transfer
+tool on the same URL. This is intended for real-world throughput checks before
+switching a large model transfer.
+
+**Syntax:**
+```bash
+modfetch bench --url URL [OPTIONS]
+```
+
+**Options:**
+- `--url URL` - URL or resolver URI to benchmark
+- `--tools modfetch,aria2` - Tools to run; `aria2` is skipped with an error
+  result if `aria2c` is not installed
+- Private/gated URLs: modfetch can benchmark with configured auth headers, but
+  aria2 is skipped when sensitive headers would otherwise be exposed through
+  process arguments.
+- `--duration 15s` - Sample duration per tool
+- `--profile auto|default|large-model` - Tuning profile for modfetch and
+  matching aria2 connection/chunk parameters
+- `--connections N` - Explicit range request count for both tools
+- `--chunk-size-mb N` - Explicit range chunk size for both tools
+- `--json` - Emit machine-readable results
+- `--keep` - Keep the temporary benchmark download directory
+
+**Examples:**
+```bash
+modfetch bench --url 'hf://owner/repo/model.gguf?rev=main' --duration 30s --json
+modfetch bench --url 'https://huggingface.co/owner/repo/resolve/main/model.gguf' \
+  --tools modfetch,aria2 --connections 16 --chunk-size-mb 64
 ```
 
 ### discover
