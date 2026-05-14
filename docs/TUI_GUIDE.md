@@ -1,6 +1,9 @@
 # TUI Guide
 
-This guide walks through launching the TUI, understanding the layout, available actions, and tips for troubleshooting.
+The modfetch TUI is the visual model-management workflow: start downloads,
+choose recommended models, inspect large transfers before committing, browse
+your local library, run bulk actions, and check configuration state without
+leaving the terminal.
 
 > **📊 Visual Learner?** Check out [TUI Wireframes](TUI_WIREFRAMES.md) for visual diagrams, wireframes, and navigation flows that show exactly how the TUI works!
 

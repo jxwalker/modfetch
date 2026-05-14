@@ -1,19 +1,25 @@
 # User Guide
 
-This guide walks you through configuration, common workflows, and tips to get the most out of modfetch.
+modfetch helps you choose the right model artifact, download it reliably, verify
+it, and organize it for local runtimes such as Ollama, llama.cpp, MLX, ComfyUI,
+AUTOMATIC1111/Forge, Transformers, and vLLM.
 
-- Build: `make build` (produces `./bin/modfetch`)
-- Config file path can be passed with `--config` or via the environment variable `MODFETCH_CONFIG`.
-- Current release: v0.8.1. The examples below include the Hugging Face shorthand
-  URI form fixed in v0.6.3, v0.7.x starter/discovery/library workflows, and the
-  v0.8.1 recommendation, benchmark, adaptive-transfer, and TUI inspection commands.
+Use this guide when you want the end-to-end workflow. For a shorter product
+overview, start with [README.md](../README.md); for flags and subcommands, use
+[CLI_GUIDE.md](CLI_GUIDE.md).
+
+- Current release: v0.8.1.
+- Build from source: `make build` produces `./bin/modfetch`.
+- Config path: pass `--config` or set `MODFETCH_CONFIG`.
+- Secrets: keep provider tokens in environment variables, not YAML.
 
 ## Configure
 
 Create a config file:
 
-1) Minimal example (see docs/CONFIG.md for full schema)
+1. Minimal example. See [CONFIG.md](CONFIG.md) for the full schema.
 
+```yaml
 version: 1
 general:
   data_root: "~/modfetch-data"
@@ -24,21 +30,28 @@ sources:
   civitai:     { enabled: true, token_env: "CIVITAI_TOKEN" }
 validation:
   safetensors_deep_verify_after_download: true
+```
 
-2) Use the wizard
+2. Use the wizard.
 
+```bash
 modfetch config wizard --out ~/.config/modfetch/config.yml
+```
 
-3) Export tokens (only if needed for gated content)
+3. Export tokens only when needed for private, gated, or restricted content.
 
+```bash
 export HF_TOKEN=...    # Hugging Face
 export CIVITAI_TOKEN=...  # CivitAI
+```
 
 ## Core workflows
 
 Set a default config if you like:
 
+```bash
 export MODFETCH_CONFIG=~/.config/modfetch/config.yml
+```
 
 ### Download
 
@@ -47,8 +60,10 @@ Default naming
 - Direct URLs default to the basename of the final URL with query/fragment removed and the name sanitized.
 - The TUI (and importer) try a HEAD request for CivitAI direct endpoints to honor server-provided filenames via Content-Disposition when available.
 
+```bash
 modfetch download --config ~/.config/modfetch/config.yml \
   --url 'https://proof.ovh.net/files/1Mb.dat'
+```
 
 - Shows a live progress bar with speed and ETA.
 - Supports resume (Range) and retries. Optionally, enable honoring server-provided Retry-After for HTTP 429 by setting `network.retry_on_rate_limit: true` in your config.
@@ -56,6 +71,7 @@ modfetch download --config ~/.config/modfetch/config.yml \
 
 For Hugging Face / CivitAI resolvers:
 
+```bash
 modfetch download --config ~/.config/modfetch/config.yml \
   --url 'hf://gpt2/README.md?rev=main'
 modfetch download --config ~/.config/modfetch/config.yml \
@@ -64,6 +80,7 @@ modfetch download --config ~/.config/modfetch/config.yml \
   --url 'hf://org/repo?rev=main&quant=Q4_K_M'
 modfetch download --config ~/.config/modfetch/config.yml \
   --url 'civitai://model/123456?file=myfile.safetensors'
+```
 
 ### Recommend a model for your hardware
 

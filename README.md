@@ -1,562 +1,374 @@
 # modfetch
 
-> **Fast, resilient downloads for AI models** • Download, verify, and organize LLM and Stable Diffusion models from HuggingFace, CivitAI, ModelScope, and Ollama Library pages
+[![CI](https://github.com/jxwalker/modfetch/actions/workflows/ci.yml/badge.svg)](https://github.com/jxwalker/modfetch/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/jxwalker/modfetch)](https://github.com/jxwalker/modfetch/releases)
+[![Licence](https://img.shields.io/github/license/jxwalker/modfetch)](LICENSE)
+[![Go](https://img.shields.io/badge/go-1.22%2B-00ADD8)](go.mod)
 
-```
-╔═══════════════════════════════════════════════════════════╗
-║   Parallel Chunked Downloads with Auto-Resume             ║
-║   SHA256 Integrity Verification                           ║
-║   Rich TUI with Model Library Browser                     ║
-║   Smart Classification & Auto-Placement                   ║
-║   Hardware-Aware Model Recommendations                    ║
-║   10-100x Faster with Indexed Model Discovery             ║
-╚═══════════════════════════════════════════════════════════╝
-```
+**The model downloader that helps you choose, fetch, verify, resume, and
+organize AI model files.**
 
-## Quick Links
+modfetch is built for the real local-model workflow: you need the right GGUF,
+safetensors, tokenizer, LoRA, checkpoint, or archive; you may not know the exact
+URL; downloads can be huge; partials must resume; and once the file lands it
+needs to be usable in Ollama, llama.cpp, MLX, ComfyUI, AUTOMATIC1111/Forge,
+Transformers, vLLM, or another local runtime.
 
-📖 **New User?** Start here: **[Quick Start Guide](docs/QUICKSTART.md)** ← Visual walkthrough in 5 minutes!
-
-📊 **Visual Learner?** See: **[TUI Wireframes](docs/TUI_WIREFRAMES.md)** ← Screenshots and navigation flows
-
-📚 **Documentation:**
-- [CLI Reference](docs/CLI_GUIDE.md) - Complete command-line reference
-- [TUI Guide](docs/TUI_GUIDE.md) - Interactive terminal interface
-- [Library Guide](docs/LIBRARY.md) - Browse and organize your models
-- [User Guide](docs/USER_GUIDE.md) - Full feature reference
-- [Configuration](docs/CONFIG.md) - Config file options
-- [Testing](TESTING.md) - Maintainer validation commands
-- [Installation Guide](docs/INSTALLATION.md) - Install with Homebrew, AUR, one-line installer, or release binaries
-- [Release Checklist](docs/RELEASE.md) - Maintainer checklist for tags, artifacts, and package updates
-
----
-
-## Features at a Glance
-
-### 🚀 Downloads
-- **Parallel chunked downloads** with automatic resume and retries
-- **SHA256 verification** (per-chunk and full file)
-- **Smart naming** with collision-safe suffixes
-- **Resolver support** for `hf://` and `civitai://` URLs
-- **Auth preflight** with early failure detection
-- **Rate limit handling** with automatic retry
-
-### 📚 Model Library
-- **Browse and search** all your downloaded models
-- **Rich metadata** from HuggingFace, CivitAI, ModelScope APIs, and Ollama Library pages
-- **Favorites system** to mark important models
-- **Directory scanner** to discover existing models (10-100x faster with indexes)
-- **Detailed view** with specs, descriptions, tags, and links
-- **Filter by type and source** (LLM, LoRA, VAE, Checkpoint, etc.)
-- **ModelScope and Ollama source support** with registry-backed enrichment; see the [Library Guide](docs/LIBRARY.md#metadata-sources)
-
-### 🧭 Model Selection
-- **Hardware-aware recommendations** with `modfetch recommend`
-- **Task presets** for chat, coding, embeddings, and image models
-- **RAM/VRAM overrides** for planning downloads for another machine
-- **Learned ranking history** from selected and skipped recommendations
-- **Runtime hints** for llama.cpp, Ollama, LM Studio, ComfyUI, Stable Diffusion WebUI, Transformers, vLLM, and ONNX Runtime
-- **One-step handoff** from recommendation to the normal resumable download pipeline
-
-### 🎯 Organization
-- **Automatic placement** into app directories
-- **Smart classification** by model type
-- **Symlink or copy** modes
-- **Batch YAML** for bulk operations
-- **Dry-run mode** to preview actions
-
-### 🖥️ Rich TUI
-- **7 tabs**: All, Pending, Active, Completed, Failed, Library, Settings
-- **Live progress** with speed, ETA, and throughput sparklines
-- **Interactive actions**: pause, retry, delete, reveal, copy
-- **Themes**: Default, Neon, Dracula, Solarized
-- **Filter and sort** downloads by various criteria
-- **Keyboard shortcuts** for power users
-
-### 🔧 Developer-Friendly
-- **Structured logging** (JSON or text)
-- **Metrics export** (Prometheus textfile)
-- **Resilient SQLite** state tracking
-- **Graceful cancellation** (SIGINT/SIGTERM)
-- **JSON output** for scripting
-
----
-
-## TUI Preview
-
-The modfetch TUI provides a beautiful, full-featured interface for managing your AI models:
-
-```
-╔═══════════════════════════════════════════════════════════════════════════╗
-║  modfetch v0.8.1                    Tab: [2] Active                       ║
-╠═══════════════════════════════════════════════════════════════════════════╣
-║  🔄 Active: 2   ✓ Completed: 45   ⏳ Pending: 3   ✗ Failed: 1            ║
-║  Throughput: 32.5 MB/s   •   Auth: HF ✓  CivitAI ✓                        ║
-╠═══════════════════════════════════════════════════════════════════════════╣
-║  Status    │ Progress        │ Speed      │ ETA    │ Size  │ File         ║
-║  ──────────┼─────────────────┼────────────┼────────┼───────┼─────────     ║
-║▶ Running   │ ████████░░░ 45% │ 18.3 MB/s  │ 2m 15s │ 3.8GB │ llama-2...   ║
-║  Running   │ ██████░░░░░ 32% │ 14.2 MB/s  │ 3m 42s │ 4.1GB │ mistral...   ║
-║  Planning  │ ...             │ -          │ -      │ 2.2GB │ sdxl-base.. .║
-╠═══════════════════════════════════════════════════════════════════════════╣
-║  n:New  y:Retry  p:Pause  5/L:Library  6/M:Settings  ?:Help  q:Quit       ║
-╚═══════════════════════════════════════════════════════════════════════════╝
+```text
+Choose a model      Resume huge files      Verify integrity      Organize library
+recommend / TUI --> adaptive download --> SHA256/safetensors --> place / scan / sync
 ```
 
-**Key Features:**
-- 🎨 **Multiple themes** (Neon, Dracula, Solarized) - Press `T` to cycle
-- ⌨️ **Vim-style navigation** (`j`/`k`) plus arrow keys
-- 📊 **Real-time stats** with speed graphs and progress bars
-- 🔍 **Search and filter** with `/` key
-- 📚 **Browse library** with `5` or `L`
-- ⚙️ **View settings** with `6` or `M`
+## Why Use It
 
-> **See it in action:** Check out the [TUI Wireframes](docs/TUI_WIREFRAMES.md) for detailed visual guides!
+- **No more copied mystery URLs**: search Hugging Face, CivitAI, and ModelScope
+  with `discover`, or let `recommend` rank real downloadable files for your
+  task and hardware.
+- **Built for large model transfers**: chunked resume, retries, rate-limit
+  handling, Hugging Face/Xet-friendly tuning, and live adaptive ramp-up/backoff.
+- **Better than a raw downloader for model work**: resolvers, auth preflight,
+  metadata, checksums, placement presets, library scanning, and SQLite state are
+  all part of the same workflow.
+- **Beginner-friendly, power-user capable**: start with curated starter
+  downloads or the guided TUI, then move to JSON output, batch YAML, catalog
+  sync, and benchmark history when you need automation.
+- **Local-first and transparent**: config is YAML, secrets stay in environment
+  variables, and dry-runs show the planned destination and transfer metadata
+  before bytes are written.
 
----
-
-## Status
-
-✅ **Production Ready:** Core download, verify, and TUI features are stable
-
-🚀 **Active Development:** metadata enrichment and user-driven archive support
-
-📖 **Documentation:** Comprehensive guides with visual examples
-
----
-
-## Upcoming
-- **v0.9 planning**: choose the next product direction from real user feedback
-  after the v0.8.1 recommendation and adaptive-transfer release line has
-  shipped.
-
-## What's new in v0.8.1
-- **Guided TUI recommendations**: press `G` in the TUI to choose a model by
-  task, detected or overridden hardware budget, provider, runtime or placement
-  target, and maximum file size, then start the same resumable download path
-  used by `modfetch download`. In the result list, press `i` for rationale,
-  runtime setup, placement, and dry-run transfer details, or `p` to probe live
-  size/range metadata before starting a large download.
-- **Recommendation release hardening**: the guided recommendation path now has
-  real-provider UAT, live probe coverage, docs drift validation, and cross-platform
-  CI coverage before the patch tag.
-
-## What's new in v0.8.0
-- **Hardware-aware recommendations**: `modfetch recommend --task coding` detects
-  your machine, ranks live provider results by memory fit, model signals,
-  learned history, and runtime fit, then can download the selected result.
-- **Learned local ranking**: recommendation history records shown, selected, and
-  skipped results per task, query, and hardware class so repeated choices improve
-  future suggestions without hiding fresh provider results.
-- **Runtime and placement hints**: recommendation output explains likely runtimes
-  for GGUF, safetensors, PyTorch, and ONNX artifacts, including llama.cpp,
-  Ollama, LM Studio, ComfyUI, Stable Diffusion WebUI, Transformers, MLX on Apple
-  Silicon, vLLM, and ONNX Runtime where appropriate.
-- **Benchmark/adaptive transfer tuning**: `modfetch bench` can compare modfetch
-  against aria2 on the same URL, and large range-capable downloads now ramp
-  chunk concurrency up or down based on observed throughput, stalls, 429s, and
-  persisted per-host transfer history.
-- **Large-model CLI tuning**: `modfetch download --profile large-model`,
-  `--connections`, and `--chunk-size-mb` expose aria2-style one-shot controls
-  while keeping modfetch's state, resume, placement, and verification pipeline.
-- **Library View**: Browse all your downloaded models with rich metadata, search, and filters
-  - View model details: type, quantization, size, source, tags, descriptions
-  - Search by name, filter by type (LLM, LoRA, VAE, etc.) and source (HuggingFace, CivitAI, local)
-  - Mark models as favorites for quick access
-  - Keyboard shortcuts: `5` or `L` to access Library, `/` to search, `Enter` for details
-- **Directory Scanner**: Automatically discover models in your configured directories
-  - Scans download_root and placement directories
-  - Extracts metadata from filenames (quantization, parameter count, version)
-  - Uses bounded parallel scanning with serialized database writes
-  - O(log n) duplicate detection with database indexes (10-100x faster than linear scan)
-  - Press `S` in Library view or run `modfetch library scan --repair-stale`
-- **Settings Tab**: View your configuration at a glance
-  - See directory paths, API token status, placement rules, download settings
-  - Visual indicators for HuggingFace and CivitAI token status
-  - Press `6` or `M` to access Settings
-- **Performance Optimizations**: Added database indexes for 10-100x speedup on large model libraries
-- **Comprehensive Testing**: 84 test cases including unit, integration, and performance benchmarks
-- **Documentation**: Complete user guides for Library (docs/LIBRARY.md) and Scanner (docs/SCANNER.md)
-
-Previous releases:
-- v0.7.1: starter downloads, real-provider discovery, ModelScope discovery, AUR packaging, metadata enrichment, and non-interactive TUI snapshots
-- v0.7.0: Homebrew docs, portable catalogs, TUI bulk maintenance, placement presets, scanner repair, and docs drift validation
-- v0.6.3: Hugging Face shorthand aliases, including public single-repo forms such as `hf://gpt2/README.md?rev=main`
-- v0.6.2: Storage, archive, schema, CLI, shell completion, and release workflow updates
-- v0.6.1: Testing reliability, real API integration coverage, and TUI test expansion
-- v0.5.2: Enhanced TUI with rich UI elements and vibrant colors
-- v0.5.1: Critical installer and TUI navigation fixes
-- v0.5.0: Comprehensive installation package with guided setup experience
-
-See full release notes and binaries: https://github.com/jxwalker/modfetch/releases
-
-## Installation
-
-### One-Line Install (Recommended)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/install.sh | bash
-```
-
-**What it does:**
-```
-✓ Downloads latest release
-✓ Verifies SHA256 checksum
-✓ Installs to /usr/local/bin
-✓ Makes executable
-→ Ready to use: modfetch --version
-```
-
-### Alternative Methods
-
-<details>
-<summary><b>📦 Custom Install Directory</b></summary>
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/install.sh | bash -s -- --install-dir ~/bin
-```
-</details>
-
-<details>
-<summary><b>🔨 Build from Source</b></summary>
-
-```bash
-git clone https://github.com/jxwalker/modfetch
-cd modfetch
-make build    # Produces ./bin/modfetch
-make test     # Run tests
-```
-</details>
-
-<details>
-<summary><b>📥 Download Binary (GitHub Releases)</b></summary>
-
-Download from [Releases](https://github.com/jxwalker/modfetch/releases):
-- Linux: amd64, arm64
-- macOS: amd64, arm64, universal
-- All with SHA256 checksums
-</details>
-
-<details>
-<summary><b>🍺 Homebrew / Package Managers</b></summary>
-
-Install with Homebrew on macOS or Linuxbrew:
+## Install
 
 ```bash
 brew tap jxwalker/tap
 brew install jxwalker/tap/modfetch
 ```
 
-Upgrade later with:
+Other supported install paths:
 
 ```bash
-brew update
-brew upgrade jxwalker/tap/modfetch
-```
+# One-line installer
+curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/install.sh | bash
 
-The formula installs the published GitHub Release binary and verifies its SHA256 checksum.
-
-Arch Linux users can install the published `modfetch-bin` AUR package:
-
-```bash
+# Arch Linux / AUR
 git clone https://aur.archlinux.org/modfetch-bin.git
 cd modfetch-bin
 makepkg -si
-```
-</details>
 
-<details>
-<summary><b>🗑️ Uninstall</b></summary>
+# From source
+git clone https://github.com/jxwalker/modfetch
+cd modfetch
+make build
+```
+
+See [docs/INSTALLATION.md](docs/INSTALLATION.md) for release binaries, custom
+install directories, shell completions, and troubleshooting.
+
+## Quick Start
+
+If you do not know what to download yet, start here:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/uninstall.sh | bash
+# One-time setup for Homebrew/source installs. The one-line installer runs this
+# for you, but the command is harmless if the config already exists.
+mkdir -p ~/.config/modfetch
+modfetch config wizard --out ~/.config/modfetch/config.yml
+export MODFETCH_CONFIG=~/.config/modfetch/config.yml
+
+# Pick a model that fits this machine.
+modfetch recommend --task coding
+
+# Preview the exact selected download without writing files.
+modfetch recommend --task coding --download --select 1 --dry-run --summary-json
+
+# Download the top result through the resumable transfer pipeline.
+modfetch recommend --task coding --download --select 1
 ```
-</details>
 
-## Get Started in 3 Steps
-
-> 📖 **Want a detailed walkthrough?** See the **[Quick Start Guide](docs/QUICKSTART.md)** with visual examples!
-
-### 1. Install (1 minute)
+If you already know the source:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/install.sh | bash
+# Direct URL, Hugging Face resolver, CivitAI resolver, or starter alias.
+modfetch download --url 'https://example.com/model.safetensors'
+modfetch download --url 'hf://gpt2/README.md?rev=main'
+modfetch download --url 'civitai://model/123456'
+modfetch download --url 'starter://gpt2-tokenizer'
 ```
 
-### 2. Configure (1 minute)
+If you want a visual workflow:
+
+```bash
+modfetch tui
+```
+
+Press `G` in the TUI to choose a model by task, hardware, provider, runtime,
+and maximum file size. Press `i` on a result to inspect ranking rationale,
+runtime setup, placement readiness, and transfer settings. Press `p` to probe
+remote size, range support, server filename, validators, and learned host
+history before starting a large download.
+
+## Common Workflows
+
+### Find and Download a Real Model
+
+```bash
+modfetch discover search "tiny gpt2"
+modfetch discover download "sshleifer/tiny-gpt2" --select 1
+```
+
+`discover` searches real providers, selects a concrete downloadable artifact,
+and delegates to `download`, so resume, auth, placement, dry-run, and JSON
+summary flags still work.
+
+### Download a Huge GGUF Without Hand-Tuning
+
+```bash
+modfetch download --url 'hf://owner/repo/model.gguf?rev=main' --profile auto
+```
+
+`--profile auto` promotes large range-capable objects to large-model tuning.
+modfetch starts from persisted per-host history when available, ramps up while
+throughput is healthy, and backs off on stalls or HTTP 429s.
+
+You can still force aria2-style settings for a specific transfer:
+
+```bash
+modfetch download --url 'https://huggingface.co/owner/repo/resolve/main/model.gguf' \
+  --connections 16 --chunk-size-mb 64
+```
+
+### Benchmark Before a Multi-Hour Download
+
+```bash
+modfetch bench --url 'hf://owner/repo/model.gguf?rev=main' \
+  --tools modfetch,aria2 --duration 30s --json
+
+modfetch bench --history
+```
+
+Benchmark runs disposable samples against the same URL and records host/tuning
+history that later adaptive downloads can reuse.
+
+### Place Models Where Local Apps Expect Them
+
+```bash
+modfetch place --path ~/Downloads/modfetch/model.gguf --preset ollama --dry-run
+modfetch place --path ~/Downloads/modfetch/model.safetensors --preset comfyui
+```
+
+Placement presets cover Ollama, ComfyUI, AUTOMATIC1111, Forge, and generic
+Hugging Face cache exports. GGUF recommendations still include runtime guidance
+for llama.cpp-style tools; use symlink, hardlink, or copy mode depending on your
+filesystem.
+
+### Manage the Library
+
+```bash
+modfetch library scan --repair-stale
+modfetch library export --output modfetch-catalog.json
+modfetch library import --input modfetch-catalog.json --dry-run
+modfetch library sync push --target file:///srv/modfetch/catalog.json
+modfetch library sync pull --target https://example.com/modfetch-catalog.json --dry-run
+```
+
+The library keeps metadata, favorites, source URLs, checksums, placement hints,
+and scan results in a local SQLite state database.
+
+### Verify and Repair
+
+```bash
+modfetch verify --all --summary
+modfetch verify --scan-dir ~/models --safetensors-deep --only-errors --summary
+modfetch verify --scan-dir ~/models --safetensors-deep --repair --quarantine-incomplete
+```
+
+modfetch can verify recorded SHA256 values, refresh sidecars, deep-check
+safetensors structure, trim safe trailing bytes, and quarantine incomplete
+files for redownload.
+
+## Feature Tour
+
+| Area | What You Get |
+| --- | --- |
+| Model selection | `recommend`, `discover`, starter aliases, task presets, hardware fit, runtime hints, local learning history |
+| Download engine | direct HTTPS, `starter://`, `hf://`, `civitai://`, chunked resume, auth preflight, retries, rate-limit handling, SHA256 sidecars |
+| Large transfers | `--profile auto`, `--profile large-model`, explicit connections/chunk size, adaptive ramp-up/backoff, persisted per-host history |
+| Benchmarking | modfetch-vs-aria2 samples on the same URL, JSON output, benchmark history |
+| TUI | downloads, library, settings, guided recommendations, result inspection, live metadata probing, themes, filters, bulk actions |
+| Library | indexed scans, rich metadata, favorites, type/source filters, stale repair, portable export/import/sync |
+| Placement | presets for Ollama, ComfyUI, AUTOMATIC1111/Forge, Hugging Face cache exports, symlink/hardlink/copy modes |
+| Verification | SHA256, sidecars, safetensors structural checks, repair/quarantine flows |
+| Automation | batch YAML, JSON summaries, JSON logs, TUI snapshots, shell completions, Prometheus textfile metrics |
+| Distribution | Homebrew/Linuxbrew, AUR `modfetch-bin`, GitHub Release binaries, one-line installer, source builds |
+
+## TUI Preview
+
+```text
++------------------------------ modfetch v0.8.1 ------------------------------+
+| Tab: [2] Active       Completed: 45   Active: 2   Pending: 3   Failed: 1     |
++------------------------------------------------------------------------------+
+| Status    Progress           Speed       ETA       Size      File             |
+| Running   ########.... 45%    18.3 MB/s   2m15s     3.8 GB    llama-8b.gguf   |
+| Running   ######...... 32%    14.2 MB/s   3m42s     4.1 GB    mistral.gguf    |
+| Planning  ...                 -           -         2.2 GB    sdxl-base.sft   |
++------------------------------------------------------------------------------+
+| G recommend | n new | b batch | y/r start | p cancel | / filter | ? help      |
++------------------------------------------------------------------------------+
+```
+
+The TUI is not just a progress display. It includes:
+
+- Guided recommendations with `G`
+- Result inspection and live metadata probing before large downloads
+- Library search, filters, details, favorites, and bulk actions
+- Settings and token-status views
+- Download sorting by speed, ETA, or remaining bytes
+- Non-interactive snapshots for scripts: `modfetch tui --snapshot --json`
+
+See [docs/TUI_GUIDE.md](docs/TUI_GUIDE.md) and
+[docs/TUI_WIREFRAMES.md](docs/TUI_WIREFRAMES.md).
+
+## Configuration
+
+Create a starter config with the wizard:
 
 ```bash
 mkdir -p ~/.config/modfetch
-cat > ~/.config/modfetch/config.yml << 'YAML'
+modfetch config wizard --out ~/.config/modfetch/config.yml
+```
+
+Or create a minimal config:
+
+```yaml
 version: 1
 general:
   data_root: "~/modfetch-data"
   download_root: "~/Downloads/modfetch"
   placement_mode: "symlink"
+network:
+  timeout_seconds: 60
+concurrency:
+  per_file_chunks: 4
+  chunk_size_mb: 8
 sources:
   huggingface: { enabled: true, token_env: "HF_TOKEN" }
   civitai:     { enabled: true, token_env: "CIVITAI_TOKEN" }
-YAML
+```
 
+Use tokens only when needed for private, gated, or restricted content:
+
+```bash
+export HF_TOKEN="..."
+export CIVITAI_TOKEN="..."
 export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 ```
 
-### 3. Your First Download
+Secrets should stay in environment variables. modfetch redacts secrets from
+logs and dry-run output.
+
+## Command Map
+
+```text
+config      validate, print, or generate YAML config
+download    fetch one URL/resolver URI or a batch file
+bench       compare modfetch and aria2, or inspect transfer history
+discover    search providers and download a selected result
+recommend   rank model files for task, hardware, runtime, and memory fit
+starter     list or download beginner-safe starter artifacts
+status      show persisted download status
+tui         open the terminal dashboard or print a snapshot
+library     scan, export, import, and sync the model catalog
+batch       import URLs from a text file and produce a YAML batch
+place       link/copy models into app-specific directories
+verify      check SHA256 and safetensors integrity
+clean       prune staged partials and orphan sidecars
+dedupe      replace duplicate completed downloads with links
+completion  generate shell completions
+```
+
+Run `modfetch help` or read [docs/CLI_GUIDE.md](docs/CLI_GUIDE.md) for the full
+reference.
+
+## Documentation
+
+Start here:
+
+- [Documentation Index](docs/README.md): every guide in one place
+- [Quick Start](docs/QUICKSTART.md): installation, config, first download, TUI
+- [User Guide](docs/USER_GUIDE.md): end-to-end workflows
+- [CLI Guide](docs/CLI_GUIDE.md): command and flag reference
+- [TUI Guide](docs/TUI_GUIDE.md): keyboard controls and visual workflow
+- [Installation](docs/INSTALLATION.md): Homebrew, AUR, installer, binaries, source
+
+Deep dives:
+
+- [Batch Jobs](docs/BATCH.md)
+- [Configuration](docs/CONFIG.md)
+- [Resolvers](docs/RESOLVERS.md)
+- [Placement](docs/PLACEMENT.md)
+- [Library](docs/LIBRARY.md)
+- [Scanner](docs/SCANNER.md)
+- [Metrics](docs/METRICS.md)
+- [Database](docs/DATABASE.md)
+- [Completions](docs/COMPLETIONS.md)
+- [Linux Deployment](docs/DEPLOY_LINUX.md)
+- [Systemd TUI](docs/SYSTEMD_TUI.md)
+- [Testing Philosophy](docs/TESTING.md)
+- [Testing Command Guide](docs/TESTING_GUIDE.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Release Checklist](docs/RELEASE.md)
+- [Roadmap](docs/ROADMAP.md)
+- [TUI Wireframes](docs/TUI_WIREFRAMES.md)
+- [TUI Analysis Summary](docs/TUI_ANALYSIS_SUMMARY.txt)
+- [AUR Packaging](packaging/aur/README.md)
+
+## Status
+
+Current release: **v0.8.1**, tagged 2026-05-14.
+
+Shipped highlights:
+
+- v0.8.1: guided TUI recommendations, result inspection, live transfer metadata
+  probing, and recommendation release hardening.
+- v0.8.0: hardware-aware recommendations, local learning history, runtime
+  hints, benchmark-driven tuning, and adaptive transfer behavior.
+- v0.7.1: starter downloads, real-provider discovery, ModelScope discovery, AUR
+  packaging, catalog sync, metadata enrichment, and TUI snapshots.
+- v0.7.0: Homebrew distribution, portable catalogs, TUI bulk operations,
+  placement presets, scanner repair, and docs drift validation.
+
+The v0.8.x release line is closed. The next roadmap item is v0.9 planning based
+on real user feedback.
+
+## Development
 
 ```bash
-# Pick from beginner-safe starter downloads
-modfetch starter list
-modfetch starter download --id gpt2-config
-
-# Search real providers and download a selected model
-modfetch discover search "sshleifer/tiny-gpt2"
-modfetch discover download "sshleifer/tiny-gpt2" --select 1
-
-# The same starter works anywhere a URL is accepted
-modfetch download --url 'starter://gpt2-tokenizer'
-
-# Or launch the TUI dashboard
-modfetch tui
+git clone https://github.com/jxwalker/modfetch
+cd modfetch
+make build
+go test -count=1 ./...
+make lint
+scripts/check-docs-drift.sh
 ```
 
-**Result:**
-```
-✓ Download complete
-✓ SHA256 verified
-✓ Saved under ~/Downloads/modfetch/
-```
+Project layout:
 
-### Optional: API Tokens (for private/gated content)
-
-```bash
-export HF_TOKEN="your_token"        # Get from: https://huggingface.co/settings/tokens
-export CIVITAI_TOKEN="your_token"   # Get from: https://civitai.com/user/account
-```
-
----
-
-Requirements
-- Go 1.22+
-- Linux (primary), macOS (secondary)
-
-Configuration
-- Provide config via YAML; don’t put secrets in YAML (use env vars).
-- Pass with `--config` or set `MODFETCH_CONFIG`.
-- Generate a starter config interactively:
-  ```
-  modfetch config wizard --out ~/modfetch/config.yml
-  ```
-- See docs/CONFIG.md for full schema.
-
-## Usage
-
-> 📚 **Full details:** See [CLI Reference](docs/CLI_GUIDE.md) | [TUI Guide](docs/TUI_GUIDE.md) | [User Guide](docs/USER_GUIDE.md)
-
-### Quick Command Reference
-
-```bash
-# Launch TUI (recommended for visual management)
-modfetch tui
-
-# Download a file
-modfetch download --url 'URL'
-
-# Choose a beginner-safe starter download
-modfetch starter list
-modfetch starter download --id gpt2-config
-
-# Search real model providers
-modfetch discover search "tiny gpt2"
-modfetch discover download "sshleifer/tiny-gpt2" --select 1
-
-# Verify downloads
-modfetch verify --all
-
-# Place model into app directory
-modfetch place --path /path/to/model.safetensors
-
-# Preview a named preset without editing config first
-modfetch place --path /path/to/model.gguf --preset ollama --dry-run
-
-# Batch downloads
-modfetch download --batch jobs.yml --place
-
-# Back up or migrate your model library catalog
-modfetch library export --output modfetch-catalog.json
-modfetch library import --input modfetch-catalog.json --dry-run
-modfetch library sync push --target file:///srv/modfetch/catalog.json
-modfetch library sync pull --target file:///srv/modfetch/catalog.json --dry-run
-modfetch library sync pull --target https://example.com/modfetch-catalog.json --dry-run
-
-# Discover existing local models and remove missing-file metadata
-modfetch library scan --repair-stale
+```text
+cmd/modfetch         CLI entry point
+internal/downloader  direct, chunked, adaptive, and resumable transfers
+internal/resolver    starter, Hugging Face, and CivitAI resolver support
+internal/recommend   hardware-aware recommendation engine
+internal/discovery   provider search and result selection
+internal/tui         Bubble Tea dashboard, library, settings, recommendations
+internal/state       SQLite state and metadata storage
+internal/metadata    Hugging Face, CivitAI, ModelScope, Ollama enrichment
+internal/placer      app placement and preset logic
+docs/                user and maintainer documentation
+scripts/             installer, release, UAT, and validation helpers
 ```
 
-### Detailed Examples
-- Validate config:
-  
-  modfetch config validate --config /path/to/config.yml
-  modfetch config validate --config /path/to/config.yml --strict
-  
-- Download with live progress (speed, ETA):
-  
-  modfetch download --config /path/to/config.yml --url 'https://proof.ovh.net/files/1Mb.dat'
-  modfetch download --config /path/to/config.yml --url 'hf://org/repo/path?rev=main'
-  modfetch download --config /path/to/config.yml --url 'civitai://model/123456?file=vae'
-  
-  - URL forms:
-    - civitai://model/{id}[?version=...] is supported; base page URLs like https://civitai.com/models/{id} auto‑resolve to the latest version’s primary file
-    - hf://org/repo/path?rev=... is supported; shorthand forms are limited to hf://repo and root-level files such as hf://repo/README.md
-  - Default filename:
-    - civitai:// uses `<ModelName> - <OriginalFileName>` if `--dest` is omitted (with collision‑safe suffixes)
-    - direct URLs use the basename of the final resolved URL; query/fragment is stripped and the name is sanitized
-    - TUI and importer try a HEAD request for CivitAI direct endpoints to use server‑provided filenames when available
-  - SHA256 expectation:
-    - pass `--sha256 <HEX>` or `--sha256-file <path>` (.sha256 "hash  filename" format supported)
-  - Quiet mode: add `--quiet`
-  - Auth preflight: runs a lightweight HEAD/0–0 probe and fails early on 401/403 with guidance; disable with `--no-auth-preflight` or set `network.disable_auth_preflight: true` in config
-  - Dry-run planning: use `--dry-run` to resolve URLs/URIs, compute the default destination, and probe remote metadata (filename, size, Accept-Range) without downloading or writing. Combine with `--summary-json` for machine-readable output.
-    - Secrets are never printed (only a boolean `auth_attached`).
-    - If `network.disable_auth_preflight: true` is set, the metadata probe is skipped.
-    
-        modfetch download --config /path/to/config.yml --url 'hf://org/repo/path?rev=main' --dry-run
-        modfetch download --config /path/to/config.yml --url 'https://example.com/file.bin' --dry-run --summary-json
-  - Large model tuning: the default `--profile auto` promotes range-capable objects around 1 GiB or larger to large-model settings. Use `--profile large-model` to force DS4/GGUF tuning, `--profile default` to disable auto-tuning, or explicit aria2-style range tuning with `--connections 16 --chunk-size-mb 64`.
-  - Adaptive transfers: chunked downloads now start from persisted per-host history when available, ramp up while throughput is healthy, and back off on stalls or 429 responses.
-  - Benchmark transfers: use `modfetch bench --url <URL> --tools modfetch,aria2 --duration 30s --json` to run disposable samples against the same URL before committing to a huge download. Use `modfetch bench --history` to inspect the persisted host/tuning history that feeds future adaptive starts.
-  - On completion, a summary is printed (dest, size, SHA256, duration, average speed)
-  - Cancel with Ctrl+C (SIGINT/SIGTERM); staged partial files and completed chunks are preserved for resume. Use `--no-resume` or `modfetch clean` when you want to discard staged data.
-- Place artifacts into apps:
-  
-  modfetch place --config /path/to/config.yml --path /path/to/model.safetensors
-  
-- Batch downloads from YAML (optionally place after):
-  
-  modfetch download --config /path/to/config.yml --batch /path/to/jobs.yml --place
-  
-  - See docs/BATCH.md for the schema and examples
-- TUI dashboard (live list, filters, per‑row speed/ETA):
+Please keep PRs focused, update docs for user-visible behavior, avoid logging
+secrets, and include a real smoke test for provider/download changes.
 
-  modfetch tui --config /path/to/config.yml
+## Licence
 
-  - **Feature-rich interface** with extensive UX upgrades
-    - **7 Tabs**: All, Pending, Active, Completed, Failed, **Library**, **Settings**
-    - **Library (Tab 5 or L)**: Browse downloaded models, search, filter, view details
-      - Search by name with `/`, filter by type/source
-      - View rich metadata: quantization, size, tags, descriptions
-      - Mark favorites with `f`, scan directories with `S`
-      - See docs/LIBRARY.md for full guide
-    - **Settings (Tab 6 or M)**: View configuration and token status
-      - See directory paths, placement rules, download settings
-      - Check HuggingFace and CivitAI token status
-      - Visual indicators for token validation
-    - Keys: j/k (select), / (filter/search), m (menu), h/? (help)
-    - Sorting: s (sort by speed), e (sort by ETA), R (remaining bytes), o (clear sort)
-    - Actions: n (new), r (refresh), d (details), g (group by status), t (toggle columns)
-    - Per‑row actions: p (pause/cancel), y (retry), C (copy path), U (copy URL), O (open/reveal), D (delete staged), X (clear row)
-    - Live speed and ETA with throughput sparklines and comprehensive status indicators
-  - Behavior:
-    - Resolving spinner appears immediately, then planning → running
-    - Live speed and ETA for both chunked and single‑stream fallback downloads
-    - Accepts CivitAI model page URLs (https://civitai.com/models/ID) and rewrites them internally to the correct direct download URL
-    - The header marks the active sort (SPEED*/ETA*/[sort: remaining]); the Stats panel shows View indicators (Sort/Group/Column/Theme)
-  - See the full TUI guide: docs/TUI_GUIDE.md
-  - See the Library guide: docs/LIBRARY.md
-  - See the Scanner guide: docs/SCANNER.md
-- Verify checksums in state:
-  
-  modfetch verify --config /path/to/config.yml --all
-  
-  - Use `--only-errors` to show only problematic files; add `--summary` for totals and paths
-  - Write/refresh a sidecar: add `--fix-sidecar` to rewrite `<dest>.sha256` once verified
-- Deep‑verify safetensors and scan/repair a directory:
-  
-  modfetch verify --config /path/to/config.yml --scan-dir /path/to/models --safetensors-deep
-  modfetch verify --config /path/to/config.yml --scan-dir /path/to/models --safetensors-deep --repair --quarantine-incomplete
-  
-  - Only errors + summary: add `--only-errors --summary`
-- JSON summary (for scripting/CI):
-  
-  modfetch download --config /path/to/config.yml --url 'https://proof.ovh.net/files/1Mb.dat' --summary-json
-  
-- Placement dry‑run:
-  
-  modfetch place --config /path/to/config.yml --path /path/to/model.safetensors --dry-run
-  
-- Clean partials and orphan sidecars:
-  
-  modfetch clean --config /path/to/config.yml --days 7 --include-next-to-dest --sidecars
-  
-
-Resolvers
-- See docs/RESOLVERS.md for hf:// and civitai:// formats, examples, and auth via env tokens.
-
-Logging and metrics
-- Control verbosity: `--log-level debug|info|warn|error`; `--json` for JSON logs
-- Quiet mode: `--quiet` (download command)
-- Metrics: Prometheus textfile exporter (see docs/METRICS.md)
-- Troubleshooting: see docs/TROUBLESHOOTING.md
-
-Contributing
-- Requirements: Go 1.22+; GitHub CLI (gh) optional for releases
-- Getting started:
-  
-  git clone https://github.com/<you>/modfetch
-  cd modfetch
-  make build && make test
-  
-- Development workflow:
-  - Create a feature branch per change
-  - Keep PRs focused and small; include rationale in the PR description
-  - Update docs for user‑visible changes
-  - Ensure tests pass: make test
-  - Run a quick smoke test locally:
-    
-    ./bin/modfetch download --config /path/to/config.yml --url 'https://proof.ovh.net/files/1Mb.dat'
-    
-- PR checklist:
-  - [ ] Tests pass (go test ./...)
-  - [ ] Docs updated (README/USER_GUIDE as applicable)
-  - [ ] No secrets in configs or logs
-  - [ ] Manual smoke test completed for at least one public URL
-- Release process (maintainers):
-  - Tag: git tag -a vX.Y.Z -m "modfetch vX.Y.Z" && git push origin vX.Y.Z
-  - CI will build and publish artifacts automatically for:
-    - Linux: amd64, arm64
-    - macOS: amd64, arm64, universal (fat) binary
-    - Checksums (.sha256) for all artifacts
-  - Release notes are extracted from the matching `CHANGELOG.md` section by `scripts/release-notes.sh`
-  - Package metadata is tracked under `packaging/homebrew/` and `packaging/aur/`
-  - Optional (local): `make release-dist` and `make macos-universal` if you want to reproduce artifacts locally
-
-See CONTRIBUTING.md for full guidelines.
-
-Project layout
-- cmd/modfetch: CLI entry point
-- internal/config: YAML loader and validation
-- internal/downloader: single + chunked engines
-- internal/resolver: hf:// and civitai:// resolvers
-- internal/placer: placement engine
-- internal/scanner: directory scanner for model discovery
-- internal/metadata: metadata fetchers for HuggingFace, CivitAI, ModelScope, and Ollama
-- internal/tui: TUI models (Library, Scanner, Settings, Downloads)
-- internal/state: SQLite state DB with indexed metadata storage
-- internal/metrics: Prometheus textfile metrics
-- docs/: configuration, testing, placement, resolvers, library, scanner
-- scripts/: smoke test and helpers
-
-Troubleshooting
-- Missing tokens: Set `HF_TOKEN` or `CIVITAI_TOKEN` in your environment when accessing private resources.
-- TLS or HEAD failures: Downloader falls back to single‑stream when Range/HEAD is unsupported.
-- Resume: Re‑running the same download will resume and verify integrity.
-- Library not showing models: Press `S` in Library view or run `modfetch library scan`.
-- Slow scanning: Use `modfetch library scan --workers 4`; subsequent scans also use indexed duplicate detection.
-
-Roadmap
-- See docs/ROADMAP.md for the active, prioritized roadmap
-- v0.7.x focus:
-  - Completed: AUR `modfetch-bin` publication
-  - Completed: Ollama Library metadata enrichment beyond ModelScope
-  - Completed: authenticated HTTP(S) catalog sync push/pull
-  - User-driven archive format expansion
-  - Completed: non-interactive TUI snapshots with `modfetch tui --snapshot --json`
+MIT. See [LICENCE](LICENSE).

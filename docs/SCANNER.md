@@ -573,6 +573,6 @@ Comprehensive test suite in `scanner_test.go`:
 ## See Also
 
 - [Library Documentation](LIBRARY.md) - User-facing library features
-- [Metadata System](METADATA.md) - Metadata structure and fetching
+- [Library Metadata Sources](LIBRARY.md#metadata-sources) - Metadata sources and enrichment behavior
 - [Database Schema](DATABASE.md) - SQLite schema and indexes
-- [Performance Guide](PERFORMANCE.md) - Optimization techniques
+- [Testing Guide](TESTING_GUIDE.md) - Validation and benchmark commands

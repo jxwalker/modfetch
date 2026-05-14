@@ -1,6 +1,8 @@
 # CLI Reference Guide
 
-Complete command-line reference for modfetch. For the visual TUI interface, see [TUI Guide](TUI_GUIDE.md).
+Complete command-line reference for modfetch. For a product overview, see
+[README.md](../README.md). For the visual TUI interface, see
+[TUI Guide](TUI_GUIDE.md).
 
 ## Table of Contents
 
@@ -12,12 +14,14 @@ Complete command-line reference for modfetch. For the visual TUI interface, see 
   - [discover](#discover)
   - [recommend](#recommend)
   - [starter](#starter)
+  - [status](#status)
+  - [library](#library)
+  - [dedupe](#dedupe)
   - [verify](#verify)
   - [place](#place)
   - [clean](#clean)
   - [config](#config)
   - [tui](#tui)
-  - [library](#library)
 - [URL Formats](#url-formats)
 - [Examples](#examples)
 - [Scripting](#scripting)
@@ -26,7 +30,21 @@ Complete command-line reference for modfetch. For the visual TUI interface, see 
 
 ## Overview
 
-modfetch provides a rich CLI for downloading, verifying, and managing AI models. All commands support:
+modfetch provides a rich CLI for choosing, downloading, verifying, and managing
+AI model files. It can operate like a normal downloader when you already have a
+URL, but it also understands model-provider workflows:
+
+- `recommend` ranks real downloadable files for your task and hardware.
+- `discover` searches model providers when you know a name but not the exact
+  file URL.
+- `download` handles direct URLs plus `starter://`, `hf://`, and `civitai://`
+  resolver URIs with resume and verification.
+- `bench` compares modfetch and aria2 on the same URL and feeds transfer
+  history back into adaptive downloads.
+- `library`, `place`, `verify`, `dedupe`, and `clean` keep the local model
+  directory usable after files land.
+
+All commands support:
 
 - **Structured output** with `--summary-json` for scripting
 - **Flexible logging** with `--log-level` and `--json`
@@ -35,9 +53,11 @@ modfetch provides a rich CLI for downloading, verifying, and managing AI models.
 **Quick command summary:**
 ```bash
 modfetch download --url URL       # Download a file
+modfetch starter list             # Beginner-safe starter artifacts
 modfetch discover search "tiny gpt2"
 modfetch discover download "sshleifer/tiny-gpt2" --select 1
 modfetch recommend --task coding   # Pick a model that fits this machine
+modfetch bench --history           # Show learned transfer history
 modfetch verify --all              # Verify all downloads
 modfetch place --path FILE         # Place model into app
 modfetch clean --days 7            # Clean old partials
