@@ -196,9 +196,12 @@ These are useful, but not required for the first v0.7.0 release:
 - [DONE] Recommendation release hardening:
   run end-to-end UAT on the CLI and TUI recommendation flows, refresh release
   notes, and prepare a patch tag once the guided recommendation work is merged.
-- [NEXT] Package channel verification:
+- [DONE] Package channel verification:
   after v0.8.1 assets publish, verify release artifacts and refresh downstream
   Homebrew/AUR package metadata as needed.
+- [NEXT] v0.9 planning:
+  choose the next product direction from real user feedback after the v0.8.1
+  recommendation and adaptive-transfer release line has shipped.
 
 ## Completed Release History
 
