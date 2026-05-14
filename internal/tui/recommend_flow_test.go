@@ -226,6 +226,30 @@ func TestRecommendFlowEscCancelsInFlightSearch(t *testing.T) {
 	}
 }
 
+func TestRecommendResultsIgnoreStaleFlow(t *testing.T) {
+	m := &Model{recommendFlow: recommendFlow{
+		active:  true,
+		loading: true,
+		flowID:  2,
+	}}
+
+	m.Update(recommendResultsMsg{
+		flowID: 1,
+		recommendations: []recommend.Recommendation{{
+			Index: 1,
+			Name:  "stale",
+			URI:   "https://example.com/stale.gguf",
+		}},
+	})
+
+	if !m.recommendFlow.loading {
+		t.Fatal("stale result should not mutate the active flow")
+	}
+	if len(m.recommendFlow.results) != 0 {
+		t.Fatalf("stale result populated results: %+v", m.recommendFlow.results)
+	}
+}
+
 func TestRecommendFlowRenderTaskStep(t *testing.T) {
 	m := &Model{th: defaultTheme()}
 	m.startRecommendFlow()

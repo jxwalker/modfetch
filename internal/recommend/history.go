@@ -57,6 +57,12 @@ func RecordHistory(st *state.DB, task, query, hardwareKey string, recs []Recomme
 	if st == nil {
 		return errors.New("nil state db")
 	}
+	action = strings.ToLower(strings.TrimSpace(action))
+	switch action {
+	case "selected", "skipped", "shown":
+	default:
+		return fmt.Errorf("unsupported recommendation history action %q", action)
+	}
 	rows := make([]state.RecommendationHistoryRow, 0, len(recs))
 	for _, rec := range recs {
 		switch action {

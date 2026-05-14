@@ -37,6 +37,7 @@ type recommendChoice struct {
 type recommendFlow struct {
 	active        bool
 	step          recommendStep
+	flowID        int64
 	input         textinput.Model
 	cancel        context.CancelFunc
 	taskIndex     int
@@ -55,11 +56,13 @@ type recommendFlow struct {
 }
 
 type recommendResultsMsg struct {
+	flowID          int64
 	recommendations []recommend.Recommendation
 	hardware        recommend.HardwareProfile
 	query           string
 	task            string
 	hardwareKey     string
+	warning         string
 	err             error
 }
 
@@ -72,6 +75,7 @@ func (m *Model) startRecommendFlow() {
 	m.recommendFlow = recommendFlow{
 		active:   true,
 		step:     recommendStepTask,
+		flowID:   time.Now().UnixNano(),
 		input:    input,
 		hardware: recommend.DetectHardware(ctx),
 	}
@@ -219,6 +223,7 @@ func (m *Model) recommendSearchCmd() tea.Cmd {
 	sizeLimit := m.selectedRecommendSizeLimit()
 	query := strings.TrimSpace(m.recommendFlow.query)
 	hardware := m.selectedRecommendHardware()
+	flowID := m.recommendFlow.flowID
 	st := m.st
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	m.recommendFlow.cancel = cancel
@@ -235,19 +240,19 @@ func (m *Model) recommendSearchCmd() tea.Cmd {
 			var err error
 			feedback, err = recommend.FeedbackFromHistory(st, effectiveTask, effectiveQuery, hardwareKey)
 			if err != nil {
-				return recommendResultsMsg{err: fmt.Errorf("load recommendation history: %w", err)}
+				return recommendResultsMsg{flowID: flowID, err: fmt.Errorf("load recommendation history: %w", err)}
 			}
 		}
 		recs, hw, err := recommend.Recommend(ctx, recommend.Options{
 			Query:    effectiveQuery,
-			Task:     task,
+			Task:     effectiveTask,
 			Provider: provider,
 			Limit:    20,
 			Hardware: hardware,
 			Feedback: feedback,
 		})
 		if err != nil {
-			return recommendResultsMsg{err: err}
+			return recommendResultsMsg{flowID: flowID, err: err}
 		}
 		recs = filterRecommendResults(recs, runtimeTarget, sizeLimit)
 		if len(recs) > 8 {
@@ -256,17 +261,20 @@ func (m *Model) recommendSearchCmd() tea.Cmd {
 		for i := range recs {
 			recs[i].Index = i + 1
 		}
+		warning := ""
 		if st != nil && len(recs) > 0 {
 			if err := recommend.RecordHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "shown", 0); err != nil {
-				return recommendResultsMsg{err: fmt.Errorf("record shown recommendations: %w", err)}
+				warning = "record shown recommendations: " + err.Error()
 			}
 		}
 		return recommendResultsMsg{
+			flowID:          flowID,
 			recommendations: recs,
 			hardware:        hw,
 			query:           effectiveQuery,
 			task:            effectiveTask,
 			hardwareKey:     hardwareKey,
+			warning:         warning,
 		}
 	}
 }

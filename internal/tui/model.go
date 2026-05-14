@@ -449,7 +449,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshLibraryData()
 		return m, m.refresh()
 	case recommendResultsMsg:
-		if !m.recommendFlow.active {
+		if !m.recommendFlow.active || msg.flowID != m.recommendFlow.flowID {
 			return m, nil
 		}
 		m.recommendFlow.cancel = nil
@@ -471,6 +471,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.addToast("no recommendations matched those filters")
 		} else {
 			m.addToast(fmt.Sprintf("recommend: %d option(s)", len(msg.recommendations)))
+		}
+		if strings.TrimSpace(msg.warning) != "" {
+			m.addToast("warning: " + msg.warning)
 		}
 		return m, nil
 	case dlDoneMsg:

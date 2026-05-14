@@ -1,10 +1,12 @@
 package recommend
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jxwalker/modfetch/internal/discovery"
+	"github.com/jxwalker/modfetch/internal/state"
 )
 
 func TestRankPrefersHardwareFitAndTask(t *testing.T) {
@@ -145,6 +147,22 @@ func TestApplyFeedbackBoostsPriorSelections(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(ranked[0].Reasons, " "), "prior selection") {
 		t.Fatalf("missing feedback reason: %#v", ranked[0].Reasons)
+	}
+}
+
+func TestRecordHistoryRejectsUnsupportedAction(t *testing.T) {
+	db, err := state.NewDB(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatalf("new db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	err = RecordHistory(db, "chat", "llama", "darwin/arm64/ram128g/unified", []Recommendation{{
+		Index: 1,
+		URI:   "hf://owner/model/model.gguf?rev=main",
+	}}, "accepted", 1)
+	if err == nil || !strings.Contains(err.Error(), "unsupported recommendation history action") {
+		t.Fatalf("RecordHistory unsupported action err = %v", err)
 	}
 }
 
