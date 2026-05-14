@@ -106,7 +106,11 @@ modfetch recommend --task coding --no-learn
 The same selection path is available in the TUI. Launch `modfetch tui`, press
 `G`, choose the task, hardware budget, provider, runtime or placement target,
 maximum file size, and optional query, then press `Enter` on a recommendation
-to start the normal resumable download.
+to start the normal resumable download. On the recommendation result list,
+press `i` to inspect ranking rationale, runtime setup, placement prerequisites,
+and the dry-run destination/transfer plan. Press `p` to run a live metadata
+probe that checks the resolved URL, remote size, range support, and any learned
+per-host transfer history before you commit to a large download.
 
 #### Dry-run planning
 

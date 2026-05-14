@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/dustin/go-humanize"
 	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/logging"
 	"github.com/jxwalker/modfetch/internal/placer"
@@ -475,6 +476,36 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if strings.TrimSpace(msg.warning) != "" {
 			m.addToast("warning: " + msg.warning)
 		}
+		return m, nil
+	case recommendInspectProbeMsg:
+		if !m.recommendFlow.active || msg.flowID != m.recommendFlow.flowID {
+			return m, nil
+		}
+		if msg.selected != m.recommendFlow.selected {
+			return m, nil
+		}
+		if msg.selected < 0 || msg.selected >= len(m.recommendFlow.results) {
+			return m, nil
+		}
+		if m.recommendFlow.results[msg.selected].URI != msg.uri {
+			return m, nil
+		}
+		m.recommendFlow.cancel = nil
+		m.recommendFlow.inspect = true
+		m.recommendFlow.probeLoading = false
+		m.recommendFlow.probeErr = ""
+		if msg.err != nil {
+			m.recommendFlow.probeErr = msg.err.Error()
+			m.recommendFlow.probeDetails = recommendProbeDetails{}
+			m.addToast("recommend probe failed: " + msg.err.Error())
+			return m, nil
+		}
+		m.recommendFlow.probeDetails = msg.details
+		size := "unknown"
+		if msg.details.Size > 0 {
+			size = humanize.Bytes(uint64(msg.details.Size))
+		}
+		m.addToast("recommend probe: size=" + size + " ranges=" + fmt.Sprint(msg.details.AcceptRange))
 		return m, nil
 	case dlDoneMsg:
 		// Apply placement metadata if needed (safe concurrent map access from Update thread)

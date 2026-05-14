@@ -234,7 +234,10 @@ Inside the TUI, press `G` to choose a model without copying a URL. The guided
 flow filters live provider results by task, detected or overridden hardware,
 provider, runtime or placement target, and maximum file size. Press `Enter` on
 the selected recommendation to start the same resumable download pipeline used
-by the CLI.
+by the CLI. Before starting a large result, press `i` to inspect why it was
+ranked, where it will be placed, and what runtime setup it expects; press `p`
+to run a live metadata probe for remote size, range support, and prior host
+transfer history without writing files.
 
 If you want modfetch to choose a model that fits your hardware, use
 `recommend`:

@@ -156,6 +156,14 @@ resumable downloader. When a runtime has a placement preset and your config has
 matching placement rules, the TUI saves the file directly under that configured
 target; otherwise it saves under `download_root`.
 
+On the result list, press `i` to inspect the selected recommendation before
+starting it. The detail view shows the ranking rationale, estimated memory
+budget, runtime setup guidance, placement preset readiness, planned destination,
+and current transfer settings. Press `p` to run a live metadata probe for the
+selected URL; the probe resolves resolver URIs, checks remote size and range
+support, and shows any prior per-host transfer history that will influence
+adaptive downloads. The probe does not create a download row or write files.
+
 ### Settings Tab Keys
 
 - `j`/`k` or arrow keys - Scroll settings view

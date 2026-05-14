@@ -411,6 +411,7 @@ The modfetch TUI has **7 tabs** organized into three functional groups:
    └─► Press '0' (All tab)
        └─► Press 'G' (guided recommendation) or 'n' (known URL)
        └─► Choose model filters or paste URL
+       └─► On recommendation results, press 'i' for details or 'p' to probe
        └─► Watch in Active tab (Press '2')
 
 5. Organize your library

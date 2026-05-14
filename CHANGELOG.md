@@ -9,6 +9,10 @@ Added
   model by task, detected or overridden hardware budget, provider, runtime or
   placement target, and maximum file size before starting a normal resumable
   download.
+- Added TUI recommendation inspection: result rows now expose rationale,
+  runtime setup guidance, placement readiness, dry-run destination and transfer
+  settings, plus a live metadata probe for size, range support, and prior host
+  transfer history before starting a large download.
 
 ## v0.8.0 — 2026-05-13
 
