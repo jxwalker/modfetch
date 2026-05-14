@@ -283,7 +283,7 @@ func filterRecommendResults(recs []recommend.Recommendation, runtimeTarget strin
 	runtimeTarget = strings.ToLower(strings.TrimSpace(runtimeTarget))
 	out := make([]recommend.Recommendation, 0, len(recs))
 	for _, rec := range recs {
-		if sizeLimit > 0 && (rec.Size <= 0 || rec.Size > sizeLimit) {
+		if sizeLimit > 0 && rec.Size > 0 && rec.Size > sizeLimit {
 			continue
 		}
 		if runtimeTarget != "" && runtimeTarget != "any" && !recommendationMatchesRuntime(rec, runtimeTarget) {
@@ -356,10 +356,9 @@ func (m *Model) startRecommendedDownload() tea.Cmd {
 		hardwareKey = recommend.HardwareKey(m.recommendFlow.hardware)
 	}
 	if err := recommend.RecordHistory(m.st, task, query, hardwareKey, m.recommendFlow.results, "selected", rec.Index); err != nil {
-		m.addToast("warning: selection history failed: " + err.Error())
-	}
-	if err := recommend.RecordHistory(m.st, task, query, hardwareKey, m.recommendFlow.results, "skipped", rec.Index); err != nil {
-		m.addToast("warning: skipped history failed: " + err.Error())
+		m.addToast("warning: recommendation history failed: " + err.Error())
+	} else if err := recommend.RecordHistory(m.st, task, query, hardwareKey, m.recommendFlow.results, "skipped", rec.Index); err != nil {
+		m.addToast("warning: recommendation history failed: " + err.Error())
 	}
 	artifactType := recommendArtifactType(rec, task, runtimeTarget)
 	dest := m.computeDefaultDest(rec.URI)

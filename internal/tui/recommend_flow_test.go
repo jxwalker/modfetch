@@ -50,6 +50,31 @@ func TestRecommendFlowFiltersByRuntimeAndSize(t *testing.T) {
 	}
 }
 
+func TestRecommendFlowSizeFilterKeepsUnknownSizeResults(t *testing.T) {
+	recs := []recommend.Recommendation{
+		{
+			Name: "unknown ollama",
+			URI:  "hf://owner/unknown/model.gguf?rev=main",
+			RuntimeHints: []recommend.RuntimeHint{
+				{Runtime: "Ollama", PlacementPreset: "ollama"},
+			},
+		},
+		{
+			Name: "known too large",
+			URI:  "hf://owner/large/model.gguf?rev=main",
+			Size: 20 << 30,
+			RuntimeHints: []recommend.RuntimeHint{
+				{Runtime: "Ollama", PlacementPreset: "ollama"},
+			},
+		},
+	}
+
+	got := filterRecommendResults(recs, "ollama", 8<<30)
+	if len(got) != 1 || got[0].Name != "unknown ollama" {
+		t.Fatalf("filtered recommendations = %+v, want unknown-size result kept", got)
+	}
+}
+
 func TestRecommendFlowStartsSelectedRecommendationDownload(t *testing.T) {
 	tmpDir := t.TempDir()
 	db, err := state.NewDB(filepath.Join(tmpDir, "state.db"))
