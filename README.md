@@ -88,7 +88,7 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════════╗
-║  modfetch v0.8.0                    Tab: [2] Active                       ║
+║  modfetch v0.8.1                    Tab: [2] Active                       ║
 ╠═══════════════════════════════════════════════════════════════════════════╣
 ║  🔄 Active: 2   ✓ Completed: 45   ⏳ Pending: 3   ✗ Failed: 1            ║
 ║  Throughput: 32.5 MB/s   •   Auth: HF ✓  CivitAI ✓                        ║
@@ -126,14 +126,19 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 ---
 
 ## Upcoming
+- **Package channel updates**: validate the v0.8.1 release assets after publish
+  and refresh downstream Homebrew/AUR package metadata as needed.
+
+## What's new in v0.8.1
 - **Guided TUI recommendations**: press `G` in the TUI to choose a model by
   task, detected or overridden hardware budget, provider, runtime or placement
   target, and maximum file size, then start the same resumable download path
   used by `modfetch download`. In the result list, press `i` for rationale,
   runtime setup, placement, and dry-run transfer details, or `p` to probe live
   size/range metadata before starting a large download.
-- **Recommendation refinements**: end-to-end release hardening around the guided
-  recommendation path and real-provider UAT before the next patch tag.
+- **Recommendation release hardening**: the guided recommendation path now has
+  real-provider UAT, live probe coverage, docs drift validation, and cross-platform
+  CI coverage before the patch tag.
 
 ## What's new in v0.8.0
 - **Hardware-aware recommendations**: `modfetch recommend --task coding` detects

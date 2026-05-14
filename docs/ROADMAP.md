@@ -1,6 +1,6 @@
 # Roadmap
 
-This is the active project roadmap after the v0.8.0 release. Historical backlog
+This is the active project roadmap after the v0.8.1 release. Historical backlog
 items that shipped in v0.6.x and v0.7.x are summarized at the end for traceability.
 
 Status key:
@@ -11,7 +11,7 @@ Status key:
 
 ## Current Baseline
 
-Current release: v0.8.0, tagged 2026-05-13.
+Current release: v0.8.1, tagged 2026-05-14.
 
 Shipped baseline:
 - Reliable direct, Hugging Face, and CivitAI downloads with resume, retries,
@@ -31,6 +31,9 @@ Shipped baseline:
 - Recommendation history and runtime hints, so repeated choices for the same
   task, query, and hardware class influence ranking, and recommendation output
   explains likely local runtimes and placement presets.
+- Guided TUI recommendations opened with `G`, including result inspection,
+  runtime setup guidance, placement readiness, and live transfer metadata
+  probing before large downloads start.
 
 ## v0.7.0 Goal [DONE]
 
@@ -190,12 +193,18 @@ These are useful, but not required for the first v0.7.0 release:
   add richer TUI detail views for recommendation rationale, runtime setup
   commands, placement prerequisites, and dry-run transfer metadata before the
   user starts a large download.
-- [NEXT] Recommendation release hardening:
+- [DONE] Recommendation release hardening:
   run end-to-end UAT on the CLI and TUI recommendation flows, refresh release
   notes, and prepare a patch tag once the guided recommendation work is merged.
+- [NEXT] Package channel verification:
+  after v0.8.1 assets publish, verify release artifacts and refresh downstream
+  Homebrew/AUR package metadata as needed.
 
 ## Completed Release History
 
+- v0.8.1: delivered guided TUI recommendations, pre-download recommendation
+  inspection, live transfer metadata probing, and release-hardened docs/UAT for
+  the recommendation workflow.
 - v0.8.0: delivered benchmark-driven transfer tuning, live adaptive
   ramp-up/backoff, persisted per-host transfer history, hardware-aware
   recommendations, learned recommendation history, and runtime/placement hints
