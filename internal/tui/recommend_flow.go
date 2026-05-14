@@ -38,6 +38,7 @@ type recommendFlow struct {
 	active        bool
 	step          recommendStep
 	input         textinput.Model
+	cancel        context.CancelFunc
 	taskIndex     int
 	hardwareIndex int
 	providerIndex int
@@ -63,7 +64,7 @@ type recommendResultsMsg struct {
 }
 
 func (m *Model) startRecommendFlow() {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	input := textinput.New()
 	input.Placeholder = "Optional search, e.g. llama 8b gguf"
@@ -79,6 +80,10 @@ func (m *Model) startRecommendFlow() {
 func (m *Model) updateRecommendFlow(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s := msg.String()
 	if s == "esc" {
+		if m.recommendFlow.cancel != nil {
+			m.recommendFlow.cancel()
+			m.recommendFlow.cancel = nil
+		}
 		m.recommendFlow.active = false
 		m.recommendFlow.input.Blur()
 		return m, nil
@@ -96,7 +101,7 @@ func (m *Model) updateRecommendFlow(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.recommendFlow.err = ""
 			m.recommendFlow.results = nil
 			return m, m.recommendSearchCmd()
-		case "left", "ctrl+h":
+		case "shift+tab":
 			m.recommendFlow.step = recommendStepSize
 			m.recommendFlow.input.Blur()
 			return m, nil
@@ -117,7 +122,7 @@ func (m *Model) updateRecommendFlow(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.recommendFlow.selected--
 			}
 			return m, nil
-		case "left", "ctrl+h":
+		case "left", "shift+tab":
 			m.recommendFlow.step = recommendStepQuery
 			m.recommendFlow.input.Focus()
 			return m, nil
@@ -215,8 +220,9 @@ func (m *Model) recommendSearchCmd() tea.Cmd {
 	query := strings.TrimSpace(m.recommendFlow.query)
 	hardware := m.selectedRecommendHardware()
 	st := m.st
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	m.recommendFlow.cancel = cancel
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
 		effectiveTask := recommend.NormalizeTask(task)
 		effectiveQuery := query
@@ -233,7 +239,7 @@ func (m *Model) recommendSearchCmd() tea.Cmd {
 			}
 		}
 		recs, hw, err := recommend.Recommend(ctx, recommend.Options{
-			Query:    query,
+			Query:    effectiveQuery,
 			Task:     task,
 			Provider: provider,
 			Limit:    20,
@@ -342,12 +348,10 @@ func (m *Model) startRecommendedDownload() tea.Cmd {
 		hardwareKey = recommend.HardwareKey(m.recommendFlow.hardware)
 	}
 	if err := recommend.RecordHistory(m.st, task, query, hardwareKey, m.recommendFlow.results, "selected", rec.Index); err != nil {
-		m.addToast("recommend history failed: " + err.Error())
-		return nil
+		m.addToast("warning: selection history failed: " + err.Error())
 	}
 	if err := recommend.RecordHistory(m.st, task, query, hardwareKey, m.recommendFlow.results, "skipped", rec.Index); err != nil {
-		m.addToast("recommend history failed: " + err.Error())
-		return nil
+		m.addToast("warning: skipped history failed: " + err.Error())
 	}
 	artifactType := recommendArtifactType(rec, task, runtimeTarget)
 	dest := m.computeDefaultDest(rec.URI)
@@ -387,13 +391,7 @@ func (m *Model) recommendPlacementDestination(urlStr, artifactType, preset strin
 	if preset == "" || artifactType == "" {
 		return "", false
 	}
-	base := filepath.Base(m.computeDefaultDest(urlStr))
-	if strings.TrimSpace(base) == "" || base == "." || base == string(filepath.Separator) {
-		base = filepath.Base(m.immediateDestCandidate(urlStr))
-	}
-	if strings.TrimSpace(base) == "" || base == "." || base == string(filepath.Separator) {
-		base = "download"
-	}
+	base := m.recommendDestinationBase(urlStr)
 	for _, rule := range m.cfg.Placement.Mapping {
 		if strings.TrimSpace(rule.Match) != artifactType {
 			continue
@@ -415,6 +413,17 @@ func (m *Model) recommendPlacementDestination(urlStr, artifactType, preset strin
 		}
 	}
 	return "", false
+}
+
+func (m *Model) recommendDestinationBase(urlStr string) string {
+	base := filepath.Base(m.computeDefaultDest(urlStr))
+	if strings.TrimSpace(base) == "" || base == "." || base == string(filepath.Separator) {
+		base = filepath.Base(m.immediateDestCandidate(urlStr))
+	}
+	if strings.TrimSpace(base) == "" || base == "." || base == string(filepath.Separator) {
+		return "download"
+	}
+	return base
 }
 
 func (m *Model) ensureDownloadMaps() {
@@ -597,8 +606,12 @@ func (m *Model) renderRecommendFlow() string {
 	case recommendStepResults:
 		sb.WriteString(m.renderRecommendResults())
 	}
+	backHint := "Shift+Tab/Left"
+	if m.recommendFlow.step == recommendStepQuery {
+		backHint = "Shift+Tab"
+	}
 	sb.WriteString("\n")
-	sb.WriteString(m.th.label.Render("j/k: choose  •  Enter: continue/start  •  Left: back  •  Esc: close") + "\n")
+	sb.WriteString(m.th.label.Render("j/k: choose  •  Enter: continue/start  •  "+backHint+": back  •  Esc: close") + "\n")
 	return sb.String()
 }
 

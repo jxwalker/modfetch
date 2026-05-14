@@ -85,7 +85,7 @@ func (m *Model) renderToasts() string {
 
 func (m *Model) renderCommandsBar() string {
 	// concise single-line commands reference
-	return m.th.footer.Render("G recommend • n new • b batch • y/r start • p cancel • D delete • O open • / filter • s/e/R sort • o clear • g group host • t col • v compact • i inspector • ? help • q quit")
+	return m.th.footer.Render("G recommend • n new • b batch • y/r start • p cancel • D delete • O open • / filter • s/e/R sort • o clear • g group host • t col • v compact • i inspector • H toasts • ? help • q quit")
 }
 
 func (m *Model) renderLibraryCommandsBar() string {

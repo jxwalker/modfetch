@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/discovery"
@@ -187,6 +188,41 @@ func TestRecommendFlowUsesConfiguredPlacementTargetAsDestination(t *testing.T) {
 	}
 	if m.autoPlace["https://example.com/model.gguf|"+wantDest] {
 		t.Fatal("recommend placement target should use the target destination without a second place pass")
+	}
+}
+
+func TestRecommendFlowQueryStepKeepsTextEditingKeys(t *testing.T) {
+	input := textinput.New()
+	input.SetValue("llama")
+	m := &Model{recommendFlow: recommendFlow{active: true, step: recommendStepQuery, input: input}}
+	m.recommendFlow.input.Focus()
+
+	m.updateRecommendFlow(tea.KeyMsg{Type: tea.KeyLeft})
+	if m.recommendFlow.step != recommendStepQuery {
+		t.Fatalf("left should stay in query input, got step %v", m.recommendFlow.step)
+	}
+
+	m.updateRecommendFlow(tea.KeyMsg{Type: tea.KeyShiftTab})
+	if m.recommendFlow.step != recommendStepSize {
+		t.Fatalf("shift+tab should navigate back to size step, got %v", m.recommendFlow.step)
+	}
+}
+
+func TestRecommendFlowEscCancelsInFlightSearch(t *testing.T) {
+	cancelled := false
+	m := &Model{recommendFlow: recommendFlow{
+		active:  true,
+		loading: true,
+		cancel:  func() { cancelled = true },
+	}}
+
+	m.updateRecommendFlow(tea.KeyMsg{Type: tea.KeyEsc})
+
+	if !cancelled {
+		t.Fatal("expected esc to cancel in-flight recommendation search")
+	}
+	if m.recommendFlow.active {
+		t.Fatal("expected esc to close recommendation flow")
 	}
 }
 

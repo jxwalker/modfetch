@@ -452,6 +452,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.recommendFlow.active {
 			return m, nil
 		}
+		m.recommendFlow.cancel = nil
 		m.recommendFlow.loading = false
 		m.recommendFlow.err = ""
 		if msg.err != nil {

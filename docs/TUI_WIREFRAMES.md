@@ -342,7 +342,7 @@ The modfetch TUI has **7 tabs** organized into three functional groups:
 │  NAVIGATION           DOWNLOADS        LIBRARY          │
 │  ───────────          ─────────        ───────          │
 │  0-6  Tabs            G  Recommend     5/L  Open        │
-│                       n  New                          │
+│  T    Theme           n  New           Space Select     │
 │  j/k  Up/Down         y  Start         /    Search      │
 │  ?    Help            p  Pause         f    Favorite    │
 │  q    Quit            D  Delete        S    Scan        │
