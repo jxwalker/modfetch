@@ -49,7 +49,7 @@ The modfetch TUI has **7 tabs** organized into three functional groups:
 ║  │  Planning   │ ...         │ -          │ -      │ 2.2GB │ flux...    │║
 ║  └──────────────────────────────────────────────────────────────────────┘║
 ╠══════════════════════════════════════════════════════════════════════════╣
-║  ↑↓:Select  n:New  y:Retry  p:Pause  D:Delete  O:Open  /:Filter  ?:Help  ║
+║  ↑↓:Select  G:Recommend  n:New  y:Retry  p:Pause  D:Delete  /:Filter  ?:Help ║
 ╚══════════════════════════════════════════════════════════════════════════╝
 ```
 
@@ -286,6 +286,7 @@ The modfetch TUI has **7 tabs** organized into three functional groups:
 ║  │ 0-4      Switch to download tabs (All/Pending/Active/Done/Fail) │ ║
 ║  │ 5 or L   Library tab                                            │ ║
 ║  │ 6 or M   Settings tab                                           │ ║
+║  │ G        Guided model recommendations                           │ ║
 ║  │ ?        Help overlay                                           │ ║
 ║  │ q or Q   Quit                                                   │ ║
 ║  │ j/k      Navigate down/up (Vim-style)                           │ ║
@@ -294,6 +295,7 @@ The modfetch TUI has **7 tabs** organized into three functional groups:
 ╠══════════════════════════════════════════════════════════════════════╣
 ║  DOWNLOAD TABS (0-4)                                                 ║
 ║  ┌─────────────────────────────────────────────────────────────────┐ ║
+║  │ G        Guided model recommendations                           │ ║
 ║  │ n        New download                                           │ ║
 ║  │ b        Import batch file                                      │ ║
 ║  │ y or r   Start/retry download                                   │ ║
@@ -339,7 +341,8 @@ The modfetch TUI has **7 tabs** organized into three functional groups:
 ┌─────────────────────────────────────────────────────────┐
 │  NAVIGATION           DOWNLOADS        LIBRARY          │
 │  ───────────          ─────────        ───────          │
-│  0-6  Tabs            n  New           5/L  Open        │
+│  0-6  Tabs            G  Recommend     5/L  Open        │
+│                       n  New                          │
 │  j/k  Up/Down         y  Start         /    Search      │
 │  ?    Help            p  Pause         f    Favorite    │
 │  q    Quit            D  Delete        S    Scan        │
@@ -406,8 +409,8 @@ The modfetch TUI has **7 tabs** organized into three functional groups:
 
 4. Download a model
    └─► Press '0' (All tab)
-       └─► Press 'n' (New download)
-       └─► Paste URL
+       └─► Press 'G' (guided recommendation) or 'n' (known URL)
+       └─► Choose model filters or paste URL
        └─► Watch in Active tab (Press '2')
 
 5. Organize your library

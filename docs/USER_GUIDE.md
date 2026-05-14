@@ -103,6 +103,11 @@ modfetch recommend --history
 modfetch recommend --task coding --no-learn
 ```
 
+The same selection path is available in the TUI. Launch `modfetch tui`, press
+`G`, choose the task, hardware budget, provider, runtime or placement target,
+maximum file size, and optional query, then press `Enter` on a recommendation
+to start the normal resumable download.
+
 #### Dry-run planning
 
 Use `--dry-run` to plan without downloading. It resolves resolver URIs and direct URLs, computes the default destination (respecting resolver SuggestedFilename and `--naming-pattern`), and probes remote metadata (filename, size, Accept-Range). It performs no database or file writes.

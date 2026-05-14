@@ -83,7 +83,7 @@ func handleRecommend(ctx context.Context, args []string) error {
 	if effectiveQuery == "" {
 		effectiveQuery = recommend.DefaultQuery(effectiveTask)
 	}
-	hardwareKey := recommendationHardwareKey(hw)
+	hardwareKey := recommend.HardwareKey(hw)
 	feedback := map[string]recommend.Feedback(nil)
 	var st *state.DB
 	if !*noLearn && cfgErr == nil {
@@ -92,7 +92,7 @@ func handleRecommend(ctx context.Context, args []string) error {
 		if stErr == nil {
 			defer func() { _ = st.Close() }()
 			var feedbackErr error
-			feedback, feedbackErr = recommendationFeedback(st, effectiveTask, effectiveQuery, hardwareKey)
+			feedback, feedbackErr = recommend.FeedbackFromHistory(st, effectiveTask, effectiveQuery, hardwareKey)
 			if feedbackErr != nil {
 				return fmt.Errorf("load recommendation history: %w", feedbackErr)
 			}
@@ -114,7 +114,7 @@ func handleRecommend(ctx context.Context, args []string) error {
 		return err
 	}
 	if st != nil {
-		if err := recordRecommendationHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "shown", 0); err != nil {
+		if err := recommend.RecordHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "shown", 0); err != nil {
 			return fmt.Errorf("record shown recommendations: %w", err)
 		}
 	}
@@ -127,10 +127,10 @@ func handleRecommend(ctx context.Context, args []string) error {
 		}
 		selected := recs[*selectIndex-1]
 		if st != nil {
-			if err := recordRecommendationHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "selected", selected.Index); err != nil {
+			if err := recommend.RecordHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "selected", selected.Index); err != nil {
 				return fmt.Errorf("record selected recommendation: %w", err)
 			}
-			if err := recordRecommendationHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "skipped", selected.Index); err != nil {
+			if err := recommend.RecordHistory(st, effectiveTask, effectiveQuery, hardwareKey, recs, "skipped", selected.Index); err != nil {
 				return fmt.Errorf("record skipped recommendations: %w", err)
 			}
 		}
@@ -258,76 +258,6 @@ func validateGiBOverride(name string, value float64) error {
 		return fmt.Errorf("%s value %.2f is unreasonably large; max is %d GiB", name, value, maxHardwareOverrideGiB)
 	}
 	return nil
-}
-
-func recommendationHardwareKey(hw recommend.HardwareProfile) string {
-	ramGB := roundedGiB(hw.RAMBytes)
-	vramGB := roundedGiB(hw.VRAMBytes)
-	switch {
-	case hw.UnifiedMemory:
-		return fmt.Sprintf("%s/%s/ram%dg/unified", strings.ToLower(hw.OS), strings.ToLower(hw.Arch), ramGB)
-	case hw.VRAMBytes > 0:
-		return fmt.Sprintf("%s/%s/vram%dg-ram%dg/discrete", strings.ToLower(hw.OS), strings.ToLower(hw.Arch), vramGB, ramGB)
-	default:
-		return fmt.Sprintf("%s/%s/ram%dg/system", strings.ToLower(hw.OS), strings.ToLower(hw.Arch), ramGB)
-	}
-}
-
-func roundedGiB(bytes int64) int64 {
-	if bytes <= 0 {
-		return 0
-	}
-	return (bytes + (1<<30 - 1)) >> 30
-}
-
-func recommendationFeedback(st *state.DB, task, query, hardwareKey string) (map[string]recommend.Feedback, error) {
-	rows, err := st.RecommendationHistoryFor(task, query, hardwareKey)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]recommend.Feedback)
-	for _, row := range rows {
-		key := recommend.FeedbackKey(row.URI)
-		fb := out[key]
-		switch row.Action {
-		case "selected":
-			fb.Selected += row.Count
-		case "skipped":
-			fb.Skipped += row.Count
-		case "shown":
-			fb.Shown += row.Count
-		}
-		out[key] = fb
-	}
-	return out, nil
-}
-
-func recordRecommendationHistory(st *state.DB, task, query, hardwareKey string, recs []recommend.Recommendation, action string, selectedIndex int) error {
-	rows := make([]state.RecommendationHistoryRow, 0, len(recs))
-	for _, rec := range recs {
-		switch action {
-		case "selected":
-			if rec.Index != selectedIndex {
-				continue
-			}
-		case "skipped":
-			if rec.Index == selectedIndex {
-				continue
-			}
-		}
-		rows = append(rows, state.RecommendationHistoryRow{
-			Task:        task,
-			Query:       query,
-			Provider:    rec.Provider,
-			ModelID:     rec.ModelID,
-			URI:         rec.URI,
-			Action:      action,
-			Score:       rec.Score,
-			Fit:         rec.Fit,
-			HardwareKey: hardwareKey,
-		})
-	}
-	return st.BatchUpsertRecommendationHistory(rows)
 }
 
 func printRecommendationHistory(cfg *config.Config, limit int, jsonOut bool) error {

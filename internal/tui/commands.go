@@ -85,17 +85,17 @@ func (m *Model) renderToasts() string {
 
 func (m *Model) renderCommandsBar() string {
 	// concise single-line commands reference
-	return m.th.footer.Render("n new • b batch • y/r start • p cancel • D delete • O open • / filter • s/e/R sort • o clear • g group host • t col • v compact • i inspector • H toasts • ? help • q quit")
+	return m.th.footer.Render("G recommend • n new • b batch • y/r start • p cancel • D delete • O open • / filter • s/e/R sort • o clear • g group host • t col • v compact • i inspector • ? help • q quit")
 }
 
 func (m *Model) renderLibraryCommandsBar() string {
 	// Library tab commands reference
-	return m.th.footer.Render("j/k navigate • Space select • A all • X clear • F filters • f favorite • r retry • V verify • p place • E export • D delete staged • ? help • q quit")
+	return m.th.footer.Render("G recommend • j/k navigate • Space select • A all • X clear • F filters • f favorite • r retry • V verify • p place • E export • D delete staged • ? help • q quit")
 }
 
 func (m *Model) renderSettingsCommandsBar() string {
 	// Settings tab commands reference
-	return m.th.footer.Render("View current configuration • H toasts • ? help • q quit")
+	return m.th.footer.Render("G recommend • View current configuration • H toasts • ? help • q quit")
 }
 
 // Help screen
@@ -106,6 +106,7 @@ func (m *Model) renderHelp() string {
 	sb.WriteString("Tabs: 1 Pending • 2 Active • 3 Completed • 4 Failed • 5/L Library • 6/M Settings\n")
 	sb.WriteString("\n")
 	sb.WriteString(m.th.head.Render("Download Tabs (1-4)") + "\n")
+	sb.WriteString("Recommend: G opens guided model selection by task, hardware, provider, runtime, and size\n")
 	sb.WriteString("Nav: j/k up/down\n")
 	sb.WriteString("Filter: / to enter; Enter to apply; Esc to clear\n")
 	sb.WriteString("Sort: s speed • e ETA • R remaining • o clear\n")
@@ -118,6 +119,7 @@ func (m *Model) renderHelp() string {
 	sb.WriteString("Actions: y/r start • p cancel • D delete • O open • C copy path • U copy URL\n")
 	sb.WriteString("\n")
 	sb.WriteString(m.th.head.Render("Library Tab (5/L)") + "\n")
+	sb.WriteString("Recommend: G opens guided model selection and starts a resumable download\n")
 	sb.WriteString("Nav: j/k up/down • Enter view details • Esc back to list\n")
 	sb.WriteString("Search/filter: / search • F filter menu for search, type, source, favorites\n")
 	sb.WriteString("Select: Space toggle • A select visible • X clear selection\n")

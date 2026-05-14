@@ -136,6 +136,8 @@ type Model struct {
 	// Batch import modal state
 	batchMode  bool
 	batchInput textinput.Model
+	// Guided recommendation modal state
+	recommendFlow recommendFlow
 	// Overrides for auto-place by key url|dest
 	placeType map[string]string
 	autoPlace map[string]bool
@@ -271,6 +273,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.w, m.h = msg.Width, msg.Height
 		return m, nil
 	case tea.KeyMsg:
+		if m.recommendFlow.active {
+			return m.updateRecommendFlow(msg)
+		}
 		if m.newJob {
 			return m.updateNewJob(msg)
 		}
@@ -443,6 +448,30 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.libraryNeedsRefresh = true
 		m.refreshLibraryData()
 		return m, m.refresh()
+	case recommendResultsMsg:
+		if !m.recommendFlow.active {
+			return m, nil
+		}
+		m.recommendFlow.loading = false
+		m.recommendFlow.err = ""
+		if msg.err != nil {
+			m.recommendFlow.err = msg.err.Error()
+			m.recommendFlow.results = nil
+			m.addToast("recommend failed: " + msg.err.Error())
+			return m, nil
+		}
+		m.recommendFlow.results = msg.recommendations
+		m.recommendFlow.hardware = msg.hardware
+		m.recommendFlow.hardwareKey = msg.hardwareKey
+		m.recommendFlow.query = msg.query
+		m.recommendFlow.task = msg.task
+		m.recommendFlow.selected = 0
+		if len(msg.recommendations) == 0 {
+			m.addToast("no recommendations matched those filters")
+		} else {
+			m.addToast(fmt.Sprintf("recommend: %d option(s)", len(msg.recommendations)))
+		}
+		return m, nil
 	case dlDoneMsg:
 		// Apply placement metadata if needed (safe concurrent map access from Update thread)
 		if msg.needsPlaceMap && msg.origKey != msg.resKey {
@@ -560,6 +589,9 @@ func (m *Model) updateNormal(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.batchInput = textinput.New()
 		m.batchInput.Placeholder = "Path to text file with URLs"
 		m.batchInput.Focus()
+		return m, nil
+	case "G":
+		m.startRecommendFlow()
 		return m, nil
 	case "S":
 		// Scan directories for existing models
@@ -961,6 +993,9 @@ func (m *Model) View() string {
 	}
 	if m.batchMode {
 		modal = m.th.border.Width(m.w - 4).Render(m.renderBatchModal())
+	}
+	if m.recommendFlow.active {
+		modal = m.th.border.Width(m.w - 4).Render(m.renderRecommendFlow())
 	}
 	if m.libraryFilterMenu {
 		modal = m.th.border.Width(m.w - 4).Render(m.renderLibraryFilterMenu())
