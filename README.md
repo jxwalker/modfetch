@@ -126,8 +126,9 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 ---
 
 ## Upcoming
-- **Package channel updates**: validate the v0.8.1 release assets after publish
-  and refresh downstream Homebrew/AUR package metadata as needed.
+- **v0.9 planning**: choose the next product direction from real user feedback
+  after the v0.8.1 recommendation and adaptive-transfer release line has
+  shipped.
 
 ## What's new in v0.8.1
 - **Guided TUI recommendations**: press `G` in the TUI to choose a model by
