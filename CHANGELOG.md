@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## Unreleased
+## v0.8.1 — 2026-05-14
 
 Added
 - Added a guided TUI recommendation flow opened with `G`, so users can choose a

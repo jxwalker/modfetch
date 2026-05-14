@@ -4,9 +4,9 @@ This guide walks you through configuration, common workflows, and tips to get th
 
 - Build: `make build` (produces `./bin/modfetch`)
 - Config file path can be passed with `--config` or via the environment variable `MODFETCH_CONFIG`.
-- Current release: v0.8.0. The examples below include the Hugging Face shorthand
+- Current release: v0.8.1. The examples below include the Hugging Face shorthand
   URI form fixed in v0.6.3, v0.7.x starter/discovery/library workflows, and the
-  v0.8.0 recommendation, benchmark, and adaptive-transfer commands.
+  v0.8.1 recommendation, benchmark, adaptive-transfer, and TUI inspection commands.
 
 ## Configure
 
