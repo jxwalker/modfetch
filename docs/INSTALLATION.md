@@ -3,9 +3,28 @@
 This guide covers supported installation methods for modfetch across Linux and
 macOS platforms.
 
-## Quick Install (Recommended)
+## Quick Install
 
-### One-liner Installation
+### Homebrew or Linuxbrew
+
+Use the tap when Homebrew is available:
+
+```bash
+brew tap jxwalker/tap
+brew install jxwalker/tap/modfetch
+```
+
+Upgrade later with:
+
+```bash
+brew update
+brew upgrade jxwalker/tap/modfetch
+```
+
+### One-line Installer
+
+Use the installer when you do not use Homebrew or want a self-contained setup:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/install.sh | bash
 ```
@@ -16,6 +35,16 @@ This will:
 - Run the interactive configuration wizard
 - Set up shell completions
 - Perform a smoke test
+
+### Arch Linux / AUR
+
+Arch users can install the published `modfetch-bin` package:
+
+```bash
+git clone https://aur.archlinux.org/modfetch-bin.git
+cd modfetch-bin
+makepkg -si
+```
 
 ### Custom Installation Directory
 ```bash

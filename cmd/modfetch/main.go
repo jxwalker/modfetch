@@ -87,7 +87,7 @@ func run(ctx context.Context, args []string) error {
 }
 
 func usage() {
-	fmt.Println(strings.TrimSpace(`modfetch - robust model fetcher (skeleton)
+	fmt.Println(strings.TrimSpace(`modfetch - choose, download, verify, and organize AI model files
 
 Usage:
   modfetch <command> [flags]
@@ -99,7 +99,7 @@ Commands:
   download          Download a file via direct URL or resolver URI (starter://, hf://, civitai://)
   bench             Benchmark modfetch against aria2 on the same URL
   discover          Search real model providers and download a selected result
-  recommend         Recommend model files for this hardware
+  recommend         Recommend model files for your task and hardware
   starter           List or download beginner-safe starter artifacts
   status            Show download status (table or JSON)
   place             Place a file into configured app directories

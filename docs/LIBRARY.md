@@ -655,4 +655,4 @@ ui:
 - [Scanner Documentation](SCANNER.md) - Detailed scanner internals
 - [TUI Guide](TUI_GUIDE.md) - Full TUI documentation
 - [Configuration Guide](CONFIG.md) - Config file reference
-- [Metadata API](METADATA.md) - Metadata system details
+- [Database Schema](DATABASE.md) - Library metadata storage details

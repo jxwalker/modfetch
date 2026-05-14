@@ -1,6 +1,12 @@
 # Quick Start Guide
 
-Get up and running with modfetch in **5 minutes**! This visual guide will walk you through installation, configuration, and your first download.
+Get up and running with modfetch in **5 minutes**. This guide takes you from a
+fresh install to a real model recommendation, a resumable download, and the TUI
+library view.
+
+If you already know the exact URL, use `modfetch download --url ...`. If you do
+not know which repo, file, or quantization to choose, start with
+`modfetch recommend` or press `G` in the TUI.
 
 ## Table of Contents
 
@@ -15,7 +21,14 @@ Get up and running with modfetch in **5 minutes**! This visual guide will walk y
 
 ## Step 1: Install
 
-### Option A: One-line Install (Recommended)
+### Option A: Homebrew or Linuxbrew
+
+```bash
+brew tap jxwalker/tap
+brew install jxwalker/tap/modfetch
+```
+
+### Option B: One-line Install
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/install.sh | bash
@@ -27,7 +40,7 @@ curl -fsSL https://raw.githubusercontent.com/jxwalker/modfetch/main/scripts/inst
 ✓ Version check passed
 ```
 
-### Option B: Build from Source
+### Option C: Build from Source
 
 ```bash
 git clone https://github.com/jxwalker/modfetch
@@ -106,7 +119,20 @@ export CIVITAI_TOKEN="your_civitai_token"      # For CivitAI
 
 ## Step 3: Your First Download
 
-Let's download a test file to verify everything works!
+Start by letting modfetch choose a model for the current machine:
+
+```bash
+modfetch recommend --task chat
+modfetch recommend --task chat --download --select 1 --dry-run --summary-json
+```
+
+When the plan looks right, remove `--dry-run`:
+
+```bash
+modfetch recommend --task chat --download --select 1
+```
+
+If you want a tiny public test file instead, use this:
 
 ### Command Line Download
 

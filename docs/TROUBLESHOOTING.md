@@ -1,25 +1,44 @@
 # Troubleshooting
 
-Common errors and remedies
+Common errors and remedies. If you are diagnosing a large Hugging Face/Xet
+download, start with a dry-run, TUI probe, or benchmark before committing to the
+full transfer. Dry-runs show the resolved destination and transfer plan; the TUI
+recommendation probe shows remote size, range support, server filename,
+validators, and learned host history; `bench --history` shows persisted host
+transfer history:
+
+```bash
+modfetch download --url 'hf://owner/repo/model.gguf?rev=main' --dry-run --summary-json
+modfetch bench --url 'hf://owner/repo/model.gguf?rev=main' --tools modfetch,aria2 --duration 30s
+modfetch bench --history
+```
 
 - ComfyUI: Error while deserializing header: incomplete metadata, file not fully covered
   - Meaning: the on-disk file size does not exactly match what the safetensors header declares (or the header/offsets are invalid).
   - Fix:
     1) Scan the directory and deep-verify all safetensors files:
        
+       ```bash
        modfetch verify --config ~/.config/modfetch/config.yml --scan-dir /path/to/checkpoints --safetensors-deep
+       ```
        
        - To focus only on problem files and get a quick count:
          
+         ```bash
          modfetch verify --config ~/.config/modfetch/config.yml --scan-dir /path/to/checkpoints --safetensors-deep --only-errors --summary
+         ```
        
     2) If you see "extra bytes", repair is safe and lossless (truncate to declared size):
        
+       ```bash
        modfetch verify --config ~/.config/modfetch/config.yml --scan-dir /path/to/checkpoints --safetensors-deep --repair
+       ```
        
     3) If you see "incomplete", quarantine and re-download (data is missing):
        
+       ```bash
        modfetch verify --config ~/.config/modfetch/config.yml --scan-dir /path/to/checkpoints --safetensors-deep --quarantine-incomplete
+       ```
        
     4) Restart ComfyUI to ensure it loads the corrected file.
   - Prevention: enable in your config
@@ -64,5 +83,4 @@ Common errors and remedies
 - Increase verbosity: use --log-level debug
 - Use --json to get structured logs for programmatic analysis
 - Use --summary-json to emit a single JSON summary per completed download
-- TUI: press h or ? for help; s to sort by speed, e to sort by ETA, R to sort by remaining
-
+- TUI: press ? for help; s to sort by speed, e to sort by ETA, R to sort by remaining
