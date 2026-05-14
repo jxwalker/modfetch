@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jxwalker/modfetch/internal/config"
 	"github.com/jxwalker/modfetch/internal/discovery"
+	"github.com/jxwalker/modfetch/internal/downloader"
 	"github.com/jxwalker/modfetch/internal/recommend"
 	"github.com/jxwalker/modfetch/internal/state"
 )
@@ -282,5 +285,165 @@ func TestRecommendFlowRenderTaskStep(t *testing.T) {
 	view := m.renderRecommendFlow()
 	if !strings.Contains(view, "Recommend Models") || !strings.Contains(view, "Chat / assistant") {
 		t.Fatalf("recommend flow view missing expected labels:\n%s", view)
+	}
+}
+
+func TestRecommendFlowInspectionRendersRationalePlacementAndTransferPlan(t *testing.T) {
+	tmpDir := t.TempDir()
+	db, err := state.NewDB(filepath.Join(tmpDir, "state.db"))
+	if err != nil {
+		t.Fatalf("new db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	cfg := &config.Config{
+		General: config.General{
+			DataRoot:      tmpDir,
+			DownloadRoot:  filepath.Join(tmpDir, "downloads"),
+			PlacementMode: "symlink",
+		},
+		Concurrency: config.Concurrency{PerFileChunks: 8, ChunkSizeMB: 64},
+		Placement: config.Placement{
+			Apps: map[string]config.AppPlacement{
+				"ollama": {
+					Base: filepath.Join(tmpDir, "ollama"),
+					Paths: map[string]string{
+						"models": "models",
+					},
+				},
+			},
+			Mapping: []config.MappingRule{
+				{Match: "llm.gguf", Targets: []config.MappingTarget{{App: "ollama", PathKey: "models"}}},
+			},
+		},
+	}
+	m := New(cfg, db, "test").(*Model)
+	m.recommendFlow = recommendFlow{
+		active:       true,
+		step:         recommendStepResults,
+		inspect:      true,
+		task:         "chat",
+		query:        "llama instruct gguf",
+		runtimeIndex: 2,
+		results: []recommend.Recommendation{
+			{
+				Index:             1,
+				Provider:          discovery.ProviderHuggingFace,
+				ModelID:           "owner/model",
+				Name:              "Owner Model",
+				URI:               "https://example.com/model.gguf",
+				FileName:          "model.gguf",
+				FileType:          "gguf",
+				Size:              7 << 30,
+				EstimatedRequired: 9 << 30,
+				MemoryBudget:      92 << 30,
+				Score:             120,
+				Fit:               "excellent",
+				Reasons:           []string{"comfortable memory fit", "GGUF is ready for local llama.cpp-style runtimes"},
+				RuntimeHints: []recommend.RuntimeHint{
+					{Runtime: "Ollama", Reason: "GGUF can be imported with a Modelfile", PlacementPreset: "ollama", SetupCommand: "ollama create NAME -f Modelfile"},
+				},
+			},
+		},
+	}
+
+	view := m.renderRecommendResults()
+	for _, want := range []string{
+		"Details",
+		"rationale:",
+		"setup: ollama create NAME -f Modelfile",
+		"placement: configured placement target",
+		"artifact: llm.gguf",
+		"dry-run transfer:",
+		"connections=8 chunk=64 MiB",
+		"live metadata: press p",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("inspection view missing %q:\n%s", want, view)
+		}
+	}
+}
+
+func TestRecommendFlowProbeUsesRealHTTPMetadataAndTransferHistory(t *testing.T) {
+	tmpDir := t.TempDir()
+	db, err := state.NewDB(filepath.Join(tmpDir, "state.db"))
+	if err != nil {
+		t.Fatalf("new db: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Accept-Ranges", "bytes")
+		w.Header().Set("Content-Length", "4096")
+		w.Header().Set("Content-Disposition", `attachment; filename="server-model.gguf"`)
+		w.Header().Set("ETag", `"abc123"`)
+		w.Header().Set("Last-Modified", "Thu, 14 May 2026 12:00:00 GMT")
+		if r.Method == http.MethodHead {
+			return
+		}
+		if r.Header.Get("Range") == "bytes=0-0" {
+			w.Header().Set("Content-Range", "bytes 0-0/4096")
+			w.WriteHeader(http.StatusPartialContent)
+			_, _ = w.Write([]byte{0})
+			return
+		}
+		_, _ = w.Write(make([]byte, 4096))
+	}))
+	defer ts.Close()
+
+	rawURL := ts.URL + "/model.gguf"
+	if err := db.UpsertTransferHistory(state.TransferHistoryRow{
+		Host:        downloader.HostFromURLForHistory(rawURL),
+		Tool:        "modfetch",
+		Connections: 12,
+		ChunkSizeMB: 64,
+		AvgBPS:      2048,
+		LastStatus:  "complete",
+	}); err != nil {
+		t.Fatalf("upsert transfer history: %v", err)
+	}
+
+	cfg := &config.Config{
+		General:     config.General{DataRoot: tmpDir, DownloadRoot: tmpDir},
+		Concurrency: config.Concurrency{PerFileChunks: 4, ChunkSizeMB: 8},
+	}
+	m := New(cfg, db, "test").(*Model)
+	m.recommendFlow = recommendFlow{
+		active:  true,
+		step:    recommendStepResults,
+		flowID:  42,
+		inspect: true,
+		results: []recommend.Recommendation{
+			{Index: 1, Provider: discovery.ProviderHuggingFace, Name: "probe me", URI: rawURL, FileName: "model.gguf", FileType: "gguf"},
+		},
+	}
+
+	cmd := m.startRecommendProbe()
+	if cmd == nil {
+		t.Fatal("expected probe command")
+	}
+	msg, ok := cmd().(recommendInspectProbeMsg)
+	if !ok {
+		t.Fatalf("probe command returned %T", msg)
+	}
+	if msg.err != nil {
+		t.Fatalf("probe command error: %v", msg.err)
+	}
+	m.Update(msg)
+
+	if m.recommendFlow.probeLoading {
+		t.Fatal("probe should not remain loading")
+	}
+	if m.recommendFlow.probeDetails.Size != 4096 || !m.recommendFlow.probeDetails.AcceptRange {
+		t.Fatalf("probe details = %+v, want size and range metadata", m.recommendFlow.probeDetails)
+	}
+	if !m.recommendFlow.probeDetails.HasHistory {
+		t.Fatalf("probe details missing transfer history: %+v", m.recommendFlow.probeDetails)
+	}
+	view := m.renderRecommendResults()
+	for _, want := range []string{"remote size: 4.1 kB", "ranges: yes", "server filename: server-model.gguf", "prior host speed:"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("probe view missing %q:\n%s", want, view)
+		}
 	}
 }

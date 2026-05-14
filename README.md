@@ -129,9 +129,11 @@ The modfetch TUI provides a beautiful, full-featured interface for managing your
 - **Guided TUI recommendations**: press `G` in the TUI to choose a model by
   task, detected or overridden hardware budget, provider, runtime or placement
   target, and maximum file size, then start the same resumable download path
-  used by `modfetch download`.
-- **Recommendation refinements**: richer result inspection and runtime-specific
-  setup guidance after the guided TUI recommendation flow starts a download.
+  used by `modfetch download`. In the result list, press `i` for rationale,
+  runtime setup, placement, and dry-run transfer details, or `p` to probe live
+  size/range metadata before starting a large download.
+- **Recommendation refinements**: end-to-end release hardening around the guided
+  recommendation path and real-provider UAT before the next patch tag.
 
 ## What's new in v0.8.0
 - **Hardware-aware recommendations**: `modfetch recommend --task coding` detects

@@ -67,6 +67,11 @@ Recommendation workflow:
     target, maximum file size, and optional query
   - Results reuse the same recommendation ranking and history helpers as the
     CLI
+  - Result inspection (`i`) shows ranking rationale, memory fit, runtime setup,
+    placement readiness, destination, and transfer settings
+  - Live recommendation probing (`p`) resolves the selected URI and checks remote
+    size, range support, server filename, validators, and learned transfer
+    history without starting a download
   - Selecting a result creates a normal pending row and starts the existing
     resumable download path
 

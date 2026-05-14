@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,7 +12,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/dustin/go-humanize"
 	"github.com/jxwalker/modfetch/internal/discovery"
+	"github.com/jxwalker/modfetch/internal/downloader"
 	"github.com/jxwalker/modfetch/internal/recommend"
+	"github.com/jxwalker/modfetch/internal/resolver"
 	"github.com/jxwalker/modfetch/internal/state"
 )
 
@@ -51,6 +54,10 @@ type recommendFlow struct {
 	hardware      recommend.HardwareProfile
 	hardwareKey   string
 	results       []recommend.Recommendation
+	inspect       bool
+	probeLoading  bool
+	probeErr      string
+	probeDetails  recommendProbeDetails
 	loading       bool
 	err           string
 }
@@ -64,6 +71,35 @@ type recommendResultsMsg struct {
 	hardwareKey     string
 	warning         string
 	err             error
+}
+
+type recommendProbeDetails struct {
+	URI          string
+	ResolvedURL  string
+	FinalURL     string
+	Filename     string
+	Size         int64
+	ETag         string
+	LastModified string
+	AcceptRange  bool
+	History      state.TransferHistoryRow
+	HasHistory   bool
+}
+
+type recommendInspectProbeMsg struct {
+	flowID   int64
+	selected int
+	uri      string
+	details  recommendProbeDetails
+	err      error
+}
+
+type recommendLocalInspection struct {
+	Destination         string
+	ArtifactType        string
+	PlacementPreset     string
+	PlacementConfigured bool
+	PlacementNote       string
 }
 
 func (m *Model) startRecommendFlow() {
@@ -84,10 +120,7 @@ func (m *Model) startRecommendFlow() {
 func (m *Model) updateRecommendFlow(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	s := msg.String()
 	if s == "esc" {
-		if m.recommendFlow.cancel != nil {
-			m.recommendFlow.cancel()
-			m.recommendFlow.cancel = nil
-		}
+		m.cancelRecommendBackground()
 		m.recommendFlow.active = false
 		m.recommendFlow.input.Blur()
 		return m, nil
@@ -117,19 +150,22 @@ func (m *Model) updateRecommendFlow(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.recommendFlow.step == recommendStepResults {
 		switch s {
 		case "j", "down":
-			if m.recommendFlow.selected < len(m.recommendFlow.results)-1 {
-				m.recommendFlow.selected++
-			}
+			m.moveRecommendSelection(1)
 			return m, nil
 		case "k", "up":
-			if m.recommendFlow.selected > 0 {
-				m.recommendFlow.selected--
-			}
+			m.moveRecommendSelection(-1)
 			return m, nil
 		case "left", "shift+tab":
+			m.cancelRecommendBackground()
+			m.clearRecommendProbe()
 			m.recommendFlow.step = recommendStepQuery
 			m.recommendFlow.input.Focus()
 			return m, nil
+		case "i":
+			m.recommendFlow.inspect = !m.recommendFlow.inspect
+			return m, nil
+		case "p", "P":
+			return m, m.startRecommendProbe()
 		case "enter", "ctrl+j":
 			return m, m.startRecommendedDownload()
 		}
@@ -150,6 +186,37 @@ func (m *Model) updateRecommendFlow(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+func (m *Model) moveRecommendSelection(delta int) {
+	if len(m.recommendFlow.results) == 0 {
+		return
+	}
+	prev := m.recommendFlow.selected
+	m.recommendFlow.selected += delta
+	if m.recommendFlow.selected < 0 {
+		m.recommendFlow.selected = 0
+	}
+	if m.recommendFlow.selected >= len(m.recommendFlow.results) {
+		m.recommendFlow.selected = len(m.recommendFlow.results) - 1
+	}
+	if m.recommendFlow.selected != prev {
+		m.cancelRecommendBackground()
+		m.clearRecommendProbe()
+	}
+}
+
+func (m *Model) cancelRecommendBackground() {
+	if m.recommendFlow.cancel != nil {
+		m.recommendFlow.cancel()
+		m.recommendFlow.cancel = nil
+	}
+}
+
+func (m *Model) clearRecommendProbe() {
+	m.recommendFlow.probeLoading = false
+	m.recommendFlow.probeErr = ""
+	m.recommendFlow.probeDetails = recommendProbeDetails{}
 }
 
 func (m *Model) nextRecommendStep() {
@@ -216,6 +283,21 @@ func (m *Model) adjustRecommendChoice(delta int) {
 	}
 }
 
+func (m *Model) startRecommendProbe() tea.Cmd {
+	if len(m.recommendFlow.results) == 0 {
+		return nil
+	}
+	if m.recommendFlow.selected < 0 || m.recommendFlow.selected >= len(m.recommendFlow.results) {
+		m.recommendFlow.selected = 0
+	}
+	m.cancelRecommendBackground()
+	m.recommendFlow.inspect = true
+	m.recommendFlow.probeLoading = true
+	m.recommendFlow.probeErr = ""
+	m.recommendFlow.probeDetails = recommendProbeDetails{}
+	return m.recommendInspectProbeCmd()
+}
+
 func (m *Model) recommendSearchCmd() tea.Cmd {
 	task := m.selectedRecommendTask()
 	provider := m.selectedRecommendProvider()
@@ -279,6 +361,71 @@ func (m *Model) recommendSearchCmd() tea.Cmd {
 	}
 }
 
+func (m *Model) recommendInspectProbeCmd() tea.Cmd {
+	if m.recommendFlow.selected < 0 || m.recommendFlow.selected >= len(m.recommendFlow.results) {
+		return nil
+	}
+	rec := m.recommendFlow.results[m.recommendFlow.selected]
+	flowID := m.recommendFlow.flowID
+	selected := m.recommendFlow.selected
+	cfg := m.cfg
+	st := m.st
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	m.recommendFlow.cancel = cancel
+	return func() tea.Msg {
+		defer cancel()
+		details := recommendProbeDetails{
+			URI:      rec.URI,
+			Filename: firstNonEmptyString(rec.FileName, rec.Raw.FileName, rec.Raw.FilePath),
+			Size:     rec.Size,
+		}
+		resolvedURL := rec.URI
+		var headers map[string]string
+		if recommendURINeedsResolve(rec.URI) {
+			res, err := resolver.Resolve(ctx, rec.URI, cfg)
+			if err != nil {
+				return recommendInspectProbeMsg{flowID: flowID, selected: selected, uri: rec.URI, err: err}
+			}
+			resolvedURL = res.URL
+			headers = res.Headers
+			details.ResolvedURL = res.URL
+			details.Filename = firstNonEmptyString(details.Filename, res.SuggestedFilename, res.FileName)
+		} else {
+			details.ResolvedURL = rec.URI
+		}
+		meta, err := downloader.ProbeURL(ctx, cfg, resolvedURL, headers)
+		if err != nil {
+			return recommendInspectProbeMsg{flowID: flowID, selected: selected, uri: rec.URI, err: err}
+		}
+		details.FinalURL = meta.FinalURL
+		details.Filename = firstNonEmptyString(meta.Filename, details.Filename)
+		if meta.Size > 0 {
+			details.Size = meta.Size
+		}
+		details.ETag = meta.ETag
+		details.LastModified = meta.LastModified
+		details.AcceptRange = meta.AcceptRange
+		if st != nil {
+			host := downloader.HostFromURLForHistory(firstNonEmptyString(meta.FinalURL, resolvedURL))
+			if host != "" {
+				if row, ok, hErr := st.BestTransferHistory(host, "modfetch"); hErr == nil && ok {
+					details.History = row
+					details.HasHistory = true
+				}
+			}
+		}
+		return recommendInspectProbeMsg{flowID: flowID, selected: selected, uri: rec.URI, details: details}
+	}
+}
+
+func recommendURINeedsResolve(uri string) bool {
+	uri = strings.ToLower(strings.TrimSpace(uri))
+	return strings.HasPrefix(uri, "hf://") ||
+		strings.HasPrefix(uri, "huggingface://") ||
+		strings.HasPrefix(uri, "civitai://") ||
+		strings.HasPrefix(uri, "starter://")
+}
+
 func filterRecommendResults(recs []recommend.Recommendation, runtimeTarget string, sizeLimit int64) []recommend.Recommendation {
 	runtimeTarget = strings.ToLower(strings.TrimSpace(runtimeTarget))
 	out := make([]recommend.Recommendation, 0, len(recs))
@@ -334,6 +481,7 @@ func recommendPlacementPreset(rec recommend.Recommendation, target string) strin
 }
 
 func (m *Model) startRecommendedDownload() tea.Cmd {
+	m.cancelRecommendBackground()
 	if m.st == nil {
 		m.addToast("recommend: state database unavailable")
 		return nil
@@ -346,7 +494,6 @@ func (m *Model) startRecommendedDownload() tea.Cmd {
 	}
 	rec := m.recommendFlow.results[m.recommendFlow.selected]
 	task := recommend.NormalizeTask(m.recommendFlow.task)
-	runtimeTarget := m.selectedRecommendRuntime()
 	query := strings.TrimSpace(m.recommendFlow.query)
 	if query == "" {
 		query = recommend.DefaultQuery(task)
@@ -360,14 +507,11 @@ func (m *Model) startRecommendedDownload() tea.Cmd {
 	} else if err := recommend.RecordHistory(m.st, task, query, hardwareKey, m.recommendFlow.results, "skipped", rec.Index); err != nil {
 		m.addToast("warning: recommendation history failed: " + err.Error())
 	}
-	artifactType := recommendArtifactType(rec, task, runtimeTarget)
-	dest := m.computeDefaultDest(rec.URI)
-	if preset := recommendPlacementPreset(rec, runtimeTarget); preset != "" && artifactType != "" {
-		if targetDest, ok := m.recommendPlacementDestination(rec.URI, artifactType, preset); ok {
-			dest = targetDest
-		} else {
-			m.addToast("placement target not configured; saving to download root")
-		}
+	inspection := m.recommendLocalInspection(rec)
+	artifactType := inspection.ArtifactType
+	dest := inspection.Destination
+	if inspection.PlacementPreset != "" && !inspection.PlacementConfigured {
+		m.addToast("placement target not configured; saving to download root")
 	}
 	if err := m.preflightDest(dest); err != nil {
 		m.addToast("dest not writable: " + err.Error())
@@ -387,6 +531,34 @@ func (m *Model) startRecommendedDownload() tea.Cmd {
 	m.recommendFlow.active = false
 	m.recommendFlow.input.Blur()
 	return cmd
+}
+
+func (m *Model) recommendLocalInspection(rec recommend.Recommendation) recommendLocalInspection {
+	task := recommend.NormalizeTask(m.recommendFlow.task)
+	if task == "" {
+		task = recommend.NormalizeTask(m.selectedRecommendTask())
+	}
+	runtimeTarget := m.selectedRecommendRuntime()
+	artifactType := recommendArtifactType(rec, task, runtimeTarget)
+	dest := m.computeDefaultDest(rec.URI)
+	out := recommendLocalInspection{
+		Destination:  dest,
+		ArtifactType: artifactType,
+	}
+	preset := recommendPlacementPreset(rec, runtimeTarget)
+	if preset == "" || artifactType == "" {
+		out.PlacementNote = "no selected placement target; download root will be used"
+		return out
+	}
+	out.PlacementPreset = preset
+	if targetDest, ok := m.recommendPlacementDestination(rec.URI, artifactType, preset); ok {
+		out.Destination = targetDest
+		out.PlacementConfigured = true
+		out.PlacementNote = "configured placement target"
+		return out
+	}
+	out.PlacementNote = "placement target is not configured; download root will be used"
+	return out
 }
 
 func (m *Model) recommendPlacementDestination(urlStr, artifactType, preset string) (string, bool) {
@@ -584,7 +756,7 @@ func (m *Model) renderRecommendFlow() string {
 	sb.WriteString(m.th.label.Render(m.renderRecommendSummary()) + "\n\n")
 	if m.recommendFlow.loading {
 		sb.WriteString(m.th.label.Render("Searching providers and applying local history...") + "\n")
-		sb.WriteString(m.th.label.Render("Esc cancels the panel; the search will finish in the background."))
+		sb.WriteString(m.th.label.Render("Esc closes the panel and cancels the in-flight request."))
 		return sb.String()
 	}
 	if m.recommendFlow.err != "" {
@@ -618,7 +790,11 @@ func (m *Model) renderRecommendFlow() string {
 		backHint = "Shift+Tab"
 	}
 	sb.WriteString("\n")
-	sb.WriteString(m.th.label.Render("j/k: choose  •  Enter: continue/start  •  "+backHint+": back  •  Esc: close") + "\n")
+	if m.recommendFlow.step == recommendStepResults {
+		sb.WriteString(m.th.label.Render("j/k: choose  •  i: details  •  p: probe  •  Enter: start  •  "+backHint+": back  •  Esc: close") + "\n")
+	} else {
+		sb.WriteString(m.th.label.Render("j/k: choose  •  Enter: continue/start  •  "+backHint+": back  •  Esc: close") + "\n")
+	}
 	return sb.String()
 }
 
@@ -646,7 +822,7 @@ func (m *Model) renderRecommendResults() string {
 		sb.WriteString(m.th.label.Render("Go back and loosen the runtime, size, or provider filter.") + "\n")
 		return sb.String()
 	}
-	sb.WriteString(m.th.label.Render("Select a model to start the normal resumable download path.") + "\n\n")
+	sb.WriteString(m.th.label.Render("Select a model to start the normal resumable download path. Press i for details or p to probe.") + "\n\n")
 	for i, rec := range m.recommendFlow.results {
 		prefix := "  "
 		if i == m.recommendFlow.selected {
@@ -679,7 +855,136 @@ func (m *Model) renderRecommendResults() string {
 			sb.WriteString(m.th.label.Render(line+"  "+strings.Join(meta, " • ")) + "\n")
 		}
 	}
+	if m.recommendFlow.inspect {
+		selected := m.recommendFlow.selected
+		if selected < 0 || selected >= len(m.recommendFlow.results) {
+			selected = 0
+		}
+		sb.WriteString(m.renderRecommendInspection(m.recommendFlow.results[selected]))
+	}
 	return sb.String()
+}
+
+func (m *Model) renderRecommendInspection(rec recommend.Recommendation) string {
+	local := m.recommendLocalInspection(rec)
+	var sb strings.Builder
+	sb.WriteString("\n")
+	sb.WriteString(m.th.head.Render("Details") + "\n")
+	sb.WriteString(m.th.label.Render("  model: "+firstNonEmptyString(rec.Name, rec.ModelID)) + "\n")
+	sb.WriteString(m.th.label.Render("  file: "+firstNonEmptyString(rec.FileName, rec.Raw.FileName, rec.Raw.FilePath, "-")) + "\n")
+	sb.WriteString(m.th.label.Render("  provider: "+rec.Provider+"  model-id: "+firstNonEmptyString(rec.ModelID, "-")) + "\n")
+	sb.WriteString(m.th.label.Render("  score: "+fmt.Sprint(rec.Score)+"  fit: "+rec.Fit+"  size: "+recommendBytes(rec.Size)) + "\n")
+	if rec.EstimatedRequired > 0 || rec.MemoryBudget > 0 {
+		sb.WriteString(m.th.label.Render("  memory: needs "+recommendBytes(rec.EstimatedRequired)+" of "+recommendBytes(rec.MemoryBudget)+" budget") + "\n")
+	}
+	if rec.ParameterCount != "" || rec.Quantization != "" {
+		sb.WriteString(m.th.label.Render("  model shape: params="+firstNonEmptyString(rec.ParameterCount, "-")+" quant="+firstNonEmptyString(rec.Quantization, "-")) + "\n")
+	}
+	if rec.Downloads > 0 || rec.Likes > 0 {
+		sb.WriteString(m.th.label.Render(fmt.Sprintf("  popularity: downloads=%d likes=%d", rec.Downloads, rec.Likes)) + "\n")
+	}
+	if len(rec.Reasons) > 0 {
+		sb.WriteString(m.th.label.Render("  rationale:") + "\n")
+		for _, reason := range rec.Reasons {
+			sb.WriteString(m.th.label.Render("    - "+reason) + "\n")
+		}
+	}
+	if len(rec.RuntimeHints) > 0 {
+		sb.WriteString(m.th.label.Render("  runtime setup:") + "\n")
+		for _, hint := range rec.RuntimeHints {
+			line := "    - " + hint.Runtime
+			if hint.PlacementPreset != "" {
+				line += " -> " + hint.PlacementPreset
+			}
+			if hint.Reason != "" {
+				line += ": " + hint.Reason
+			}
+			sb.WriteString(m.th.label.Render(line) + "\n")
+			if cmd := recommendRuntimeSetupCommand(hint, local.Destination); cmd != "" {
+				sb.WriteString(m.th.label.Render("      setup: "+cmd) + "\n")
+			}
+		}
+	}
+	sb.WriteString(m.th.label.Render("  placement: "+local.PlacementNote) + "\n")
+	if local.PlacementPreset != "" {
+		sb.WriteString(m.th.label.Render("    preset: "+local.PlacementPreset+"  artifact: "+local.ArtifactType) + "\n")
+	}
+	sb.WriteString(m.th.label.Render("  dry-run transfer:") + "\n")
+	sb.WriteString(m.th.label.Render("    dest: "+truncateMiddle(local.Destination, 100)) + "\n")
+	sb.WriteString(m.th.label.Render("    "+m.recommendTransferSettings()) + "\n")
+	if m.recommendFlow.probeLoading {
+		sb.WriteString(m.th.label.Render("    live metadata: probing selected URL...") + "\n")
+	} else if m.recommendFlow.probeErr != "" {
+		sb.WriteString(m.th.bad.Render("    live metadata failed: "+m.recommendFlow.probeErr) + "\n")
+	} else if m.recommendFlow.probeDetails.URI == rec.URI {
+		sb.WriteString(m.renderRecommendProbeDetails(m.recommendFlow.probeDetails))
+	} else {
+		sb.WriteString(m.th.label.Render("    live metadata: press p to resolve URL, check size, range support, and history") + "\n")
+	}
+	return sb.String()
+}
+
+func (m *Model) renderRecommendProbeDetails(details recommendProbeDetails) string {
+	var sb strings.Builder
+	sb.WriteString(m.th.label.Render("    resolved: "+truncateMiddle(firstNonEmptyString(details.ResolvedURL, details.URI), 100)) + "\n")
+	if details.FinalURL != "" && details.FinalURL != details.ResolvedURL {
+		sb.WriteString(m.th.label.Render("    final: "+truncateMiddle(details.FinalURL, 100)) + "\n")
+	}
+	sb.WriteString(m.th.label.Render("    remote size: "+recommendBytes(details.Size)+"  ranges: "+yesNo(details.AcceptRange)) + "\n")
+	if details.Filename != "" {
+		sb.WriteString(m.th.label.Render("    server filename: "+details.Filename) + "\n")
+	}
+	if details.ETag != "" || details.LastModified != "" {
+		sb.WriteString(m.th.label.Render("    validators: etag="+firstNonEmptyString(details.ETag, "-")+" last-modified="+firstNonEmptyString(details.LastModified, "-")) + "\n")
+	}
+	if details.HasHistory {
+		sb.WriteString(m.th.label.Render(fmt.Sprintf("    prior host speed: %s/s over %d sample(s), connections=%d chunk=%dMiB status=%s",
+			humanize.Bytes(uint64(details.History.AvgBPS)), details.History.Samples, details.History.Connections, details.History.ChunkSizeMB, details.History.LastStatus)) + "\n")
+	}
+	return sb.String()
+}
+
+func recommendRuntimeSetupCommand(hint recommend.RuntimeHint, dest string) string {
+	if strings.TrimSpace(hint.SetupCommand) != "" {
+		return hint.SetupCommand
+	}
+	switch strings.ToLower(strings.TrimSpace(hint.Runtime)) {
+	case "llama.cpp":
+		return "llama-cli -m " + strconv.Quote(dest) + " -p \"Hello\""
+	case "lm studio":
+		return "Open LM Studio and add " + dest
+	default:
+		return ""
+	}
+}
+
+func (m *Model) recommendTransferSettings() string {
+	if m.cfg == nil {
+		return "transfer: config unavailable"
+	}
+	connections := "default"
+	if m.cfg.Concurrency.PerFileChunks > 0 {
+		connections = fmt.Sprintf("%d", m.cfg.Concurrency.PerFileChunks)
+	}
+	chunk := "auto"
+	if m.cfg.Concurrency.ChunkSizeMB > 0 {
+		chunk = fmt.Sprintf("%d MiB", m.cfg.Concurrency.ChunkSizeMB)
+	}
+	return "transfer: connections=" + connections + " chunk=" + chunk + " profile=auto/adaptive"
+}
+
+func recommendBytes(size int64) string {
+	if size <= 0 {
+		return "unknown"
+	}
+	return humanize.Bytes(uint64(size))
+}
+
+func yesNo(v bool) string {
+	if v {
+		return "yes"
+	}
+	return "no"
 }
 
 func renderRuntimeHints(hints []recommend.RuntimeHint) string {

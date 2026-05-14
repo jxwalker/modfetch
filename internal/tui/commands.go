@@ -107,6 +107,7 @@ func (m *Model) renderHelp() string {
 	sb.WriteString("\n")
 	sb.WriteString(m.th.head.Render("Download Tabs (1-4)") + "\n")
 	sb.WriteString("Recommend: G opens guided model selection by task, hardware, provider, runtime, and size\n")
+	sb.WriteString("Recommend results: i inspect rationale/placement/transfer plan • p probe live metadata\n")
 	sb.WriteString("Nav: j/k up/down\n")
 	sb.WriteString("Filter: / to enter; Enter to apply; Esc to clear\n")
 	sb.WriteString("Sort: s speed • e ETA • R remaining • o clear\n")

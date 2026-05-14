@@ -186,10 +186,13 @@ These are useful, but not required for the first v0.7.0 release:
 - [DONE] Interactive recommendation flow in the TUI:
   add a guided "choose a model" workflow that filters by task, hardware, file
   size, source, and placement target before starting a download.
-- [NEXT] Recommendation result inspection:
+- [DONE] Recommendation result inspection:
   add richer TUI detail views for recommendation rationale, runtime setup
   commands, placement prerequisites, and dry-run transfer metadata before the
   user starts a large download.
+- [NEXT] Recommendation release hardening:
+  run end-to-end UAT on the CLI and TUI recommendation flows, refresh release
+  notes, and prepare a patch tag once the guided recommendation work is merged.
 
 ## Completed Release History
 
