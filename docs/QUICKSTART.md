@@ -230,6 +230,12 @@ modfetch discover search "sshleifer/tiny-gpt2"
 modfetch discover download "sshleifer/tiny-gpt2" --select 1
 ```
 
+Inside the TUI, press `G` to choose a model without copying a URL. The guided
+flow filters live provider results by task, detected or overridden hardware,
+provider, runtime or placement target, and maximum file size. Press `Enter` on
+the selected recommendation to start the same resumable download pipeline used
+by the CLI.
+
 If you want modfetch to choose a model that fits your hardware, use
 `recommend`:
 

@@ -95,12 +95,14 @@ help overlay.
 - `5` or `L` - Switch to Library tab
 - `6` or `M` - Switch to Settings tab
 - `j`/`k` or arrow keys - Navigate up/down
+- `G` - Open guided model recommendations
 - `?` - Toggle help overlay
 - `q` - Quit
 
 ### Download Tab Keys
 
 - `n` - Start a new download
+- `G` - Choose a recommended model by task, hardware, provider, runtime, and size
 - `b` - Import a batch file
 - `y` or `r` - Start or retry selected download
 - `p` - Cancel selected download
@@ -134,6 +136,25 @@ help overlay.
 - `E` - Export selected models to `library-selected-catalog.json`
 - `D` - Delete selected staged download data after confirmation
 - `S` - Scan configured directories for new models
+
+## Guided recommendations
+
+Press `G` from any tab to open a guided model picker. The flow asks for:
+
+- Task: chat, coding, embeddings, or image generation
+- Hardware budget: detected local hardware or a RAM override
+- Provider: all providers, Hugging Face, CivitAI, or ModelScope
+- Runtime or placement target: llama.cpp, Ollama, LM Studio, MLX, ComfyUI, or
+  AUTOMATIC1111/Forge
+- Maximum file size
+- Optional search terms
+
+The results reuse the same ranking engine as `modfetch recommend`, including
+hardware fit, runtime hints, and local recommendation history. Press `Enter` on
+a result to create a normal pending download row and start the existing
+resumable downloader. When a runtime has a placement preset and your config has
+matching placement rules, the TUI saves the file directly under that configured
+target; otherwise it saves under `download_root`.
 
 ### Settings Tab Keys
 

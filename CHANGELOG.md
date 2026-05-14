@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+Added
+- Added a guided TUI recommendation flow opened with `G`, so users can choose a
+  model by task, detected or overridden hardware budget, provider, runtime or
+  placement target, and maximum file size before starting a normal resumable
+  download.
+
 ## v0.8.0 — 2026-05-13
 
 Added

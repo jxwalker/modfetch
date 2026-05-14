@@ -5,7 +5,7 @@
 
 PROJECT: modfetch - CLI+TUI for downloading LLM/Stable Diffusion models
 VERSION: v0.8.0
-ANALYSIS DATE: 2026-04-29
+ANALYSIS DATE: 2026-05-14
 
 ================================================================================
 1. CURRENT OVERVIEW
@@ -29,6 +29,7 @@ modfetch now ships one maintained TUI entry point:
     - Settings rendering in internal/tui/settings_view.go
     - Non-interactive snapshot assembly in cmd/modfetch/tui_cmd.go
     - Modal handling in internal/tui/modals.go
+    - Guided recommendation flow in internal/tui/recommend_flow.go
     - Shared TUI URL normalization in internal/tui/url_resolution.go
     - UI preference persistence in internal/tui/ui_state.go
 
@@ -60,6 +61,15 @@ Library management:
   - Selected-entry catalog export through the shared library export path
   - Scan progress and stale-record repair support
 
+Recommendation workflow:
+  - `G` opens a guided model picker from any tab
+  - The flow filters by task, hardware budget, provider, runtime or placement
+    target, maximum file size, and optional query
+  - Results reuse the same recommendation ranking and history helpers as the
+    CLI
+  - Selecting a result creates a normal pending row and starts the existing
+    resumable download path
+
 Configuration visibility:
   - Read-only settings view for directory roots, placement mode, source tokens,
     download settings, and placement rules
@@ -85,6 +95,8 @@ findings are no longer current:
   - There are no user-facing TUI selector flags.
   - Modal and library confirmation paths handle both Enter key forms.
   - CivitAI page normalization has a shared helper in internal/tui/url_resolution.go.
+  - The guided recommendation flow is isolated in internal/tui/recommend_flow.go
+    and delegates downloads back to the existing TUI action path.
   - TUI selection and filter behavior is covered by focused tests in
     internal/tui/model_test.go, internal/tui/library_test.go, and
     internal/tui/navigation_test.go.
@@ -108,6 +120,8 @@ Current TUI test coverage includes:
   - Settings rendering
   - Non-interactive TUI snapshot JSON/text output against a real SQLite state
     database
+  - Guided recommendation filtering, rendering, history recording, and download
+    handoff against a real SQLite state database
   - Inspector behavior
   - UI-state persistence
   - Config wizard validation
@@ -126,6 +140,7 @@ Keep future TUI changes in the current package structure:
 
   - Place rendering changes in the relevant *_view.go file.
   - Define modal behavior in modals.go.
+  - Keep guided recommendation behavior in recommend_flow.go.
   - Handle library mutations and confirmations in library_actions.go.
   - Implement shared resolver/page normalization in url_resolution.go.
   - Add focused tests beside the touched behavior.
@@ -137,10 +152,10 @@ Keep future TUI changes in the current package structure:
 ================================================================================
 
 The current v0.8.0 TUI is a single, maintained interface with download
-management, library maintenance, settings inspection, bulk operations, and
-state persistence. Non-interactive snapshot hooks now expose the same persisted
-state for scripts without starting the Bubble Tea program. The older
-dual-implementation comparison has been superseded by the current package
-layout and test coverage.
+management, guided model recommendations, library maintenance, settings
+inspection, bulk operations, and state persistence. Non-interactive snapshot
+hooks expose the same persisted state for scripts without starting the Bubble
+Tea program. The older dual-implementation comparison has been superseded by
+the current package layout and test coverage.
 
 ================================================================================

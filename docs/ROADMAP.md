@@ -183,9 +183,13 @@ These are useful, but not required for the first v0.7.0 release:
   expose placement/runtime hints for Ollama, llama.cpp, MLX, ComfyUI, and
   Stable Diffusion UIs so recommendation output explains where a model can run,
   not just whether it can be downloaded.
-- [NEXT] Interactive recommendation flow in the TUI:
+- [DONE] Interactive recommendation flow in the TUI:
   add a guided "choose a model" workflow that filters by task, hardware, file
   size, source, and placement target before starting a download.
+- [NEXT] Recommendation result inspection:
+  add richer TUI detail views for recommendation rationale, runtime setup
+  commands, placement prerequisites, and dry-run transfer metadata before the
+  user starts a large download.
 
 ## Completed Release History
 
