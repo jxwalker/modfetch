@@ -199,9 +199,12 @@ These are useful, but not required for the first v0.7.0 release:
 - [DONE] Package channel verification:
   after v0.8.1 assets publish, verify release artifacts and refresh downstream
   Homebrew/AUR package metadata as needed.
-- [NEXT] v0.9 planning:
-  choose the next product direction from real user feedback after the v0.8.1
-  recommendation and adaptive-transfer release line has shipped.
+- [IN PROGRESS] v0.9 beginner acquisition path:
+  add `modfetch get` task presets as the beginner-friendly layer above
+  recommendations, starter artifacts, and the normal resumable download path.
+- [NEXT] v0.9 follow-up:
+  expand from single-file task presets into curated task packs, multi-file
+  snapshot manifests, and stronger post-download "run it locally" guidance.
 
 ## Completed Release History
 

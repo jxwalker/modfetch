@@ -12,6 +12,7 @@ Complete command-line reference for modfetch. For a product overview, see
   - [download](#download)
   - [bench](#bench)
   - [discover](#discover)
+  - [get](#get)
   - [recommend](#recommend)
   - [starter](#starter)
   - [status](#status)
@@ -56,6 +57,7 @@ modfetch download --url URL       # Download a file
 modfetch starter list             # Beginner-safe starter artifacts
 modfetch discover search "tiny gpt2"
 modfetch discover download "sshleifer/tiny-gpt2" --select 1
+modfetch get coding --small        # Beginner preset over recommend/download
 modfetch recommend --task coding   # Pick a model that fits this machine
 modfetch bench --history           # Show learned transfer history
 modfetch verify --all              # Verify all downloads
@@ -216,6 +218,49 @@ files, or the TUI new-download modal. `discover download` searches first, picks
 the `--select` result number, and then delegates to `download`, so normal flags
 such as `--config`, `--dest`, `--place`, `--dry-run`, `--quiet`, and
 `--summary-json` still apply.
+
+### get
+
+Use task presets when you want a good first command instead of deciding provider
+queries, task flags, and download handoff yourself. `get` delegates to
+`recommend` for model tasks and to `starter download` for the starter task, so
+history, runtime hints, adaptive transfer tuning, resume, dry-run, placement,
+and JSON behavior stay on the existing code paths.
+
+```bash
+modfetch get TASK [--small|--medium|--large] [OPTIONS]
+```
+
+**Tasks:**
+- `coding` - coding assistant GGUF recommendations
+- `chat` - general chat/instruct GGUF recommendations
+- `embedding` - embedding model recommendations. `embeddings` and `embed` are
+  accepted aliases.
+- `image` - Stable Diffusion / ComfyUI safetensors recommendations
+- `starter` - beginner-safe public starter artifact
+
+**Options:**
+- `--small`, `--medium`, `--large`, or `--size NAME` - choose the curated query
+  preset. The default is `medium`.
+- `--query TEXT` - override the curated query.
+- `--provider huggingface|civitai|modelscope|all` - override the provider.
+- `--limit N` - number of recommendations to inspect before selecting a result.
+- `--download` - download the selected recommendation.
+- `--dry-run` - plan the selected recommendation download without writing
+  files. This implies the download handoff.
+- `--select N`, `--dest PATH`, `--place`, `--summary-json`, `--quiet`,
+  `--no-resume`, `--ram-gb`, `--vram-gb`, `--unified-memory`, and `--no-learn`
+  forward to the underlying recommendation/download flow.
+- `--starter-id ID` - choose a specific starter artifact for `get starter`.
+
+**Examples:**
+```bash
+modfetch get coding --small
+modfetch get coding --small --download
+modfetch get embedding --download --summary-json
+modfetch get image --small --dry-run
+modfetch get starter --dry-run
+```
 
 ### recommend
 

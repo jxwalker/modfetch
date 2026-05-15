@@ -74,14 +74,14 @@ mkdir -p ~/.config/modfetch
 modfetch config wizard --out ~/.config/modfetch/config.yml
 export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 
-# Pick a model that fits this machine.
-modfetch recommend --task coding
+# Beginner path: choose a small coding model that fits this machine.
+modfetch get coding --small
 
 # Preview the exact selected download without writing files.
-modfetch recommend --task coding --download --select 1 --dry-run --summary-json
+modfetch get coding --small --dry-run --summary-json
 
 # Download the top result through the resumable transfer pipeline.
-modfetch recommend --task coding --download --select 1
+modfetch get coding --small --download
 ```
 
 If you already know the source:
@@ -111,13 +111,16 @@ history before starting a large download.
 ### Find and Download a Real Model
 
 ```bash
+modfetch get coding --small
+modfetch get coding --small --download
 modfetch discover search "tiny gpt2"
 modfetch discover download "sshleifer/tiny-gpt2" --select 1
 ```
 
-`discover` searches real providers, selects a concrete downloadable artifact,
-and delegates to `download`, so resume, auth, placement, dry-run, and JSON
-summary flags still work.
+`get` is the beginner path: task and size presets feed the recommendation
+engine, then optional `--download` delegates to the normal transfer pipeline.
+Use `discover` when you want to search a provider by name and select a concrete
+artifact yourself.
 
 ### Download a Huge GGUF Without Hand-Tuning
 
@@ -272,6 +275,7 @@ config      validate, print, or generate YAML config
 download    fetch one URL/resolver URI or a batch file
 bench       compare modfetch and aria2, or inspect transfer history
 discover    search providers and download a selected result
+get         beginner task presets for choosing and downloading models
 recommend   rank model files for task, hardware, runtime, and memory fit
 starter     list or download beginner-safe starter artifacts
 status      show persisted download status

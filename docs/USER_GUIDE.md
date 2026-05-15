@@ -82,6 +82,26 @@ modfetch download --config ~/.config/modfetch/config.yml \
   --url 'civitai://model/123456?file=myfile.safetensors'
 ```
 
+### Get a model with beginner presets
+
+If you want a beginner-friendly path, start with `get`. It applies task and size
+presets, then delegates to `recommend` and `download` so the normal history,
+runtime hints, resume, dry-run, placement, and JSON behavior still apply.
+
+```bash
+modfetch get coding --small
+modfetch get coding --small --dry-run --summary-json
+modfetch get coding --small --download
+modfetch get embedding --download
+modfetch get starter --dry-run
+```
+
+Use `--query` when the preset is close but you want to steer the search:
+
+```bash
+modfetch get coding --small --query "qwen2.5 coder gguf"
+```
+
 ### Recommend a model for your hardware
 
 If you do not know which repo or quantization to choose, start with

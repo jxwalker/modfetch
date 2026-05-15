@@ -8,7 +8,7 @@ automating, troubleshooting, or maintaining a release.
 
 - [Quick Start](QUICKSTART.md): install, configure, run a first download, and
   open the TUI.
-- [User Guide](USER_GUIDE.md): end-to-end workflows for recommendations,
+- [User Guide](USER_GUIDE.md): end-to-end workflows for `get`, recommendations,
   downloads, verification, placement, library management, and snapshots.
 - [CLI Guide](CLI_GUIDE.md): command and flag reference.
 - [TUI Guide](TUI_GUIDE.md): dashboard layout, keyboard controls, guided
