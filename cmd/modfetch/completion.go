@@ -56,7 +56,7 @@ _modfetch_completions()
                 *) ;;
             esac ;;
         download)
-            COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --profile --connections --chunk-size-mb --dry-run --force --no-auth-preflight --extract --extract-dir --quant --list-quants" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --profile --connections --chunk-size-mb --dry-run --run-help --force --no-auth-preflight --extract --extract-dir --quant --list-quants" -- "$cur") ) ;;
         bench)
             COMPREPLY=( $(compgen -W "--config --log-level --json --url --tools --duration --profile --connections --chunk-size-mb --keep --history modfetch aria2" -- "$cur") ) ;;
         discover)
@@ -68,13 +68,13 @@ _modfetch_completions()
                 search)
                     COMPREPLY=( $(compgen -W "--config --log-level --json --provider --limit huggingface civitai modelscope all" -- "$cur") ) ;;
                 download)
-                    COMPREPLY=( $(compgen -W "--config --log-level --json --provider --limit --select --dest --place --summary-json --dry-run --quiet --no-resume huggingface civitai modelscope all" -- "$cur") ) ;;
+                    COMPREPLY=( $(compgen -W "--config --log-level --json --provider --limit --select --dest --place --summary-json --dry-run --run-help --quiet --no-resume huggingface civitai modelscope all" -- "$cur") ) ;;
                 *) ;;
             esac ;;
         get)
-            COMPREPLY=( $(compgen -W "--config --log-level --json --provider --query --limit --select --download --dest --place --summary-json --dry-run --quiet --no-resume --ram-gb --vram-gb --unified-memory --small --medium --large --size --starter-id --no-learn coding chat embedding embeddings image starter huggingface civitai modelscope all" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --provider --query --limit --select --download --dest --place --summary-json --dry-run --run-help --quiet --no-resume --ram-gb --vram-gb --unified-memory --small --medium --large --size --starter-id --no-learn coding chat embedding embeddings image starter huggingface civitai modelscope all" -- "$cur") ) ;;
         recommend)
-            COMPREPLY=( $(compgen -W "--config --log-level --json --provider --task --limit --ram-gb --vram-gb --unified-memory --select --download --dest --place --summary-json --dry-run --quiet --no-resume --history --history-limit --no-learn chat coding embedding image huggingface civitai modelscope all" -- "$cur") ) ;;
+            COMPREPLY=( $(compgen -W "--config --log-level --json --provider --task --limit --ram-gb --vram-gb --unified-memory --select --download --dest --place --summary-json --dry-run --run-help --quiet --no-resume --history --history-limit --no-learn chat coding embedding image huggingface civitai modelscope all" -- "$cur") ) ;;
         starter)
             if [[ ${cword} -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "list show download" -- "$cur") )
@@ -84,7 +84,7 @@ _modfetch_completions()
                 list|show)
                     COMPREPLY=( $(compgen -W "--config --log-level --json gpt2-config gpt2-tokenizer public-1mb" -- "$cur") ) ;;
                 download)
-                    COMPREPLY=( $(compgen -W "--config --log-level --json --id --dest --place --summary-json --dry-run --quiet --no-resume gpt2-config gpt2-tokenizer public-1mb" -- "$cur") ) ;;
+                    COMPREPLY=( $(compgen -W "--config --log-level --json --id --dest --place --summary-json --dry-run --run-help --quiet --no-resume gpt2-config gpt2-tokenizer public-1mb" -- "$cur") ) ;;
                 *) ;;
             esac ;;
         dedupe)
@@ -171,7 +171,7 @@ _modfetch() {
       fi
       ;;
     download)
-      _arguments '*:options:(--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --profile --connections --chunk-size-mb --dry-run --force --no-auth-preflight --extract --extract-dir --quant --list-quants)'
+      _arguments '*:options:(--config --log-level --json --quiet --no-resume --url --dest --sha256 --sha256-file --batch --place --summary-json --batch-parallel --profile --connections --chunk-size-mb --dry-run --run-help --force --no-auth-preflight --extract --extract-dir --quant --list-quants)'
       ;;
     bench)
       _arguments '*:options:(--config --log-level --json --url --tools --duration --profile --connections --chunk-size-mb --keep --history modfetch aria2)'
@@ -185,16 +185,16 @@ _modfetch() {
             _arguments '*:options:(--config --log-level --json --provider --limit huggingface civitai modelscope all)'
             ;;
           download)
-            _arguments '*:options:(--config --log-level --json --provider --limit --select --dest --place --summary-json --dry-run --quiet --no-resume huggingface civitai modelscope all)'
+            _arguments '*:options:(--config --log-level --json --provider --limit --select --dest --place --summary-json --dry-run --run-help --quiet --no-resume huggingface civitai modelscope all)'
             ;;
         esac
       fi
       ;;
     get)
-      _arguments '*:options:(--config --log-level --json --provider --query --limit --select --download --dest --place --summary-json --dry-run --quiet --no-resume --ram-gb --vram-gb --unified-memory --small --medium --large --size --starter-id --no-learn coding chat embedding embeddings image starter huggingface civitai modelscope all)'
+      _arguments '*:options:(--config --log-level --json --provider --query --limit --select --download --dest --place --summary-json --dry-run --run-help --quiet --no-resume --ram-gb --vram-gb --unified-memory --small --medium --large --size --starter-id --no-learn coding chat embedding embeddings image starter huggingface civitai modelscope all)'
       ;;
     recommend)
-      _arguments '*:options:(--config --log-level --json --provider --task --limit --ram-gb --vram-gb --unified-memory --select --download --dest --place --summary-json --dry-run --quiet --no-resume --history --history-limit --no-learn chat coding embedding image huggingface civitai modelscope all)'
+      _arguments '*:options:(--config --log-level --json --provider --task --limit --ram-gb --vram-gb --unified-memory --select --download --dest --place --summary-json --dry-run --run-help --quiet --no-resume --history --history-limit --no-learn chat coding embedding image huggingface civitai modelscope all)'
       ;;
     starter)
       if (( CURRENT == 3 )); then
@@ -205,7 +205,7 @@ _modfetch() {
             _arguments '*:options:(--config --log-level --json gpt2-config gpt2-tokenizer public-1mb)'
             ;;
           download)
-            _arguments '*:options:(--config --log-level --json --id --dest --place --summary-json --dry-run --quiet --no-resume gpt2-config gpt2-tokenizer public-1mb)'
+            _arguments '*:options:(--config --log-level --json --id --dest --place --summary-json --dry-run --run-help --quiet --no-resume gpt2-config gpt2-tokenizer public-1mb)'
             ;;
         esac
       fi
@@ -335,6 +335,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from download" -l profile -d "Do
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l connections -d "Parallel range requests per file"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l chunk-size-mb -d "Range chunk size in MiB"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l dry-run -d "Plan without downloading"
+complete -c modfetch -n "__fish_seen_subcommand_from download" -l run-help -d "Show local runtime guidance"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l force -d "Skip SHA256 verification"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l no-auth-preflight -d "Skip auth preflight probe"
 complete -c modfetch -n "__fish_seen_subcommand_from download" -l extract -d "Extract zip/tar/tar.gz/tgz/7z archive after download"
@@ -366,6 +367,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_s
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l place -d "Place after download"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l summary-json -d "Print completion summary as JSON"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l dry-run -d "Plan without downloading"
+complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l run-help -d "Show local runtime guidance"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l quiet -d "Suppress progress and info logs"
 complete -c modfetch -n "__fish_seen_subcommand_from discover; and __fish_seen_subcommand_from download" -l no-resume -d "Start fresh instead of resuming"
 complete -c modfetch -n "__fish_seen_subcommand_from get" -a "coding chat embedding embeddings image starter" -d "Task preset"
@@ -378,6 +380,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from get" -l dest -d "Destinatio
 complete -c modfetch -n "__fish_seen_subcommand_from get" -l place -d "Place after download"
 complete -c modfetch -n "__fish_seen_subcommand_from get" -l summary-json -d "Print completion summary as JSON"
 complete -c modfetch -n "__fish_seen_subcommand_from get" -l dry-run -d "Plan without downloading"
+complete -c modfetch -n "__fish_seen_subcommand_from get" -l run-help -d "Show local runtime guidance"
 complete -c modfetch -n "__fish_seen_subcommand_from get" -l quiet -d "Suppress progress and info logs"
 complete -c modfetch -n "__fish_seen_subcommand_from get" -l no-resume -d "Start fresh instead of resuming"
 complete -c modfetch -n "__fish_seen_subcommand_from get" -l ram-gb -d "Override RAM in GiB"
@@ -401,6 +404,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l dest -d "Dest
 complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l place -d "Place after download"
 complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l summary-json -d "Print completion summary as JSON"
 complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l dry-run -d "Plan without downloading"
+complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l run-help -d "Show local runtime guidance"
 complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l quiet -d "Suppress progress and info logs"
 complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l no-resume -d "Start fresh instead of resuming"
 complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l history -d "List recommendation history"
@@ -424,6 +428,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_su
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l place -d "Place after download"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l summary-json -d "Print completion summary as JSON"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l dry-run -d "Plan without downloading"
+complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l run-help -d "Show local runtime guidance"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l quiet -d "Suppress progress and info logs"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l no-resume -d "Start fresh instead of resuming"
 complete -c modfetch -n "__fish_seen_subcommand_from library" -a "export" -d "Export model catalog"

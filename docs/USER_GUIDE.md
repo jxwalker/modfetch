@@ -90,7 +90,8 @@ runtime hints, resume, dry-run, placement, and JSON behavior still apply.
 
 ```bash
 modfetch get coding --small
-modfetch get coding --small --dry-run --summary-json
+modfetch get coding --small --run-help
+modfetch get coding --small --dry-run --summary-json --run-help
 modfetch get coding --small --download
 modfetch get embedding --download
 modfetch get starter --dry-run
@@ -109,7 +110,8 @@ If you do not know which repo or quantization to choose, start with
 memory fit from file size, parameter count, and quantization metadata, and shows
 the command it would use to download each result. The output also includes
 runtime hints, such as llama.cpp/Ollama for GGUF files or ComfyUI/Stable
-Diffusion WebUI for image safetensors.
+Diffusion WebUI for image safetensors. Add `--run-help` when you want concrete
+commands for the selected artifact before downloading it.
 
 ```bash
 modfetch recommend --task chat
@@ -125,11 +127,13 @@ When you like a result, download it through the same resumable pipeline:
 
 ```bash
 modfetch recommend --task coding --download --select 1
+modfetch recommend --task coding --select 1 --run-help
 ```
 
 Use `--dry-run --summary-json` first when you want to verify the selected URI,
 destination, remote size, range support, and attached auth state without writing
-files.
+files. `--run-help` can be combined with the JSON summary; the response includes
+`run_hints` so scripts can show the same local runtime guidance.
 
 modfetch remembers selected and skipped recommendations per task, query, and
 hardware class. That history nudges future ranking without hiding fresh provider
@@ -151,7 +155,7 @@ per-host transfer history before you commit to a large download.
 
 #### Dry-run planning
 
-Use `--dry-run` to plan without downloading. It resolves resolver URIs and direct URLs, computes the default destination (respecting resolver SuggestedFilename and `--naming-pattern`), and probes remote metadata (filename, size, Accept-Range). It performs no database or file writes.
+Use `--dry-run` to plan without downloading. It resolves resolver URIs and direct URLs, computes the default destination (respecting resolver SuggestedFilename and `--naming-pattern`), and probes remote metadata (filename, size, Accept-Ranges). It performs no database or file writes. Add `--run-help` to include local runtime guidance for the planned file.
 
 - Secrets are never printed; only a boolean `auth_attached` is shown.
 - If `network.disable_auth_preflight: true` is set in the config, the probe is skipped.

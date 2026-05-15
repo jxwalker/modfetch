@@ -40,7 +40,7 @@ func printDiscoverUsage() {
 Examples:
   modfetch discover search "tiny gpt2"
   modfetch discover download "sshleifer/tiny-gpt2" --select 1 --summary-json
-  modfetch discover download "llama gguf" --select 2 --dry-run`))
+  modfetch discover download "llama gguf" --select 2 --dry-run --run-help`))
 }
 
 func discoverSearch(ctx context.Context, args []string) error {
@@ -72,10 +72,11 @@ func discoverDownload(ctx context.Context, args []string) error {
 	placeFlag := fs.Bool("place", false, "place after successful download")
 	summaryJSON := fs.Bool("summary-json", false, "print completion summary as JSON")
 	dryRun := fs.Bool("dry-run", false, "plan without downloading")
+	runHelp := fs.Bool("run-help", false, "print local runtime guidance for the planned or downloaded artifact")
 	quiet := fs.Bool("quiet", false, "suppress progress and info logs")
 	noResume := fs.Bool("no-resume", false, "start fresh instead of resuming")
 	flagArgs, queryArgs := splitDiscoverArgs(args, map[string]bool{
-		"json": true, "place": true, "summary-json": true, "dry-run": true, "quiet": true, "no-resume": true,
+		"json": true, "place": true, "summary-json": true, "dry-run": true, "run-help": true, "quiet": true, "no-resume": true,
 	})
 	if err := fs.Parse(flagArgs); err != nil {
 		return err
@@ -114,6 +115,9 @@ func discoverDownload(ctx context.Context, args []string) error {
 	}
 	if *dryRun {
 		downloadArgs = append(downloadArgs, "--dry-run")
+	}
+	if *runHelp {
+		downloadArgs = append(downloadArgs, "--run-help")
 	}
 	if *quiet {
 		downloadArgs = append(downloadArgs, "--quiet")

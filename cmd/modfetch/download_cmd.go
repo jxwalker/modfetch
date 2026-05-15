@@ -63,6 +63,7 @@ func handleDownload(ctx context.Context, args []string) error {
 	extractDir := fs.String("extract-dir", "", "directory for extracted archives (default: archive path without extension)")
 	quant := fs.String("quant", "", "HuggingFace quantization to download (e.g., Q4_K_M, fp16)")
 	listQuants := fs.Bool("list-quants", false, "list available quantizations for HuggingFace URI and exit")
+	runHelp := fs.Bool("run-help", false, "print local runtime guidance for the planned or downloaded artifact")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -80,6 +81,9 @@ func handleDownload(ctx context.Context, args []string) error {
 	}
 	if storage.IsS3URI(strings.TrimSpace(*dest)) && (*extractFlag || *placeFlag) {
 		return errors.New("s3 destinations cannot be combined with --extract or --place")
+	}
+	if strings.TrimSpace(*batchPath) != "" && *runHelp {
+		return errors.New("--run-help is only supported for single-file downloads")
 	}
 	if err := applyDownloadTuning(c, *profile, *connections, *chunkSizeMB); err != nil {
 		return err
@@ -513,6 +517,10 @@ func handleDownload(ctx context.Context, args []string) error {
 			base := util.URLPathBase(resolvedURL)
 			candDest = filepath.Join(c.General.DownloadRoot, util.SafeFileName(base))
 		}
+		var runHints []runHelpHint
+		if *runHelp {
+			runHints = runHelpHintsForPath(candDest)
+		}
 		if *summaryJSON {
 			chunkMode, effectiveChunkMB := effectiveChunkSize(c)
 			summary := map[string]any{
@@ -523,6 +531,9 @@ func handleDownload(ctx context.Context, args []string) error {
 				"chunk_size_mode": chunkMode,
 				"profile":         reportedDownloadProfile(*profile, *connections, *chunkSizeMB, adaptiveDecision),
 				"profile_source":  reportedDownloadProfileSource(*profile, *connections, *chunkSizeMB, adaptiveDecision),
+			}
+			if *runHelp {
+				summary["run_hints"] = runHints
 			}
 			if adaptiveDecision != nil && adaptiveDecision.Probed && adaptiveDecision.Reason != "" {
 				summary["adaptive_reason"] = adaptiveDecision.Reason
@@ -554,6 +565,9 @@ func handleDownload(ctx context.Context, args []string) error {
 			fmt.Printf("  Chunk size: %d MiB\n", chunkSizeMB)
 		} else {
 			fmt.Printf("  Chunk size: auto (%d-%d MiB)\n", autoChunkSizeMinMB, autoChunkSizeMaxMB)
+		}
+		if *runHelp {
+			printRunHelp(candDest, runHints)
 		}
 		return nil
 	}
@@ -673,9 +687,7 @@ func handleDownload(ctx context.Context, args []string) error {
 		avgBps = float64(size) / dur
 	}
 	if *summaryJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(map[string]any{
+		summary := map[string]any{
 			"url":       logging.SanitizeURL(resolvedURL),
 			"dest":      final,
 			"size":      size,
@@ -684,7 +696,13 @@ func handleDownload(ctx context.Context, args []string) error {
 			"sha256":    sum,
 			"status":    "ok",
 			"extracted": extracted,
-		})
+		}
+		if *runHelp {
+			summary["run_hints"] = runHelpHintsForPath(final)
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(summary)
 	} else if !*common.jsonOut && !*quiet {
 		var rate string
 		if dur > 0 && size > 0 {
@@ -693,6 +711,9 @@ func handleDownload(ctx context.Context, args []string) error {
 			rate = "-"
 		}
 		fmt.Printf("\nDownloaded: %s\nDest: %s\nSHA256: %s\nSize: %s\nDuration: %.1fs  Avg: %s\n", logging.SanitizeURL(resolvedURL), final, sum, humanize.Bytes(uint64(size)), dur, rate)
+		if *runHelp {
+			printRunHelp(final, runHelpHintsForPath(final))
+		}
 	}
 	log.Infof("downloaded: %s (sha256=%s)", final, sum)
 	if len(extracted) > 0 {

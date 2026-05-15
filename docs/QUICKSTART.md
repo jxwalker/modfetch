@@ -273,10 +273,13 @@ If you want modfetch to choose a model that fits your hardware, use
 modfetch recommend --task chat
 modfetch recommend --task coding
 modfetch recommend --task chat --download --select 1 --dry-run
+modfetch recommend --task coding --select 1 --run-help
 ```
 
 The dry run shows the selected resolver URI, destination, remote size, range
-support, and auth state before any file is written.
+support, and auth state before any file is written. `--run-help` adds concrete
+next commands for likely local runtimes, such as llama.cpp/Ollama for GGUF
+files or ComfyUI placement for image safetensors.
 
 Recommendation output also shows likely runtimes and placement presets. After
 you select or skip results a few times, modfetch records local preference

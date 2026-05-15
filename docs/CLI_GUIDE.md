@@ -135,6 +135,10 @@ modfetch download --url URL [OPTIONS]
 - `--quant NAME` - Select a Hugging Face quantization to download
 - `--list-quants` - List available Hugging Face quantizations and exit
 - `--dry-run` - Preview download without actually downloading
+- `--run-help` - Add local runtime guidance for the planned or downloaded
+  artifact. For GGUF files this prints llama.cpp/Ollama/LM Studio guidance; for
+  image safetensors it prints placement commands for ComfyUI and
+  AUTOMATIC1111/Forge.
 - `--summary-json` - Output JSON summary instead of human-readable
 - `--quiet` - Suppress human-readable output (keeps errors)
 - `--no-auth-preflight` - Skip authentication check (override config)
@@ -156,6 +160,7 @@ modfetch download --url 'hf://TheBloke/Llama-2-7B-GGUF/llama-2-7b.Q4_K_M.gguf?re
 modfetch download --url 'hf://owner/repo/model.gguf?rev=main'
 modfetch download --url 'hf://owner/repo/model.gguf?rev=main' --profile large-model
 modfetch download --url 'https://huggingface.co/owner/repo/resolve/main/model.gguf' --connections 16 --chunk-size-mb 64
+modfetch download --url 'hf://owner/repo/model.gguf?rev=main' --dry-run --run-help
 
 # CivitAI (requires CIVITAI_TOKEN for restricted content)
 modfetch download --url 'civitai://model/123456'
@@ -248,6 +253,8 @@ modfetch get TASK [--small|--medium|--large] [OPTIONS]
 - `--download` - download the selected recommendation.
 - `--dry-run` - plan the selected recommendation download without writing
   files. This implies the download handoff.
+- `--run-help` - show concrete local runtime guidance for the selected
+  artifact. Without `--download`, this implies `--dry-run`.
 - `--select N`, `--dest PATH`, `--place`, `--summary-json`, `--quiet`,
   `--no-resume`, `--ram-gb`, `--vram-gb`, `--unified-memory`, and `--no-learn`
   forward to the underlying recommendation/download flow.
@@ -256,6 +263,7 @@ modfetch get TASK [--small|--medium|--large] [OPTIONS]
 **Examples:**
 ```bash
 modfetch get coding --small
+modfetch get coding --small --run-help
 modfetch get coding --small --download
 modfetch get embedding --download --summary-json
 modfetch get image --small --dry-run
@@ -283,6 +291,8 @@ modfetch recommend [QUERY] [OPTIONS]
 - `--unified-memory` - treat system RAM as shared CPU/GPU memory
 - `--download` - pass the selected recommendation to `download`
 - `--select N` - 1-based recommendation number for `--download`
+- `--run-help` - show local runtime guidance for the selected result. Without
+  `--download`, this implies `--dry-run`.
 - `--dest PATH`, `--place`, `--summary-json`, `--dry-run`, `--quiet`,
   `--no-resume` - forwarded to the selected download
 - `--history` - list persisted recommendation history instead of searching
@@ -300,6 +310,9 @@ modfetch recommend "llama 8b gguf" --ram-gb 32 --unified-memory --json
 
 # Select the top recommendation and show the exact download plan.
 modfetch recommend --task chat --download --select 1 --dry-run --summary-json
+
+# Plan the top coding result and show how to run it locally.
+modfetch recommend --task coding --select 1 --run-help
 
 # Inspect what modfetch has learned from prior recommendation runs.
 modfetch recommend --history
