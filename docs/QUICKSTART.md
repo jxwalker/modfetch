@@ -6,7 +6,7 @@ library view.
 
 If you already know the exact URL, use `modfetch download --url ...`. If you do
 not know which repo, file, or quantization to choose, start with
-`modfetch recommend` or press `G` in the TUI.
+`modfetch get`, `modfetch recommend`, or press `G` in the TUI.
 
 ## Table of Contents
 
@@ -119,17 +119,18 @@ export CIVITAI_TOKEN="your_civitai_token"      # For CivitAI
 
 ## Step 3: Your First Download
 
-Start by letting modfetch choose a model for the current machine:
+Start with a beginner task preset. It chooses the recommendation query for you,
+then hands off to the same resumable download path when you add `--download`:
 
 ```bash
-modfetch recommend --task chat
-modfetch recommend --task chat --download --select 1 --dry-run --summary-json
+modfetch get chat --small
+modfetch get chat --small --dry-run --summary-json
 ```
 
 When the plan looks right, remove `--dry-run`:
 
 ```bash
-modfetch recommend --task chat --download --select 1
+modfetch get chat --small --download
 ```
 
 If you want a tiny public test file instead, use this:

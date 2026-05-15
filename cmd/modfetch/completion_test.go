@@ -7,7 +7,7 @@ import (
 
 func TestCompletionTopLevelCommands(t *testing.T) {
 	for name, script := range completionScripts() {
-		for _, command := range []string{"config", "download", "bench", "discover", "recommend", "starter", "place", "verify", "status", "tui", "library", "batch", "dedupe", "clean", "hostcaps", "version", "help", "completion"} {
+		for _, command := range []string{"config", "download", "bench", "discover", "get", "recommend", "starter", "place", "verify", "status", "tui", "library", "batch", "dedupe", "clean", "hostcaps", "version", "help", "completion"} {
 			want := completionCommandToken(name, command)
 			if !strings.Contains(script, want) {
 				t.Fatalf("%s completion missing top-level command %q", name, command)
@@ -18,10 +18,18 @@ func TestCompletionTopLevelCommands(t *testing.T) {
 
 func TestCompletionCurrentFlags(t *testing.T) {
 	tests := map[string][]string{
-		"config":    {"--strict", "--out"},
-		"download":  {"--no-resume", "--summary-json", "--batch-parallel", "--profile", "--connections", "--chunk-size-mb", "--dry-run", "--force", "--no-auth-preflight", "--quant", "--list-quants"},
-		"bench":     {"--url", "--tools", "--duration", "--profile", "--connections", "--chunk-size-mb", "--keep", "--history"},
-		"discover":  {"--provider", "--limit", "--select", "--summary-json", "--dry-run"},
+		"config":   {"--strict", "--out"},
+		"download": {"--no-resume", "--summary-json", "--batch-parallel", "--profile", "--connections", "--chunk-size-mb", "--dry-run", "--force", "--no-auth-preflight", "--quant", "--list-quants"},
+		"bench":    {"--url", "--tools", "--duration", "--profile", "--connections", "--chunk-size-mb", "--keep", "--history"},
+		"discover": {"--provider", "--limit", "--select", "--summary-json", "--dry-run"},
+		"get": {
+			"--provider", "--query", "--limit", "--select",
+			"--small", "--medium", "--large", "--size",
+			"--download", "--dry-run", "--dest", "--place",
+			"--summary-json", "--quiet", "--no-resume",
+			"--ram-gb", "--vram-gb", "--unified-memory",
+			"--starter-id", "--no-learn",
+		},
 		"recommend": {"--provider", "--task", "--ram-gb", "--vram-gb", "--unified-memory", "--download", "--select", "--dry-run", "--history", "--history-limit", "--no-learn"},
 		"starter":   {"--id", "--summary-json", "--dry-run"},
 		"place":     {"--dry-run", "--preset", "--list-presets"},

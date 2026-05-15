@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+
+Added
+- Added `modfetch get` as a beginner-friendly task preset command for coding,
+  chat, embeddings, image, and starter workflows. The command delegates to the
+  existing recommendation, starter, and download paths so history, dry-run,
+  resume, placement, and adaptive transfer behavior stay shared.
+
 ## v0.8.1 — 2026-05-14
 
 Added

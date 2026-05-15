@@ -52,6 +52,8 @@ func run(ctx context.Context, args []string) error {
 		return handleBench(ctx, args[1:])
 	case "discover":
 		return handleDiscover(ctx, args[1:])
+	case "get":
+		return handleGet(ctx, args[1:])
 	case "recommend":
 		return handleRecommend(ctx, args[1:])
 	case "starter":
@@ -99,6 +101,7 @@ Commands:
   download          Download a file via direct URL or resolver URI (starter://, hf://, civitai://)
   bench             Benchmark modfetch against aria2 on the same URL
   discover          Search real model providers and download a selected result
+  get               Beginner task presets for choosing and downloading models
   recommend         Recommend model files for your task and hardware
   starter           List or download beginner-safe starter artifacts
   status            Show download status (table or JSON)
