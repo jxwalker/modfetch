@@ -38,6 +38,7 @@ func handleGet(ctx context.Context, args []string) error {
 	placeFlag := fs.Bool("place", false, "place after successful download")
 	summaryJSON := fs.Bool("summary-json", false, "print download completion summary as JSON")
 	dryRun := fs.Bool("dry-run", false, "plan selected download without downloading")
+	runHelp := fs.Bool("run-help", false, "show local runtime guidance for the selected artifact; implies --dry-run unless --download is set")
 	quiet := fs.Bool("quiet", false, "suppress progress and info logs")
 	noResume := fs.Bool("no-resume", false, "start selected download fresh instead of resuming")
 	ramGB := fs.Float64("ram-gb", 0, "override detected system RAM in GiB")
@@ -51,7 +52,7 @@ func handleGet(ctx context.Context, args []string) error {
 	noLearn := fs.Bool("no-learn", false, "do not use or write recommendation history")
 	flagArgs, positional := splitDiscoverArgs(args, map[string]bool{
 		"json": true, "download": true, "place": true, "summary-json": true, "dry-run": true, "quiet": true,
-		"no-resume": true, "unified-memory": true, "small": true, "medium": true, "large": true, "no-learn": true,
+		"run-help": true, "no-resume": true, "unified-memory": true, "small": true, "medium": true, "large": true, "no-learn": true,
 	})
 	if err := fs.Parse(flagArgs); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -85,6 +86,7 @@ func handleGet(ctx context.Context, args []string) error {
 	} else if queryWords != "" {
 		profile.Query = queryWords
 	}
+	selectedDryRun := *dryRun || (*runHelp && !*download)
 	if profile.StarterID != "" {
 		if queryWords != "" || strings.TrimSpace(*query) != "" {
 			return errors.New("starter does not accept free-form query terms; use --starter-id")
@@ -101,7 +103,8 @@ func handleGet(ctx context.Context, args []string) error {
 			dest:        *dest,
 			place:       *placeFlag,
 			summaryJSON: *summaryJSON,
-			dryRun:      *dryRun,
+			dryRun:      selectedDryRun,
+			runHelp:     *runHelp,
 			quiet:       *quiet,
 			noResume:    *noResume,
 		}))
@@ -115,11 +118,12 @@ func handleGet(ctx context.Context, args []string) error {
 		query:       profile.Query,
 		limit:       profile.Limit,
 		selectIndex: *selectIndex,
-		download:    *download || *dryRun || strings.TrimSpace(*dest) != "" || *placeFlag || *summaryJSON,
+		download:    *download || selectedDryRun || strings.TrimSpace(*dest) != "" || *placeFlag || *summaryJSON,
 		dest:        *dest,
 		place:       *placeFlag,
 		summaryJSON: *summaryJSON,
-		dryRun:      *dryRun,
+		dryRun:      selectedDryRun,
+		runHelp:     *runHelp,
 		quiet:       *quiet,
 		noResume:    *noResume,
 		ramGB:       *ramGB,
@@ -142,6 +146,7 @@ Tasks:
 
 Examples:
   modfetch get coding --small
+  modfetch get coding --small --run-help
   modfetch get coding --small --download
   modfetch get embedding --download --summary-json
   modfetch get image --small --dry-run
@@ -163,6 +168,7 @@ type getRunOptions struct {
 	place       bool
 	summaryJSON bool
 	dryRun      bool
+	runHelp     bool
 	quiet       bool
 	noResume    bool
 	ramGB       float64
@@ -197,6 +203,9 @@ func buildGetRecommendArgs(opts getRunOptions) []string {
 	}
 	if opts.dryRun {
 		args = append(args, "--dry-run")
+	}
+	if opts.runHelp {
+		args = append(args, "--run-help")
 	}
 	if opts.quiet {
 		args = append(args, "--quiet")
@@ -242,6 +251,9 @@ func buildGetStarterArgs(opts getRunOptions) []string {
 	}
 	if opts.dryRun {
 		args = append(args, "--dry-run")
+	}
+	if opts.runHelp {
+		args = append(args, "--run-help")
 	}
 	if opts.quiet {
 		args = append(args, "--quiet")

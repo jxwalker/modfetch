@@ -9,6 +9,10 @@ Added
   chat, embeddings, image, and starter workflows. The command delegates to the
   existing recommendation, starter, and download paths so history, dry-run,
   resume, placement, and adaptive transfer behavior stay shared.
+- Added `--run-help` to single-file download, selected recommendation,
+  discovery download, starter download, and `get` flows so dry-runs and
+  completion summaries can include local runtime commands for GGUF files,
+  safetensors placement, and related artifact formats.
 
 ## v0.8.1 — 2026-05-14
 

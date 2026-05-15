@@ -41,6 +41,7 @@ func handleRecommend(ctx context.Context, args []string) error {
 	placeFlag := fs.Bool("place", false, "place after successful download")
 	summaryJSON := fs.Bool("summary-json", false, "print download completion summary as JSON")
 	dryRun := fs.Bool("dry-run", false, "plan selected download without downloading")
+	runHelp := fs.Bool("run-help", false, "include local runtime guidance with the selected dry-run/download output")
 	quiet := fs.Bool("quiet", false, "suppress progress and info logs for selected download")
 	noResume := fs.Bool("no-resume", false, "start selected download fresh instead of resuming")
 	history := fs.Bool("history", false, "list persisted recommendation history")
@@ -48,6 +49,7 @@ func handleRecommend(ctx context.Context, args []string) error {
 	noLearn := fs.Bool("no-learn", false, "do not use or write recommendation history for this invocation")
 	flagArgs, queryArgs := splitDiscoverArgs(args, map[string]bool{
 		"json": true, "unified-memory": true, "download": true, "place": true, "summary-json": true, "dry-run": true, "quiet": true, "no-resume": true, "history": true, "no-learn": true,
+		"run-help": true,
 	})
 	if err := fs.Parse(flagArgs); err != nil {
 		return err
@@ -118,7 +120,8 @@ func handleRecommend(ctx context.Context, args []string) error {
 			return fmt.Errorf("record shown recommendations: %w", err)
 		}
 	}
-	if *download {
+	selectedDryRun := *dryRun || (*runHelp && !*download)
+	if *download || selectedDryRun {
 		if len(recs) == 0 {
 			return fmt.Errorf("no recommendations for %q", effectiveQuery)
 		}
@@ -155,8 +158,11 @@ func handleRecommend(ctx context.Context, args []string) error {
 		if *summaryJSON {
 			downloadArgs = append(downloadArgs, "--summary-json")
 		}
-		if *dryRun {
+		if selectedDryRun {
 			downloadArgs = append(downloadArgs, "--dry-run")
+		}
+		if *runHelp {
+			downloadArgs = append(downloadArgs, "--run-help")
 		}
 		if *quiet {
 			downloadArgs = append(downloadArgs, "--quiet")

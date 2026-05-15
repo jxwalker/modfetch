@@ -199,12 +199,16 @@ These are useful, but not required for the first v0.7.0 release:
 - [DONE] Package channel verification:
   after v0.8.1 assets publish, verify release artifacts and refresh downstream
   Homebrew/AUR package metadata as needed.
-- [IN PROGRESS] v0.9 beginner acquisition path:
+- [DONE] v0.9 beginner acquisition path:
   add `modfetch get` task presets as the beginner-friendly layer above
   recommendations, starter artifacts, and the normal resumable download path.
+- [DONE] v0.9 run-it-locally guidance:
+  add `--run-help` to selected recommendation/get/download flows so GGUF and
+  safetensors users see concrete local runtime or placement commands during
+  dry-runs and in JSON summaries.
 - [NEXT] v0.9 follow-up:
-  expand from single-file task presets into curated task packs, multi-file
-  snapshot manifests, and stronger post-download "run it locally" guidance.
+  expand from single-file task presets into curated task packs and multi-file
+  snapshot manifests.
 
 ## Completed Release History
 

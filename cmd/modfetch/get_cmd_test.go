@@ -79,6 +79,7 @@ func TestBuildGetRecommendArgs(t *testing.T) {
 		selectIndex: 2,
 		download:    true,
 		dryRun:      true,
+		runHelp:     true,
 		noLearn:     true,
 	})
 	got := strings.Join(args, "\x00")
@@ -92,6 +93,7 @@ func TestBuildGetRecommendArgs(t *testing.T) {
 		"--json",
 		"--download",
 		"--dry-run",
+		"--run-help",
 		"--no-learn",
 		"--\x00qwen2.5 coder 1.5b gguf",
 	} {

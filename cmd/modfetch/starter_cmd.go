@@ -52,7 +52,7 @@ func printStarterUsage() {
 	fmt.Println(strings.TrimSpace(`Usage:
   modfetch starter list [--config PATH] [--json]
   modfetch starter show [--config PATH] [--json] ID
-  modfetch starter download --id ID [--config PATH] [--dest PATH] [--dry-run] [--summary-json]
+  modfetch starter download --id ID [--config PATH] [--dest PATH] [--dry-run] [--summary-json] [--run-help]
 
 Examples:
   modfetch starter list
@@ -106,6 +106,7 @@ func starterDownload(ctx context.Context, args []string) error {
 	placeFlag := fs.Bool("place", false, "place after successful download")
 	summaryJSON := fs.Bool("summary-json", false, "print JSON summary when complete")
 	dryRun := fs.Bool("dry-run", false, "plan without downloading")
+	runHelp := fs.Bool("run-help", false, "print local runtime guidance for the planned or downloaded artifact")
 	quiet := fs.Bool("quiet", false, "suppress progress and info logs")
 	noResume := fs.Bool("no-resume", false, "do not resume; start fresh")
 	if err := fs.Parse(args); err != nil {
@@ -140,6 +141,9 @@ func starterDownload(ctx context.Context, args []string) error {
 	}
 	if *dryRun {
 		downloadArgs = append(downloadArgs, "--dry-run")
+	}
+	if *runHelp {
+		downloadArgs = append(downloadArgs, "--run-help")
 	}
 	if *quiet {
 		downloadArgs = append(downloadArgs, "--quiet")

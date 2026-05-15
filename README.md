@@ -30,8 +30,8 @@ recommend / TUI --> adaptive download --> SHA256/safetensors --> place / scan / 
   metadata, checksums, placement presets, library scanning, and SQLite state are
   all part of the same workflow.
 - **Beginner-friendly, power-user capable**: start with curated starter
-  downloads or the guided TUI, then move to JSON output, batch YAML, catalog
-  sync, and benchmark history when you need automation.
+  downloads, `get`, or the guided TUI, then move to JSON output, batch YAML,
+  catalog sync, and benchmark history when you need automation.
 - **Local-first and transparent**: config is YAML, secrets stay in environment
   variables, and dry-runs show the planned destination and transfer metadata
   before bytes are written.
@@ -77,8 +77,8 @@ export MODFETCH_CONFIG=~/.config/modfetch/config.yml
 # Beginner path: choose a small coding model that fits this machine.
 modfetch get coding --small
 
-# Preview the exact selected download without writing files.
-modfetch get coding --small --dry-run --summary-json
+# Preview the exact selected download and how to run it locally.
+modfetch get coding --small --run-help
 
 # Download the top result through the resumable transfer pipeline.
 modfetch get coding --small --download
@@ -112,6 +112,7 @@ history before starting a large download.
 
 ```bash
 modfetch get coding --small
+modfetch get coding --small --run-help
 modfetch get coding --small --download
 modfetch discover search "tiny gpt2"
 modfetch discover download "sshleifer/tiny-gpt2" --select 1
@@ -121,6 +122,19 @@ modfetch discover download "sshleifer/tiny-gpt2" --select 1
 engine, then optional `--download` delegates to the normal transfer pipeline.
 Use `discover` when you want to search a provider by name and select a concrete
 artifact yourself.
+
+### Run the File Locally
+
+```bash
+modfetch get coding --small --run-help
+modfetch download --url 'hf://owner/repo/model.gguf?rev=main' --dry-run --run-help
+modfetch download --url 'https://example.com/checkpoint.safetensors' --dry-run --run-help
+```
+
+`--run-help` adds concrete next commands to the dry-run or completion summary:
+llama.cpp/Ollama/LM Studio for GGUF files, ComfyUI and AUTOMATIC1111/Forge
+placement for image safetensors, and cautious notes for formats that normally
+need a full repository snapshot.
 
 ### Download a Huge GGUF Without Hand-Tuning
 
@@ -195,6 +209,7 @@ files for redownload.
 | Model selection | `recommend`, `discover`, starter aliases, task presets, hardware fit, runtime hints, local learning history |
 | Download engine | direct HTTPS, `starter://`, `hf://`, `civitai://`, chunked resume, auth preflight, retries, rate-limit handling, SHA256 sidecars |
 | Large transfers | `--profile auto`, `--profile large-model`, explicit connections/chunk size, adaptive ramp-up/backoff, persisted per-host history |
+| Local run guidance | `--run-help` commands for GGUF runtimes and safetensors placement, including JSON `run_hints` |
 | Benchmarking | modfetch-vs-aria2 samples on the same URL, JSON output, benchmark history |
 | TUI | downloads, library, settings, guided recommendations, result inspection, live metadata probing, themes, filters, bulk actions |
 | Library | indexed scans, rich metadata, favorites, type/source filters, stale repair, portable export/import/sync |
