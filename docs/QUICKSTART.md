@@ -157,6 +157,36 @@ modfetch download --url 'https://proof.ovh.net/files/1Mb.dat'
 └─────────────────────────────────────────────────────────┘
 ```
 
+### Download a Complete Tiny Pack
+
+Some runtimes need more than one file. Use a curated pack when you want a
+small, public, multi-file bundle without deciding which repo files belong
+together:
+
+```bash
+modfetch pack list
+modfetch pack download --id llm-smoke --dry-run
+modfetch pack download --id embedding-smoke --batch-parallel 2
+```
+
+`pack download --dry-run` prints every planned file and destination. Without
+`--dry-run`, the pack is converted to normal batch YAML internally and runs
+through the same resumable downloader as `modfetch download --batch`.
+
+### Snapshot a Hugging Face Repository
+
+Use `snapshot` when you already know a repository and want a reviewable
+multi-file manifest:
+
+```bash
+modfetch snapshot hf://hf-internal-testing/tiny-random-bert \
+  --include '*.json' --include '*.safetensors' --output tiny-bert.yml
+modfetch download --batch tiny-bert.yml --batch-parallel 2
+```
+
+The generated manifest preserves repo paths under your download root and can be
+edited before download.
+
 ### Download from Hugging Face
 
 ```bash

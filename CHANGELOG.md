@@ -13,6 +13,12 @@ Added
   discovery download, starter download, and `get` flows so dry-runs and
   completion summaries can include local runtime commands for GGUF files,
   safetensors placement, and related artifact formats.
+- Added curated multi-file task packs with `modfetch pack`, including manifest
+  export and batch-backed downloads for small public LLM and embedding smoke
+  packs.
+- Added `modfetch snapshot` to turn Hugging Face repositories or subdirectories
+  into filtered multi-file batch or JSON manifests, with optional batch-backed
+  downloads through the existing resumable transfer pipeline.
 
 ## v0.8.1 — 2026-05-14
 

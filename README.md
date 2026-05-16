@@ -30,8 +30,9 @@ recommend / TUI --> adaptive download --> SHA256/safetensors --> place / scan / 
   metadata, checksums, placement presets, library scanning, and SQLite state are
   all part of the same workflow.
 - **Beginner-friendly, power-user capable**: start with curated starter
-  downloads, `get`, or the guided TUI, then move to JSON output, batch YAML,
-  catalog sync, and benchmark history when you need automation.
+  downloads, task packs, `get`, or the guided TUI, then move to JSON output,
+  snapshots, batch YAML, catalog sync, and benchmark history when you need
+  automation.
 - **Local-first and transparent**: config is YAML, secrets stay in environment
   variables, and dry-runs show the planned destination and transfer metadata
   before bytes are written.
@@ -82,6 +83,9 @@ modfetch get coding --small --run-help
 
 # Download the top result through the resumable transfer pipeline.
 modfetch get coding --small --download
+
+# Download a small multi-file pack when a single model file is not enough.
+modfetch pack download --id embedding-smoke --dry-run
 ```
 
 If you already know the source:
@@ -122,6 +126,24 @@ modfetch discover download "sshleifer/tiny-gpt2" --select 1
 engine, then optional `--download` delegates to the normal transfer pipeline.
 Use `discover` when you want to search a provider by name and select a concrete
 artifact yourself.
+
+### Download a Curated Pack or Snapshot
+
+```bash
+modfetch pack list
+modfetch pack download --id llm-smoke --dry-run
+modfetch pack download --id embedding-smoke --batch-parallel 2
+
+modfetch snapshot hf://hf-internal-testing/tiny-random-bert \
+  --include '*.json' --include '*.safetensors' --output tiny-bert.yml
+modfetch download --batch tiny-bert.yml --batch-parallel 2
+```
+
+Use `pack` when you want a curated multi-file starter bundle that is small,
+public, and safe to test. Use `snapshot` when a model needs the surrounding
+repository files, such as config, tokenizer, vocabulary, and weight shards.
+Snapshot output is normal batch YAML by default, so it can be reviewed, checked
+into automation, or downloaded with the existing batch pipeline.
 
 ### Run the File Locally
 
@@ -207,6 +229,7 @@ files for redownload.
 | Area | What You Get |
 | --- | --- |
 | Model selection | `recommend`, `discover`, starter aliases, task presets, hardware fit, runtime hints, local learning history |
+| Packs and snapshots | curated multi-file packs, Hugging Face repository snapshots, filtered batch/JSON manifests |
 | Download engine | direct HTTPS, `starter://`, `hf://`, `civitai://`, chunked resume, auth preflight, retries, rate-limit handling, SHA256 sidecars |
 | Large transfers | `--profile auto`, `--profile large-model`, explicit connections/chunk size, adaptive ramp-up/backoff, persisted per-host history |
 | Local run guidance | `--run-help` commands for GGUF runtimes and safetensors placement, including JSON `run_hints` |
@@ -292,7 +315,9 @@ bench       compare modfetch and aria2, or inspect transfer history
 discover    search providers and download a selected result
 get         beginner task presets for choosing and downloading models
 recommend   rank model files for task, hardware, runtime, and memory fit
+pack        list, export, or download curated multi-file task packs
 starter     list or download beginner-safe starter artifacts
+snapshot    build filtered multi-file Hugging Face batch manifests
 status      show persisted download status
 tui         open the terminal dashboard or print a snapshot
 library     scan, export, import, and sync the model catalog
@@ -346,6 +371,8 @@ Current release: **v0.8.1**, tagged 2026-05-14.
 
 Shipped highlights:
 
+- Unreleased: beginner `get`, `--run-help`, curated task packs, and Hugging
+  Face snapshot manifests.
 - v0.8.1: guided TUI recommendations, result inspection, live transfer metadata
   probing, and recommendation release hardening.
 - v0.8.0: hardware-aware recommendations, local learning history, runtime

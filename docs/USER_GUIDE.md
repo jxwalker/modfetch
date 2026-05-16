@@ -103,6 +103,48 @@ Use `--query` when the preset is close but you want to steer the search:
 modfetch get coding --small --query "qwen2.5 coder gguf"
 ```
 
+### Download a curated multi-file pack
+
+Use `pack` when the artifact needs a few files that belong together. Packs are
+small public bundles, so they are useful for first-run tests and for proving the
+batch downloader without committing to a large model.
+
+```bash
+modfetch pack list
+modfetch pack show llm-smoke
+modfetch pack download --id llm-smoke --dry-run
+modfetch pack download --id embedding-smoke --batch-parallel 2
+```
+
+`pack export` writes a normal batch manifest that you can inspect or edit:
+
+```bash
+modfetch pack export --id embedding-smoke --output embedding-smoke.yml
+modfetch download --batch embedding-smoke.yml --batch-parallel 2
+```
+
+### Build a Hugging Face snapshot manifest
+
+Use `snapshot` when you know the repository and want a multi-file manifest for
+config, tokenizer, vocabulary, weights, or a filtered subset such as GGUF files.
+The command lists the Hugging Face tree, applies include/exclude globs, and
+writes batch YAML by default.
+
+```bash
+modfetch snapshot hf://hf-internal-testing/tiny-random-bert \
+  --include '*.json' --include '*.safetensors' --output tiny-bert.yml
+modfetch download --batch tiny-bert.yml --batch-parallel 2
+```
+
+Useful safety controls:
+
+- `--dry-run` prints the generated plan without writing or downloading.
+- `--max-files N` prevents accidental giant manifests.
+- `--include` and `--exclude` can be repeated; patterns without `/` match
+  basenames.
+- `--download` executes the generated manifest immediately through the existing
+  batch downloader.
+
 ### Recommend a model for your hardware
 
 If you do not know which repo or quantization to choose, start with

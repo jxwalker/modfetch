@@ -9,7 +9,7 @@ automating, troubleshooting, or maintaining a release.
 - [Quick Start](QUICKSTART.md): install, configure, run a first download, and
   open the TUI.
 - [User Guide](USER_GUIDE.md): end-to-end workflows for `get`, recommendations,
-  downloads, verification, placement, library management, and snapshots.
+  packs, snapshots, downloads, verification, placement, and library management.
 - [CLI Guide](CLI_GUIDE.md): command and flag reference.
 - [TUI Guide](TUI_GUIDE.md): dashboard layout, keyboard controls, guided
   recommendations, and library actions.
@@ -56,3 +56,6 @@ Current release: v0.8.1.
 The v0.8.x line shipped hardware-aware recommendations, runtime hints, learned
 recommendation history, benchmark-driven adaptive transfer tuning, guided TUI
 recommendations, recommendation inspection, and live transfer metadata probes.
+
+Unreleased main adds beginner `get`, `--run-help`, curated multi-file task
+packs, and Hugging Face snapshot manifests.

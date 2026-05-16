@@ -56,8 +56,12 @@ func run(ctx context.Context, args []string) error {
 		return handleGet(ctx, args[1:])
 	case "recommend":
 		return handleRecommend(ctx, args[1:])
+	case "pack":
+		return handlePack(ctx, args[1:])
 	case "starter":
 		return handleStarter(ctx, args[1:])
+	case "snapshot":
+		return handleSnapshot(ctx, args[1:])
 	case "place":
 		return handlePlace(ctx, args[1:])
 	case "verify":
@@ -103,7 +107,9 @@ Commands:
   discover          Search real model providers and download a selected result
   get               Beginner task presets for choosing and downloading models
   recommend         Recommend model files for your task and hardware
+  pack              Curated multi-file task packs
   starter           List or download beginner-safe starter artifacts
+  snapshot          Build a multi-file Hugging Face snapshot manifest
   status            Show download status (table or JSON)
   place             Place a file into configured app directories
   verify            Verify SHA256 of a file or all completed downloads

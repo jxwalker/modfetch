@@ -34,6 +34,8 @@ Shipped baseline:
 - Guided TUI recommendations opened with `G`, including result inspection,
   runtime setup guidance, placement readiness, and live transfer metadata
   probing before large downloads start.
+- Curated multi-file task packs and Hugging Face snapshot manifests that feed
+  the existing batch downloader for complete repo subsets.
 
 ## v0.7.0 Goal [DONE]
 
@@ -206,7 +208,7 @@ These are useful, but not required for the first v0.7.0 release:
   add `--run-help` to selected recommendation/get/download flows so GGUF and
   safetensors users see concrete local runtime or placement commands during
   dry-runs and in JSON summaries.
-- [NEXT] v0.9 follow-up:
+- [DONE] v0.9 follow-up:
   expand from single-file task presets into curated task packs and multi-file
   snapshot manifests.
 

@@ -14,6 +14,8 @@ Complete command-line reference for modfetch. For a product overview, see
   - [discover](#discover)
   - [get](#get)
   - [recommend](#recommend)
+  - [pack](#pack)
+  - [snapshot](#snapshot)
   - [starter](#starter)
   - [status](#status)
   - [library](#library)
@@ -40,6 +42,8 @@ URL, but it also understands model-provider workflows:
   file URL.
 - `download` handles direct URLs plus `starter://`, `hf://`, and `civitai://`
   resolver URIs with resume and verification.
+- `pack` and `snapshot` produce multi-file manifests for complete tiny bundles
+  or Hugging Face repository subsets.
 - `bench` compares modfetch and aria2 on the same URL and feeds transfer
   history back into adaptive downloads.
 - `library`, `place`, `verify`, `dedupe`, and `clean` keep the local model
@@ -59,6 +63,8 @@ modfetch discover search "tiny gpt2"
 modfetch discover download "sshleifer/tiny-gpt2" --select 1
 modfetch get coding --small        # Beginner preset over recommend/download
 modfetch recommend --task coding   # Pick a model that fits this machine
+modfetch pack list                 # Curated multi-file task packs
+modfetch snapshot hf://owner/repo --include '*.gguf' --output repo.yml
 modfetch bench --history           # Show learned transfer history
 modfetch verify --all              # Verify all downloads
 modfetch place --path FILE         # Place model into app
@@ -322,6 +328,62 @@ Recommendation history is keyed by task, query, and a coarse hardware class, so
 choices made for a 128 GiB unified-memory Mac do not distort recommendations for
 a smaller discrete-GPU host. The history is advisory: it adjusts score ordering
 but does not hide live provider results.
+
+### pack
+
+List, inspect, export, or download curated multi-file packs. Packs are small,
+public bundles for common first-run tasks where a single file is not enough.
+
+```bash
+modfetch pack list
+modfetch pack show llm-smoke
+modfetch pack export --id llm-smoke --output llm-smoke.yml
+modfetch pack download --id embedding-smoke --dry-run
+modfetch pack download --id embedding-smoke --batch-parallel 2
+```
+
+**Subcommands:**
+- `list` - show available packs.
+- `show ID` - show pack metadata and files.
+- `export --id ID` - write a batch YAML manifest by default, or JSON with
+  `--format json`.
+- `download --id ID` - generate the batch internally and run it through the
+  existing batch downloader.
+
+**Useful flags:**
+- `--dest-dir PATH` - destination root for generated files. Defaults to
+  `general.download_root`.
+- `--format batch|json` and `--output PATH` - control `pack export` output.
+- `--dry-run` - for `pack download`, print the planned files and destinations.
+- `--batch-parallel N`, `--summary-json`, `--quiet`, `--no-resume`,
+  `--profile`, `--place`, and `--mode` - forwarded to the batch download path.
+
+### snapshot
+
+Build a filtered multi-file Hugging Face manifest from a repository or
+subdirectory. The default output is batch YAML, so the result can be reviewed,
+edited, committed, or passed directly to `download --batch`.
+
+```bash
+modfetch snapshot hf://owner/repo --include '*.gguf' --output repo.yml
+modfetch snapshot hf://owner/repo/tokenizer --format json
+modfetch snapshot hf://hf-internal-testing/tiny-random-bert \
+  --include '*.json' --include '*.safetensors' --output tiny-bert.yml
+modfetch download --batch tiny-bert.yml --batch-parallel 2
+```
+
+**Useful flags:**
+- `--include GLOB` - include matching files. Repeat the flag for multiple
+  patterns. Patterns without `/` match basenames.
+- `--exclude GLOB` - remove matching files after includes are applied.
+- `--rev REV` - repository revision. This overrides a `?rev=` query.
+- `--dest-dir PATH` - destination root for generated batch jobs.
+- `--max-files N` - fail if the manifest would include more than `N` files.
+- `--format batch|json` and `--output PATH` - choose manifest output.
+- `--dry-run` - print the download plan without writing a manifest.
+- `--download` - execute the generated batch immediately.
+- `--batch-parallel N`, `--summary-json`, `--quiet`, `--no-resume`,
+  `--profile`, `--place`, and `--mode` - forwarded when using `--download`.
 
 ### starter
 

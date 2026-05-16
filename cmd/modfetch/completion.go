@@ -35,7 +35,7 @@ _modfetch_completions()
     local cur prev words cword
     _init_completion || return
     local presets="automatic1111 comfyui forge hf-cache ollama"
-    local cmds="config download bench discover get recommend starter place verify status tui library batch dedupe clean hostcaps version help completion"
+    local cmds="config download bench discover get recommend pack starter snapshot place verify status tui library batch dedupe clean hostcaps version help completion"
     if [[ ${cword} -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${cmds}" -- "$cur") )
         return
@@ -75,6 +75,20 @@ _modfetch_completions()
             COMPREPLY=( $(compgen -W "--config --log-level --json --provider --query --limit --select --download --dest --place --summary-json --dry-run --run-help --quiet --no-resume --ram-gb --vram-gb --unified-memory --small --medium --large --size --starter-id --no-learn coding chat embedding embeddings image starter huggingface civitai modelscope all" -- "$cur") ) ;;
         recommend)
             COMPREPLY=( $(compgen -W "--config --log-level --json --provider --task --limit --ram-gb --vram-gb --unified-memory --select --download --dest --place --summary-json --dry-run --run-help --quiet --no-resume --history --history-limit --no-learn chat coding embedding image huggingface civitai modelscope all" -- "$cur") ) ;;
+        pack)
+            if [[ ${cword} -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "list show export download" -- "$cur") )
+                return
+            fi
+            case ${words[2]} in
+                list|show)
+                    COMPREPLY=( $(compgen -W "--config --log-level --json llm-smoke embedding-smoke" -- "$cur") ) ;;
+                export)
+                    COMPREPLY=( $(compgen -W "--config --log-level --json --id --output --format --dest-dir llm-smoke embedding-smoke batch json" -- "$cur") ) ;;
+                download)
+                    COMPREPLY=( $(compgen -W "--config --log-level --json --id --dest-dir --dry-run --batch-parallel --summary-json --quiet --no-resume --profile --place --mode llm-smoke embedding-smoke" -- "$cur") ) ;;
+                *) ;;
+            esac ;;
         starter)
             if [[ ${cword} -eq 2 ]]; then
                 COMPREPLY=( $(compgen -W "list show download" -- "$cur") )
@@ -87,6 +101,8 @@ _modfetch_completions()
                     COMPREPLY=( $(compgen -W "--config --log-level --json --id --dest --place --summary-json --dry-run --run-help --quiet --no-resume gpt2-config gpt2-tokenizer public-1mb" -- "$cur") ) ;;
                 *) ;;
             esac ;;
+        snapshot)
+            COMPREPLY=( $(compgen -W "--config --log-level --json --include --exclude --rev --output --format --dest-dir --max-files --download --dry-run --batch-parallel --summary-json --quiet --no-resume --profile --place --mode batch json" -- "$cur") ) ;;
         dedupe)
             COMPREPLY=( $(compgen -W "--config --log-level --json --mode --dry-run" -- "$cur") ) ;;
         place)
@@ -147,7 +163,7 @@ const zshCompletion = `#compdef modfetch
 # zsh completion for modfetch (basic)
 _modfetch() {
   local -a cmds
-  cmds=(config download bench discover get recommend starter place verify status tui library batch dedupe clean hostcaps version help completion)
+  cmds=(config download bench discover get recommend pack starter snapshot place verify status tui library batch dedupe clean hostcaps version help completion)
   if (( CURRENT == 2 )); then
     _describe 'command' cmds
     return
@@ -196,6 +212,23 @@ _modfetch() {
     recommend)
       _arguments '*:options:(--config --log-level --json --provider --task --limit --ram-gb --vram-gb --unified-memory --select --download --dest --place --summary-json --dry-run --run-help --quiet --no-resume --history --history-limit --no-learn chat coding embedding image huggingface civitai modelscope all)'
       ;;
+    pack)
+      if (( CURRENT == 3 )); then
+        _arguments '*:subcommands:(list show export download)'
+      else
+        case $words[3] in
+          list|show)
+            _arguments '*:options:(--config --log-level --json llm-smoke embedding-smoke)'
+            ;;
+          export)
+            _arguments '*:options:(--config --log-level --json --id --output --format --dest-dir llm-smoke embedding-smoke batch json)'
+            ;;
+          download)
+            _arguments '*:options:(--config --log-level --json --id --dest-dir --dry-run --batch-parallel --summary-json --quiet --no-resume --profile --place --mode llm-smoke embedding-smoke)'
+            ;;
+        esac
+      fi
+      ;;
     starter)
       if (( CURRENT == 3 )); then
         _arguments '*:subcommands:(list show download)'
@@ -209,6 +242,9 @@ _modfetch() {
             ;;
         esac
       fi
+      ;;
+    snapshot)
+      _arguments '*:options:(--config --log-level --json --include --exclude --rev --output --format --dest-dir --max-files --download --dry-run --batch-parallel --summary-json --quiet --no-resume --profile --place --mode batch json)'
       ;;
     dedupe)
       _arguments '*:options:(--config --log-level --json --mode --dry-run)'
@@ -281,7 +317,9 @@ complete -c modfetch -f -n "__fish_use_subcommand" -a "bench" -d "benchmark down
 complete -c modfetch -f -n "__fish_use_subcommand" -a "discover" -d "search real model providers"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "get" -d "beginner task presets"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "recommend" -d "recommend models for hardware"
+complete -c modfetch -f -n "__fish_use_subcommand" -a "pack" -d "curated task packs"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "starter" -d "beginner starter downloads"
+complete -c modfetch -f -n "__fish_use_subcommand" -a "snapshot" -d "snapshot manifests"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "dedupe" -d "dedupe duplicate downloads"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "place" -d "place files"
 complete -c modfetch -f -n "__fish_use_subcommand" -a "verify" -d "verify checksums"
@@ -305,7 +343,7 @@ complete -c modfetch -n "__fish_seen_subcommand_from clean" -l include-next-to-d
 complete -c modfetch -n "__fish_seen_subcommand_from clean" -l sidecars -d "Remove orphan .sha256"
 
 # Common flags
-for cmd in download bench get recommend place verify status tui library dedupe clean
+for cmd in download bench get recommend pack starter snapshot place verify status tui library dedupe clean
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l config -d "Path to config"
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l log-level -d "Log level"
   complete -c modfetch -n "__fish_seen_subcommand_from $cmd" -l json -d "JSON output"
@@ -410,6 +448,25 @@ complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l no-resume -d 
 complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l history -d "List recommendation history"
 complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l history-limit -d "Recommendation history row limit"
 complete -c modfetch -n "__fish_seen_subcommand_from recommend" -l no-learn -d "Disable recommendation history for this invocation"
+complete -c modfetch -n "__fish_seen_subcommand_from pack" -a "list" -d "List curated packs"
+complete -c modfetch -n "__fish_seen_subcommand_from pack" -a "show" -d "Show pack details"
+complete -c modfetch -n "__fish_seen_subcommand_from pack" -a "export" -d "Export a pack manifest"
+complete -c modfetch -n "__fish_seen_subcommand_from pack" -a "download" -d "Download a pack"
+complete -c modfetch -n "__fish_seen_subcommand_from pack" -a "llm-smoke embedding-smoke" -d "Pack ID"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from export" -l id -a "llm-smoke embedding-smoke" -d "Pack ID"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from export" -l output -d "Manifest output path"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from export" -l format -a "batch json" -d "Manifest format"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from export" -l dest-dir -d "Destination root"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from download" -l id -a "llm-smoke embedding-smoke" -d "Pack ID"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from download" -l dest-dir -d "Destination root"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from download" -l dry-run -d "Plan without downloading"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from download" -l batch-parallel -d "Parallel file downloads"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from download" -l summary-json -d "Print per-file summaries"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from download" -l quiet -d "Suppress progress and info logs"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from download" -l no-resume -d "Start fresh instead of resuming"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from download" -l profile -a "auto default large-model" -d "Download tuning profile"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from download" -l place -d "Place files after download"
+complete -c modfetch -n "__fish_seen_subcommand_from pack; and __fish_seen_subcommand_from download" -l mode -a "symlink hardlink copy" -d "Placement mode"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "list" -d "List starter downloads"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "show" -d "Show starter details"
 complete -c modfetch -n "__fish_seen_subcommand_from starter" -a "download" -d "Download a starter"
@@ -431,6 +488,22 @@ complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_su
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l run-help -d "Show local runtime guidance"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l quiet -d "Suppress progress and info logs"
 complete -c modfetch -n "__fish_seen_subcommand_from starter; and __fish_seen_subcommand_from download" -l no-resume -d "Start fresh instead of resuming"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l include -d "Include glob"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l exclude -d "Exclude glob"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l rev -d "Repository revision"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l output -d "Manifest output path"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l format -a "batch json" -d "Manifest format"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l dest-dir -d "Destination root"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l max-files -d "Maximum matched files"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l download -d "Download generated manifest"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l dry-run -d "Plan without downloading"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l batch-parallel -d "Parallel file downloads"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l summary-json -d "Print per-file summaries"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l quiet -d "Suppress progress and info logs"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l no-resume -d "Start fresh instead of resuming"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l profile -a "auto default large-model" -d "Download tuning profile"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l place -d "Place files after download"
+complete -c modfetch -n "__fish_seen_subcommand_from snapshot" -l mode -a "symlink hardlink copy" -d "Placement mode"
 complete -c modfetch -n "__fish_seen_subcommand_from library" -a "export" -d "Export model catalog"
 complete -c modfetch -n "__fish_seen_subcommand_from library" -a "import" -d "Import model catalog"
 complete -c modfetch -n "__fish_seen_subcommand_from library" -a "scan" -d "Scan model directories"
