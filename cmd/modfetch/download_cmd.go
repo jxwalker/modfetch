@@ -264,6 +264,11 @@ func handleDownload(ctx context.Context, args []string) error {
 						if storage.IsS3URI(destCandidate) && (job.Extract || *extractFlag || job.Place || *placeFlag) {
 							return fmt.Errorf("job %d: s3 destinations cannot be combined with extract or place", it.idx)
 						}
+						if !storage.IsS3URI(destCandidate) {
+							if err := os.MkdirAll(filepath.Dir(destCandidate), 0o755); err != nil {
+								return fmt.Errorf("job %d dest mkdir: %w", it.idx, err)
+							}
+						}
 						// Allow global --force to skip expected SHA verification even if job specifies one
 						expected := job.SHA256
 						if *forceSkip {

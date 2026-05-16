@@ -128,6 +128,48 @@ func TestDownloadBatch_UsesOrderedMirrorFallback(t *testing.T) {
 	}
 }
 
+func TestDownloadBatchCreatesExplicitDestParents(t *testing.T) {
+	d := t.TempDir()
+	cfgPath := filepath.Join(d, "config.yaml")
+	downloadRoot := filepath.Join(d, "downloads")
+	if err := os.MkdirAll(downloadRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "version: 1\n" +
+		"general:\n" +
+		"  data_root: " + fmt.Sprintf("%q", d) + "\n" +
+		"  download_root: " + fmt.Sprintf("%q", downloadRoot) + "\n" +
+		"concurrency:\n" +
+		"  max_retries: 1\n"
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("nested ok"))
+	}))
+	defer server.Close()
+
+	dest := filepath.Join(downloadRoot, "repo", "nested", "model.bin")
+	batchPath := filepath.Join(d, "jobs.yaml")
+	batchYAML := "version: 1\njobs:\n" +
+		"  - uri: " + fmt.Sprintf("%q", server.URL+"/model.bin") + "\n" +
+		"    dest: " + fmt.Sprintf("%q", dest) + "\n"
+	if err := os.WriteFile(batchPath, []byte(batchYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := handleDownload(context.Background(), []string{"--config", cfgPath, "--batch", batchPath, "--quiet"}); err != nil {
+		t.Fatalf("download batch failed: %v", err)
+	}
+	got, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatalf("read nested dest: %v", err)
+	}
+	if string(got) != "nested ok" {
+		t.Fatalf("dest content = %q", got)
+	}
+}
+
 func TestDownloadBatch_EnqueuesHigherPriorityFirst(t *testing.T) {
 	d := t.TempDir()
 	cfgPath := filepath.Join(d, "config.yaml")

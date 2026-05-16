@@ -49,6 +49,14 @@ temporary config, then performs live public downloads through direct HTTP,
 selected through `discover`. It verifies the resulting download records before
 removing its temporary workspace.
 
+For pack and snapshot changes, add a live public smoke before release:
+
+```bash
+modfetch pack download --id llm-smoke --dry-run
+modfetch snapshot hf://hf-internal-testing/tiny-random-bert \
+  --include '*.json' --include '*.safetensors' --dry-run --json
+```
+
 Set `MODFETCH_UAT_CIVITAI_URI` to add a known-small CivitAI download to the
 matrix. This is intentionally opt-in because CivitAI availability, gating, and
 acceptable test assets change more often than the public HTTP and Hugging Face

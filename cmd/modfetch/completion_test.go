@@ -7,7 +7,7 @@ import (
 
 func TestCompletionTopLevelCommands(t *testing.T) {
 	for name, script := range completionScripts() {
-		for _, command := range []string{"config", "download", "bench", "discover", "get", "recommend", "starter", "place", "verify", "status", "tui", "library", "batch", "dedupe", "clean", "hostcaps", "version", "help", "completion"} {
+		for _, command := range []string{"config", "download", "bench", "discover", "get", "recommend", "pack", "starter", "snapshot", "place", "verify", "status", "tui", "library", "batch", "dedupe", "clean", "hostcaps", "version", "help", "completion"} {
 			want := completionCommandToken(name, command)
 			if !strings.Contains(script, want) {
 				t.Fatalf("%s completion missing top-level command %q", name, command)
@@ -31,7 +31,9 @@ func TestCompletionCurrentFlags(t *testing.T) {
 			"--starter-id", "--no-learn",
 		},
 		"recommend": {"--provider", "--task", "--ram-gb", "--vram-gb", "--unified-memory", "--download", "--select", "--dry-run", "--run-help", "--history", "--history-limit", "--no-learn"},
+		"pack":      {"--id", "--output", "--format", "--dest-dir", "--dry-run", "--batch-parallel", "--profile"},
 		"starter":   {"--id", "--summary-json", "--dry-run", "--run-help"},
+		"snapshot":  {"--include", "--exclude", "--rev", "--output", "--format", "--dest-dir", "--max-files", "--download", "--dry-run", "--batch-parallel", "--profile"},
 		"place":     {"--dry-run", "--preset", "--list-presets"},
 		"batch":     {"--naming-pattern"},
 		"hostcaps":  {"--config", "--list", "--clear", "--clear-all", "--json"},
@@ -75,19 +77,25 @@ func TestCompletionNestedSubcommandFlags(t *testing.T) {
 			assertContains(t, name, "batch", batchSection, "case ${words[2]}", "import)", "--naming-pattern")
 			assertContains(t, name, "discover", completionCommandSection(t, name, script, "discover"), "search", "download", "--provider", "--select")
 			assertContains(t, name, "library", completionCommandSection(t, name, script, "library"), "sync", "push", "pull", "--target", "--dry-run", "--token-env")
+			assertContains(t, name, "pack", completionCommandSection(t, name, script, "pack"), "list", "show", "export", "download", "llm-smoke")
 			assertContains(t, name, "starter", completionCommandSection(t, name, script, "starter"), "list", "show", "download", "gpt2-config")
+			assertContains(t, name, "snapshot", completionCommandSection(t, name, script, "snapshot"), "--include", "--download", "--max-files")
 		case "zsh":
 			assertContains(t, name, "config", configSection, "case $words[3]", "validate)", "wizard)", "--strict", "--out")
 			assertContains(t, name, "batch", batchSection, "case $words[3]", "import)", "--naming-pattern")
 			assertContains(t, name, "discover", completionCommandSection(t, name, script, "discover"), "search", "download", "--provider", "--select")
 			assertContains(t, name, "library", completionCommandSection(t, name, script, "library"), "sync", "push", "pull", "--target", "--dry-run", "--token-env")
+			assertContains(t, name, "pack", completionCommandSection(t, name, script, "pack"), "list", "show", "export", "download", "llm-smoke")
 			assertContains(t, name, "starter", completionCommandSection(t, name, script, "starter"), "list", "show", "download", "gpt2-config")
+			assertContains(t, name, "snapshot", completionCommandSection(t, name, script, "snapshot"), "--include", "--download", "--max-files")
 		case "fish":
 			assertContains(t, name, "config", configSection, "and __fish_seen_subcommand_from validate", "and __fish_seen_subcommand_from wizard", "-l strict", "-l out")
 			assertContains(t, name, "batch", batchSection, "and __fish_seen_subcommand_from import", "-l naming-pattern")
 			assertContains(t, name, "discover", completionCommandSection(t, name, script, "discover"), "search", "download", "-l provider", "-l select")
 			assertContains(t, name, "library", completionCommandSection(t, name, script, "library"), "sync", "push", "pull", "-l target", "-l dry-run", "-l token-env")
+			assertContains(t, name, "pack", completionCommandSection(t, name, script, "pack"), "llm-smoke", "-l id", "-l batch-parallel")
 			assertContains(t, name, "starter", completionCommandSection(t, name, script, "starter"), "gpt2-config", "-l id", "-l dry-run")
+			assertContains(t, name, "snapshot", completionCommandSection(t, name, script, "snapshot"), "-l include", "-l download", "-l max-files")
 		}
 	}
 }

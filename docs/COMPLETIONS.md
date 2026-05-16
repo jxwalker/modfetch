@@ -24,12 +24,15 @@ Usage
   ```
 
 Notable flags and commands covered
-- Commands: config, download, place, verify, status, tui, batch, dedupe, clean, hostcaps
+- Commands: config, download, discover, get, recommend, pack, starter,
+  snapshot, place, verify, status, tui, library, batch, dedupe, clean, hostcaps
 - --url, --dest, --sha256, --place, --batch
 - --quiet, --json, --log-level
 - --summary-json, --no-resume, --batch-parallel, --naming-pattern, --no-auth-preflight, --dry-run
 - --strict, --force, --quant, --list-quants
 - library sync --target, --dry-run, --token-env
+- pack --id, --format, --dest-dir, --batch-parallel
+- snapshot --include, --exclude, --rev, --max-files, --download
 - tui --snapshot for non-interactive state snapshots
 
 Notes
