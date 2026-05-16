@@ -382,8 +382,8 @@ Shipped highlights:
 - v0.7.0: Homebrew distribution, portable catalogs, TUI bulk operations,
   placement presets, scanner repair, and docs drift validation.
 
-The v0.8.x release line is closed. The next roadmap item is v0.9 planning based
-on real user feedback.
+The v0.9 feature roadmap is complete on `main`; the next operational step is
+cutting v0.9.0 and then planning the next feedback-driven improvement slice.
 
 ## Development
 

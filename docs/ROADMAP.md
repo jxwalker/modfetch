@@ -13,6 +13,10 @@ Status key:
 
 Current release: v0.8.1, tagged 2026-05-14.
 
+Current main has the completed v0.9 feature set staged in `CHANGELOG.md` under
+`Unreleased`. The next operational step is cutting v0.9.0 and refreshing package
+channels from the published assets.
+
 Shipped baseline:
 - Reliable direct, Hugging Face, and CivitAI downloads with resume, retries,
   SHA256 verification, auth preflight, rate-limit handling, archive extraction,
