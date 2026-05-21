@@ -4,8 +4,8 @@
 ================================================================================
 
 PROJECT: modfetch - CLI+TUI for downloading LLM/Stable Diffusion models
-VERSION: v0.8.1
-ANALYSIS DATE: 2026-05-14
+VERSION: v0.9.0
+ANALYSIS DATE: 2026-05-21
 
 ================================================================================
 1. CURRENT OVERVIEW
@@ -156,7 +156,7 @@ Keep future TUI changes in the current package structure:
                               CONCLUSION
 ================================================================================
 
-The current v0.8.1 TUI is a single, maintained interface with download
+The current v0.9.0 TUI is a single, maintained interface with download
 management, guided model recommendations, library maintenance, settings
 inspection, bulk operations, and state persistence. Non-interactive snapshot
 hooks expose the same persisted state for scripts without starting the Bubble
