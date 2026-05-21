@@ -43,8 +43,8 @@ automating, troubleshooting, or maintaining a release.
 
 - [Release Checklist](RELEASE.md): changelog, artifacts, package channels, docs
   drift, and post-publish verification.
-- [Roadmap](ROADMAP.md): shipped baseline, completed v0.9 work, and next
-  release step.
+- [Roadmap](ROADMAP.md): shipped baseline, v0.9.0 release scope, and next
+  planning area.
 - [TUI Wireframes](TUI_WIREFRAMES.md): visual interaction reference.
 - [TUI Analysis Summary](TUI_ANALYSIS_SUMMARY.txt): current TUI architecture and
   maintenance notes.
@@ -52,12 +52,10 @@ automating, troubleshooting, or maintaining a release.
 
 ## Current Release
 
-Current release: v0.8.1.
+Current release: v0.9.0.
 
-The v0.8.x line shipped hardware-aware recommendations, runtime hints, learned
-recommendation history, benchmark-driven adaptive transfer tuning, guided TUI
-recommendations, recommendation inspection, and live transfer metadata probes.
-
-Unreleased main contains the completed v0.9 feature set: beginner `get`,
-`--run-help`, curated multi-file task packs, and Hugging Face snapshot
-manifests.
+The v0.9.0 line ships beginner `get`, `--run-help`, curated multi-file task
+packs, Hugging Face snapshot manifests, guided recommendations, hardware-aware
+recommendations, runtime hints, learned recommendation history, benchmark-driven
+adaptive transfer tuning, recommendation inspection, and live transfer metadata
+probes.

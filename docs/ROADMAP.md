@@ -1,6 +1,6 @@
 # Roadmap
 
-This is the active project roadmap after the v0.8.1 release. Historical backlog
+This is the active project roadmap after the v0.9.0 release. Historical backlog
 items that shipped in v0.6.x and v0.7.x are summarized at the end for traceability.
 
 Status key:
@@ -11,11 +11,11 @@ Status key:
 
 ## Current Baseline
 
-Current release: v0.8.1, tagged 2026-05-14.
+Current release: v0.9.0, tagged 2026-05-21.
 
-Current main has the completed v0.9 feature set staged in `CHANGELOG.md` under
-`Unreleased`. The next operational step is cutting v0.9.0 and refreshing package
-channels from the published assets.
+The v0.9.0 release closes the beginner acquisition, run-it-locally guidance,
+task pack, and snapshot manifest roadmap. The next feature roadmap should be
+planned from real install, recommendation, and large-model transfer feedback.
 
 Shipped baseline:
 - Reliable direct, Hugging Face, and CivitAI downloads with resume, retries,
@@ -218,6 +218,9 @@ These are useful, but not required for the first v0.7.0 release:
 
 ## Completed Release History
 
+- v0.9.0: delivered beginner `get` task presets, `--run-help` local runtime
+  guidance, curated multi-file task packs, and Hugging Face snapshot manifests
+  that feed the existing batch downloader.
 - v0.8.1: delivered guided TUI recommendations, pre-download recommendation
   inspection, live transfer metadata probing, and release-hardened docs/UAT for
   the recommendation workflow.

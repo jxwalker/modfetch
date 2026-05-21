@@ -244,7 +244,7 @@ files for redownload.
 ## TUI Preview
 
 ```text
-+------------------------------ modfetch v0.8.1 ------------------------------+
++------------------------------ modfetch v0.9.0 ------------------------------+
 | Tab: [2] Active       Completed: 45   Active: 2   Pending: 3   Failed: 1     |
 +------------------------------------------------------------------------------+
 | Status    Progress           Speed       ETA       Size      File             |
@@ -367,12 +367,12 @@ Deep dives:
 
 ## Status
 
-Current release: **v0.8.1**, tagged 2026-05-14.
+Current release: **v0.9.0**, tagged 2026-05-21.
 
 Shipped highlights:
 
-- Unreleased: beginner `get`, `--run-help`, curated task packs, and Hugging
-  Face snapshot manifests.
+- v0.9.0: beginner `get`, `--run-help`, curated task packs, and Hugging Face
+  snapshot manifests.
 - v0.8.1: guided TUI recommendations, result inspection, live transfer metadata
   probing, and recommendation release hardening.
 - v0.8.0: hardware-aware recommendations, local learning history, runtime
@@ -382,8 +382,8 @@ Shipped highlights:
 - v0.7.0: Homebrew distribution, portable catalogs, TUI bulk operations,
   placement presets, scanner repair, and docs drift validation.
 
-The v0.9 feature roadmap is complete on `main`; the next operational step is
-cutting v0.9.0 and then planning the next feedback-driven improvement slice.
+The v0.9.0 release line is current; the next roadmap should be planned from
+real install, recommendation, and large-model transfer feedback.
 
 ## Development
 

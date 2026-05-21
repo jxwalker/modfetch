@@ -8,7 +8,7 @@ Use this guide when you want the end-to-end workflow. For a shorter product
 overview, start with [README.md](../README.md); for flags and subcommands, use
 [CLI_GUIDE.md](CLI_GUIDE.md).
 
-- Current release: v0.8.1.
+- Current release: v0.9.0.
 - Build from source: `make build` produces `./bin/modfetch`.
 - Config path: pass `--config` or set `MODFETCH_CONFIG`.
 - Secrets: keep provider tokens in environment variables, not YAML.
