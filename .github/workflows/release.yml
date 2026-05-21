@@ -71,7 +71,10 @@ jobs:
             modfetch_darwin_amd64/modfetch_darwin_amd64 \
             modfetch_darwin_arm64/modfetch_darwin_arm64 \
             -output modfetch_darwin_universal/modfetch_darwin_universal
-          shasum -a 256 modfetch_darwin_universal/modfetch_darwin_universal > modfetch_darwin_universal/modfetch_darwin_universal.sha256
+          (
+            cd modfetch_darwin_universal
+            shasum -a 256 modfetch_darwin_universal > modfetch_darwin_universal.sha256
+          )
       - name: Upload universal artifact
         uses: actions/upload-artifact@v4
         with:
