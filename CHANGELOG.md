@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## Unreleased
 
+Fixes
+- Fixed future macOS universal release checksum generation in
+  `.github/workflows/release.yml` so the published `.sha256` file validates
+  beside the downloaded asset.
+
+Changed
+- Updated checked AUR `modfetch-bin` metadata for the v0.9.0 release assets.
+
 ## v0.9.0 — 2026-05-21
 
 Added
