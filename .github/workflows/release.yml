@@ -15,21 +15,17 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, modfetch]
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            goos: linux
+          - goos: linux
             goarch: amd64
-          - os: ubuntu-latest
-            goos: linux
+          - goos: linux
             goarch: arm64
-          - os: macos-latest
-            goos: darwin
+          - goos: darwin
             goarch: amd64
-          - os: macos-latest
-            goos: darwin
+          - goos: darwin
             goarch: arm64
     steps:
       - uses: actions/checkout@v4
@@ -56,7 +52,7 @@ jobs:
 
   macos_universal:
     needs: build
-    runs-on: macos-latest
+    runs-on: [self-hosted, Linux, X64, modfetch]
     steps:
       - name: Download macOS artifacts
         uses: actions/download-artifact@v4
@@ -66,8 +62,10 @@ jobs:
           merge-multiple: false
       - name: Build macOS universal binary
         run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm
           mkdir -p modfetch_darwin_universal
-          lipo -create \
+          "$(command -v llvm-lipo || command -v llvm-lipo-18)" -create \
             modfetch_darwin_amd64/modfetch_darwin_amd64 \
             modfetch_darwin_arm64/modfetch_darwin_arm64 \
             -output modfetch_darwin_universal/modfetch_darwin_universal
@@ -85,7 +83,7 @@ jobs:
 
   release:
     needs: [build, macos_universal]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, modfetch]
     steps:
       - uses: actions/checkout@v4
       - name: Download artifacts

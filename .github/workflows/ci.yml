@@ -15,7 +15,8 @@ env:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64, modfetch]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,10 +38,8 @@ jobs:
 
   test:
     needs: [lint]
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64, modfetch]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -51,12 +50,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            sudo apt-get update
-            sudo apt-get install -y p7zip-full
-          elif [[ "$RUNNER_OS" == "macOS" ]]; then
-            HOMEBREW_NO_AUTO_UPDATE=1 brew install p7zip
-          fi
+          sudo apt-get update
+          sudo apt-get install -y p7zip-full
       - name: Vet
         run: go vet ./...
       - name: Test
