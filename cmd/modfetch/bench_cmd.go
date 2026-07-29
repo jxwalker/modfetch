@@ -252,12 +252,15 @@ func runModfetchBench(ctx context.Context, base *config.Config, log *logging.Log
 }
 
 func runAria2Bench(ctx context.Context, cfg *config.Config, rawURL string, headers map[string]string, workDir string, duration time.Duration) benchResult {
+	// Reject secrets before probing the local aria2 installation. This keeps the
+	// safety decision deterministic and prevents a missing optional binary from
+	// masking an unsafe invocation.
+	if hasSensitiveHeaders(headers) {
+		return benchResult{Tool: "aria2", Status: "error", Error: "aria2 benchmark skipped: sensitive headers cannot be passed safely to aria2c"}
+	}
 	aria2Path, err := exec.LookPath("aria2c")
 	if err != nil {
 		return benchResult{Tool: "aria2", Status: "error", Error: "aria2c not found on PATH"}
-	}
-	if hasSensitiveHeaders(headers) {
-		return benchResult{Tool: "aria2", Status: "error", Error: "aria2 benchmark skipped: sensitive headers cannot be passed safely to aria2c"}
 	}
 	dir := filepath.Join(workDir, "aria2")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
