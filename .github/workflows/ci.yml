@@ -111,7 +111,9 @@ jobs:
           # Mach-O UUID metadata. Keep the project's minimum version unchanged,
           # but exercise the native macOS lane with the supported stable toolchain.
           go-version: stable
-          cache: true
+          # Avoid multi-gigabyte module-cache archives on the space-constrained
+          # dedicated Mac runner. The shared module cache remains local.
+          cache: false
       - name: Vet
         run: go vet ./...
       - name: Test
