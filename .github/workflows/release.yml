@@ -52,7 +52,7 @@ jobs:
 
   macos_universal:
     needs: build
-    runs-on: [self-hosted, Linux, X64, modfetch]
+    runs-on: [self-hosted, macOS, ARM64, ci-macos, modfetch]
     steps:
       - name: Download macOS artifacts
         uses: actions/download-artifact@v4
@@ -62,13 +62,12 @@ jobs:
           merge-multiple: false
       - name: Build macOS universal binary
         run: |
-          sudo apt-get update
-          sudo apt-get install -y llvm
           mkdir -p modfetch_darwin_universal
-          "$(command -v llvm-lipo || command -v llvm-lipo-18)" -create \
+          lipo -create \
             modfetch_darwin_amd64/modfetch_darwin_amd64 \
             modfetch_darwin_arm64/modfetch_darwin_arm64 \
             -output modfetch_darwin_universal/modfetch_darwin_universal
+          lipo -info modfetch_darwin_universal/modfetch_darwin_universal
           (
             cd modfetch_darwin_universal
             shasum -a 256 modfetch_darwin_universal > modfetch_darwin_universal.sha256

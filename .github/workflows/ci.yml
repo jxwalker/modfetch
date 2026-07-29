@@ -98,3 +98,23 @@ jobs:
         uses: golang/govulncheck-action@v1
         with:
           go-version-file: go.mod
+
+  test-macos:
+    needs: [lint]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, macOS, ARM64, ci-macos, modfetch]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22.x'
+          cache: true
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./... -cover
+      - name: Native Apple Silicon build
+        run: |
+          mkdir -p bin
+          go build -ldflags "-s -w" -o bin/modfetch ./cmd/modfetch
+          ./bin/modfetch version
